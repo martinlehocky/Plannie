@@ -184,13 +184,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         .slice(0, 3)
   }
 
-  // --- FIXED FORMATTING FUNCTION ---
   const formatTimeInTz = (slotKey: string) => {
     try {
-      // 1. Try parsing as new ISO format (e.g. "2023-10-25T14:00:00.000Z")
       const date = new Date(slotKey)
-
-      // Check if valid date
       if (!isNaN(date.getTime())) {
         return date.toLocaleTimeString([], {
           timeZone: userTimezone,
@@ -201,11 +197,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           day: 'numeric'
         })
       }
-
-      // 2. Fallback for old format "yyyy-MM-dd-HH:mm"
       const [y, m, d, h, min] = slotKey.split(/[-:]/).map(Number)
       const fallbackDate = new Date(y, m - 1, d, h, min)
-
       return fallbackDate.toLocaleTimeString([], {
         timeZone: userTimezone,
         weekday: 'short',
@@ -214,52 +207,53 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         month: 'short',
         day: 'numeric'
       })
-
     } catch (e) {
-      return slotKey // Return raw string if all else fails
+      return slotKey
     }
   }
 
-  if (loading) return <div>Loading...</div>
-  if (!eventData) return <div>Event not found</div>
+  if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>
+  if (!eventData) return <div className="flex items-center justify-center min-h-screen">Event not found</div>
 
   const bestTimes = getBestTimes()
 
   return (
-      <div className="min-h-screen bg-background p-4 md:p-8">
-        <div className="mx-auto max-w-6xl space-y-6">
+      <div className="h-screen overflow-hidden bg-background flex flex-col">
+        <div className="mx-auto w-full max-w-7xl flex flex-col h-full">
 
-          {/* Header */}
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">{eventData.name}</h1>
-              <div className="flex items-center gap-4 text-muted-foreground mt-2">
-                <div className="flex items-center gap-1">
-                  <Calendar className="h-4 w-4" />
-                  <span>
-                  {format(new Date(eventData.dateRange.from), "MMM d")} -{" "}
-                    {format(new Date(eventData.dateRange.to), "MMM d, yyyy")}
-                </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Globe className="h-4 w-4" />
-                  <span className="capitalize">{userTimezone.replace(/_/g, " ")}</span>
+          {/* Compact Header */}
+          <div className="flex items-center justify-between p-4 border-b shrink-0">
+            <div className="flex items-center gap-4">
+              <div>
+                <h1 className="text-xl font-bold">{eventData.name}</h1>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    <span>
+                      {format(new Date(eventData.dateRange.from), "MMM d")} - {format(new Date(eventData.dateRange.to), "MMM d, yyyy")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Globe className="h-3 w-3" />
+                    <span className="capitalize">{userTimezone.replace(/_/g, " ")}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => router.push("/dashboard")}>Dashboard</Button>
+              <ThemeToggle />
+              <Button size="sm" variant="outline" onClick={() => router.push("/dashboard")}>Dashboard</Button>
               {isParticipant && !isCreator && (
-                  <Button variant="destructive" onClick={handleLeave}>Leave</Button>
+                  <Button size="sm" variant="destructive" onClick={handleLeave}>Leave</Button>
               )}
-              <Button variant="outline" onClick={handleShare}>
-                <Share2 className="mr-2 h-4 w-4" /> Share
+              <Button size="sm" variant="outline" onClick={handleShare}>
+                <Share2 className="h-4 w-4" />
               </Button>
               {isCreator && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="destructive"><Trash2 className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="destructive"><Trash2 className="h-4 w-4" /></Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
@@ -276,11 +270,130 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-            {/* Main Grid Area */}
-            <div className="space-y-6">
-              <Card>
-                <CardContent className="p-6">
+          {/* Main Content - Sidebar LEFT, Grid RIGHT */}
+          <div className="flex-1 overflow-hidden p-4">
+            <div className="grid gap-4 h-full lg:grid-cols-[260px_1fr]">
+
+              {/* Compact Sidebar - LEFT with scrolling */}
+              <div className="overflow-y-auto space-y-2.5 h-full">
+
+                {/* Identity Card - Minimal */}
+                {isLoggedIn && currentParticipant && (
+                    <Card className="shadow-sm">
+                      <CardContent className="p-3">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar className="h-8 w-8 shrink-0">
+                            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                              {currentParticipant.name[0].toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[9px] uppercase tracking-wide text-muted-foreground font-medium">You</div>
+                            <div className="text-sm font-semibold truncate">{currentParticipant.name}</div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                )}
+
+                {/* Best Times - Compact */}
+                <Card className="shadow-sm">
+                  <CardHeader className="p-3 pb-2">
+                    <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                      <Trophy className="h-3.5 w-3.5 text-yellow-500 shrink-0" /> Best Times
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3 pt-0 space-y-1.5">
+                    {bestTimes.length > 0 ? (
+                        bestTimes.map((time, i) => (
+                            <div key={i} className="rounded-md border bg-card/50 p-2 space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-xs font-semibold text-green-600 dark:text-green-400 truncate">
+                                  {formatTimeInTz(time.slot)}
+                                </div>
+                                <Badge variant="secondary" className="shrink-0 text-[10px] h-5 px-1.5">
+                                  {time.count}/{eventData.participants.length}
+                                </Badge>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground line-clamp-1">
+                                {time.names.join(", ")}
+                              </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="text-xs text-muted-foreground text-center py-3">
+                          No overlaps yet
+                        </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Participants - Compact */}
+                <Card className="shadow-sm">
+                  <CardHeader className="p-3 pb-2">
+                    <CardTitle className="flex items-center justify-between text-sm font-semibold">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-3.5 w-3.5 shrink-0" /> Participants
+                      </div>
+                      <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                        {eventData.participants.length}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3 pt-0 space-y-1.5">
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                      {eventData.participants.map((p) => (
+                          <div key={p.id} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-muted/50 transition-colors">
+                            <Avatar className="h-6 w-6 shrink-0">
+                              <AvatarFallback className="text-[10px] font-semibold">{p.name[0].toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs font-medium truncate">{p.name}</span>
+                          </div>
+                      ))}
+                    </div>
+                    {!isLoggedIn && (
+                        <Button className="w-full mt-1.5" size="sm" variant="outline" onClick={() => router.push("/login")}>
+                          <LogIn className="h-3 w-3 mr-1.5" />
+                          Sign In
+                        </Button>
+                    )}
+                    {isLoggedIn && !isParticipant && (
+                        <Button className="w-full mt-1.5" size="sm" onClick={handleJoin}>
+                          Join Event
+                        </Button>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Invite - Compact */}
+                {isCreator && (
+                    <Card className="shadow-sm">
+                      <CardHeader className="p-3 pb-2">
+                        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                          <UserPlus className="h-3.5 w-3.5 shrink-0" /> Invite
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-3 pt-0">
+                        <div className="flex gap-1.5">
+                          <Input
+                              className="text-xs h-8"
+                              placeholder="Username"
+                              value={inviteUsername}
+                              onChange={(e) => setInviteUsername(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
+                          />
+                          <Button size="sm" onClick={handleInvite} className="shrink-0 h-8 px-3 text-xs">
+                            Invite
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                )}
+              </div>
+
+              {/* Availability Grid - RIGHT */}
+              <Card className="overflow-hidden flex flex-col shadow-sm">
+                <CardContent className="p-4 flex-1 overflow-y-auto min-h-0">
                   {isLoggedIn && currentParticipant ? (
                       <AvailabilityGrid
                           dateRange={{
@@ -294,103 +407,15 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                           timezone={userTimezone}
                       />
                   ) : (
-                      <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <LogIn className="h-12 w-12 text-muted-foreground mb-4" />
-                        <h3 className="text-lg font-semibold">Please Sign In</h3>
-                        <p className="text-muted-foreground mb-4">You must be logged in to participate.</p>
-                        <Button onClick={() => router.push("/login")}>Sign In Now</Button>
+                      <div className="flex flex-col items-center justify-center h-full text-center">
+                        <LogIn className="h-10 w-10 text-muted-foreground mb-3" />
+                        <h3 className="text-base font-semibold">Please Sign In</h3>
+                        <p className="text-sm text-muted-foreground mb-3">You must be logged in to participate.</p>
+                        <Button size="sm" onClick={() => router.push("/login")}>Sign In Now</Button>
                       </div>
                   )}
                 </CardContent>
               </Card>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Best Times */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Trophy className="h-5 w-5 text-yellow-500" /> Best Times
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {bestTimes.length > 0 ? (
-                      bestTimes.map((time, i) => (
-                          <div key={i} className="flex items-center justify-between p-2 rounded border bg-card">
-                            <div className="text-sm">
-                              <div className="font-medium text-green-600">{formatTimeInTz(time.slot)}</div>
-                              <div className="text-xs text-muted-foreground">{time.names.join(", ")}</div>
-                            </div>
-                            <Badge variant="secondary">{time.count}/{eventData.participants.length}</Badge>
-                          </div>
-                      ))
-                  ) : (
-                      <div className="text-sm text-muted-foreground">No overlapping times yet.</div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Participants */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Users className="h-5 w-5" /> Participants
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {eventData.participants.map((p) => (
-                      <div key={p.id} className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback>{p.name[0].toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm font-medium">{p.name}</span>
-                      </div>
-                  ))}
-                  {!isLoggedIn && (
-                      <Button className="w-full mt-2" onClick={() => router.push("/login")}>Sign In to Join</Button>
-                  )}
-                  {isLoggedIn && !isParticipant && (
-                      <Button className="w-full mt-2" onClick={handleJoin}>Join Event</Button>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Invite */}
-              {isCreator && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <UserPlus className="h-5 w-5" /> Invite
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex gap-2">
-                        <Input
-                            placeholder="Username"
-                            value={inviteUsername}
-                            onChange={(e) => setInviteUsername(e.target.value)}
-                        />
-                        <Button onClick={handleInvite}>Add</Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-              )}
-
-              {/* Identity */}
-              {isLoggedIn && currentParticipant && (
-                  <div className="flex items-center gap-3 p-4 border rounded-lg bg-muted/20">
-                    <Avatar>
-                      <AvatarFallback className="bg-primary text-primary-foreground">
-                        {currentParticipant.name[0].toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <div className="text-xs text-muted-foreground">Signed in as</div>
-                      <div className="font-semibold">{currentParticipant.name}</div>
-                    </div>
-                  </div>
-              )}
             </div>
           </div>
         </div>
