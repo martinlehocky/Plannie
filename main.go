@@ -5,129 +5,549 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"sync"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/time/rate"
 )
 
-// EventStore handles thread-safe access to our data
-type EventStore struct {
-	sync.RWMutex
-	Events map[string]interface{}
-	File   string
+// --- RATE LIMITING ---
+type visitor struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
 }
 
-// Load reads the JSON file into memory
-func (s *EventStore) Load() {
-	s.Lock()
-	defer s.Unlock()
+var (
+	visitors = make(map[string]*visitor)
+	mu       sync.Mutex
+)
 
-	file, err := ioutil.ReadFile(s.File)
-	if err != nil {
-		if os.IsNotExist(err) {
-			s.Events = make(map[string]interface{}) // Start fresh if file doesn't exist
+func getVisitor(ip string) *rate.Limiter {
+	mu.Lock()
+	defer mu.Unlock()
+	v, exists := visitors[ip]
+	if !exists {
+		limiter := rate.NewLimiter(5, 10)
+		visitors[ip] = &visitor{limiter, time.Now()}
+		return limiter
+	}
+	v.lastSeen = time.Now()
+	return v.limiter
+}
+
+func cleanupVisitors() {
+	for {
+		time.Sleep(time.Minute)
+		mu.Lock()
+		for ip, v := range visitors {
+			if time.Since(v.lastSeen) > 3*time.Minute {
+				delete(visitors, ip)
+			}
+		}
+		mu.Unlock()
+	}
+}
+
+func rateLimitMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		limiter := getVisitor(ip)
+		if !limiter.Allow() {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests"})
 			return
 		}
-		log.Fatal("Failed to load events:", err)
-	}
-
-	json.Unmarshal(file, &s.Events)
-}
-
-// Save writes the memory map back to the JSON file
-func (s *EventStore) Save() {
-	s.Lock()
-	defer s.Unlock()
-
-	data, err := json.MarshalIndent(s.Events, "", "  ")
-	if err != nil {
-		log.Println("Error marshalling data:", err)
-		return
-	}
-
-	err = ioutil.WriteFile(s.File, data, 0644)
-	if err != nil {
-		log.Println("Error writing file:", err)
+		c.Next()
 	}
 }
 
-// Global store instance
-var store = EventStore{File: "events.json"}
+// --- DATA STRUCTURES ---
+
+type User struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type Event struct {
+	ID           string                 `json:"id"`
+	CreatorID    string                 `json:"creatorId"`
+	Data         map[string]interface{} `json:"data"`
+	Participants []string               `json:"participants"`
+}
+
+// --- STORAGE ---
+
+type DataStore struct {
+	sync.RWMutex
+	Events map[string]Event
+	Users  map[string]User
+}
+
+var store = DataStore{
+	Events: make(map[string]Event),
+	Users:  make(map[string]User),
+}
+
+func saveToDisk(filename string, data interface{}) {
+	file, _ := json.MarshalIndent(data, "", "  ")
+	_ = ioutil.WriteFile(filename, file, 0644)
+}
+
+func loadFromDisk() {
+	if data, err := ioutil.ReadFile("users.json"); err == nil {
+		json.Unmarshal(data, &store.Users)
+	}
+	if data, err := ioutil.ReadFile("events.json"); err == nil {
+		json.Unmarshal(data, &store.Events)
+	}
+	log.Printf("Loaded %d events and %d users", len(store.Events), len(store.Users))
+}
+
+// --- MAIN ---
 
 func main() {
-	// 1. Initialize Store
-	store.Load()
-	log.Println("Loaded", len(store.Events), "events from disk")
+	loadFromDisk()
+	go cleanupVisitors()
 
-	// 2. Setup Router
 	r := gin.Default()
 
-	// 3. Configure CORS (Allows your Next.js frontend to connect)
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"http://localhost:3000"}
-	config.AllowMethods = []string{"GET", "POST", "PUT", "OPTIONS"}
-	config.AllowHeaders = []string{"Origin", "Content-Type"}
+	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	r.Use(cors.New(config))
+	r.Use(rateLimitMiddleware())
 
-	// --- API ENDPOINTS ---
-
-	// POST /events - Create a new event
-	r.POST("/events", func(c *gin.Context) {
-		var eventData map[string]interface{}
-		if err := c.BindJSON(&eventData); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
+	// --- AUTH ---
+	r.POST("/register", func(c *gin.Context) {
+		var input struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := c.BindJSON(&input); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid input"})
 			return
 		}
-
-		id, ok := eventData["id"].(string)
-		if !ok {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "ID is required"})
-			return
-		}
-
-		// Save to memory and disk
 		store.Lock()
-		store.Events[id] = eventData
-		store.Unlock()
-		store.Save()
-
-		c.JSON(http.StatusCreated, eventData)
+		defer store.Unlock()
+		for _, u := range store.Users {
+			if u.Username == input.Username {
+				c.JSON(400, gin.H{"error": "Username taken"})
+				return
+			}
+		}
+		hashed, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 10)
+		newUser := User{ID: uuid.New().String(), Username: input.Username, Password: string(hashed)}
+		store.Users[newUser.ID] = newUser
+		saveToDisk("users.json", store.Users)
+		c.JSON(201, gin.H{"id": newUser.ID, "username": newUser.Username})
 	})
 
-	// GET /events/:id - Retrieve an event
+	r.POST("/login", func(c *gin.Context) {
+		var input struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := c.BindJSON(&input); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid input"})
+			return
+		}
+		store.RLock()
+		defer store.RUnlock()
+		for _, u := range store.Users {
+			if u.Username == input.Username {
+				if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(input.Password)); err == nil {
+					c.JSON(200, gin.H{"token": u.ID, "username": u.Username})
+					return
+				}
+			}
+		}
+		c.JSON(401, gin.H{"error": "Invalid credentials"})
+	})
+
+	r.PUT("/users/me", func(c *gin.Context) {
+		userID := c.GetHeader("Authorization")
+		if userID == "" {
+			c.JSON(401, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		var input struct {
+			Username    string `json:"username"`
+			OldPassword string `json:"oldPassword"`
+			NewPassword string `json:"newPassword"`
+		}
+		if err := c.BindJSON(&input); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid input"})
+			return
+		}
+
+		store.Lock()
+		defer store.Unlock()
+
+		user, exists := store.Users[userID]
+		if !exists {
+			c.JSON(404, gin.H{"error": "User not found"})
+			return
+		}
+
+		// Update Username
+		nameChanged := false
+		if input.Username != "" && input.Username != user.Username {
+			for _, u := range store.Users {
+				if u.Username == input.Username {
+					c.JSON(400, gin.H{"error": "Username taken"})
+					return
+				}
+			}
+			user.Username = input.Username
+			nameChanged = true
+		}
+
+		// Update Password
+		if input.NewPassword != "" {
+			if input.OldPassword == "" {
+				c.JSON(400, gin.H{"error": "Current password required to set new password"})
+				return
+			}
+			if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.OldPassword)); err != nil {
+				c.JSON(401, gin.H{"error": "Current password incorrect"})
+				return
+			}
+			hashed, _ := bcrypt.GenerateFromPassword([]byte(input.NewPassword), 10)
+			user.Password = string(hashed)
+		}
+
+		store.Users[userID] = user
+		saveToDisk("users.json", store.Users)
+
+		if nameChanged {
+			for id, event := range store.Events {
+				updated := false
+				if parts, ok := event.Data["participants"].([]interface{}); ok {
+					newParts := []interface{}{}
+					for _, p := range parts {
+						if pMap, ok := p.(map[string]interface{}); ok {
+							if pMap["id"] == userID {
+								pMap["name"] = user.Username
+								updated = true
+							}
+							newParts = append(newParts, pMap)
+						}
+					}
+					event.Data["participants"] = newParts
+				}
+				if updated {
+					store.Events[id] = event
+				}
+			}
+			saveToDisk("events.json", store.Events)
+		}
+
+		c.JSON(200, gin.H{"username": user.Username})
+	})
+
+	// --- EVENTS ---
+	r.POST("/events", func(c *gin.Context) {
+		var input map[string]interface{}
+		if err := c.BindJSON(&input); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid JSON"})
+			return
+		}
+		id := input["id"].(string)
+		creatorID := c.GetHeader("Authorization")
+
+		participants := []string{}
+
+		if creatorID != "" {
+			participants = append(participants, creatorID)
+
+			var myUsername string
+			store.RLock()
+			for _, u := range store.Users {
+				if u.ID == creatorID {
+					myUsername = u.Username
+					break
+				}
+			}
+			store.RUnlock()
+
+			newParticipant := map[string]interface{}{
+				"id":           creatorID,
+				"name":         myUsername,
+				"availability": map[string]bool{},
+			}
+
+			if input["participants"] == nil {
+				input["participants"] = []interface{}{}
+			}
+
+			if list, ok := input["participants"].([]interface{}); ok {
+				input["participants"] = append(list, newParticipant)
+			}
+		}
+
+		store.Lock()
+		store.Events[id] = Event{ID: id, CreatorID: creatorID, Data: input, Participants: participants}
+		store.Unlock()
+		saveToDisk("events.json", store.Events)
+		c.JSON(201, input)
+	})
+
 	r.GET("/events/:id", func(c *gin.Context) {
 		id := c.Param("id")
-
 		store.RLock()
-		eventData, exists := store.Events[id]
+		event, exists := store.Events[id]
 		store.RUnlock()
-
 		if !exists {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
+			c.JSON(404, gin.H{"error": "Not found"})
+			return
+		}
+		res := make(map[string]interface{})
+		for k, v := range event.Data {
+			res[k] = v
+		}
+		res["creatorId"] = event.CreatorID
+		c.JSON(200, res)
+	})
+
+	r.PUT("/events/:id", func(c *gin.Context) {
+		id := c.Param("id")
+		var input map[string]interface{}
+		if err := c.BindJSON(&input); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid JSON"})
+			return
+		}
+		store.Lock()
+		event, exists := store.Events[id]
+		if !exists {
+			store.Unlock()
+			c.JSON(404, gin.H{"error": "Not found"})
+			return
+		}
+		event.Data = input
+
+		if parts, ok := input["participants"].([]interface{}); ok {
+			newParts := []string{}
+			for _, p := range parts {
+				if pMap, ok := p.(map[string]interface{}); ok {
+					if pid, ok := pMap["id"].(string); ok {
+						newParts = append(newParts, pid)
+					}
+				}
+			}
+			event.Participants = newParts
+		}
+
+		store.Events[id] = event
+		store.Unlock()
+		saveToDisk("events.json", store.Events)
+		c.JSON(200, input)
+	})
+
+	r.DELETE("/events/:id", func(c *gin.Context) {
+		id := c.Param("id")
+		userID := c.GetHeader("Authorization")
+		store.Lock()
+		defer store.Unlock()
+		event, exists := store.Events[id]
+		if !exists {
+			c.JSON(404, gin.H{"error": "Not found"})
+			return
+		}
+		if event.CreatorID != userID {
+			c.JSON(403, gin.H{"error": "Only creator can delete"})
+			return
+		}
+		delete(store.Events, id)
+		saveToDisk("events.json", store.Events)
+		c.JSON(200, gin.H{"message": "Deleted"})
+	})
+
+	// --- INVITES / JOIN / LEAVE ---
+
+	r.POST("/events/:id/invite", func(c *gin.Context) {
+		id := c.Param("id")
+		creatorID := c.GetHeader("Authorization")
+		var input struct {
+			Username string `json:"username"`
+		}
+		if err := c.BindJSON(&input); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid input"})
+			return
+		}
+		store.Lock()
+		defer store.Unlock()
+
+		event, exists := store.Events[id]
+		if !exists {
+			c.JSON(404, gin.H{"error": "Not found"})
 			return
 		}
 
-		c.JSON(http.StatusOK, eventData)
+		if event.CreatorID != creatorID {
+			c.JSON(403, gin.H{"error": "Only creator can invite"})
+			return
+		}
+
+		var targetUserID string
+		var targetUsername string
+		for _, u := range store.Users {
+			if u.Username == input.Username {
+				targetUserID = u.ID
+				targetUsername = u.Username
+				break
+			}
+		}
+		if targetUserID == "" {
+			c.JSON(404, gin.H{"error": "User not found"})
+			return
+		}
+
+		for _, p := range event.Participants {
+			if p == targetUserID {
+				c.JSON(409, gin.H{"error": "User already in event"})
+				return
+			}
+		}
+
+		event.Participants = append(event.Participants, targetUserID)
+
+		if parts, ok := event.Data["participants"].([]interface{}); ok {
+			newParticipant := map[string]interface{}{
+				"id":           targetUserID,
+				"name":         targetUsername,
+				"availability": map[string]bool{},
+			}
+			event.Data["participants"] = append(parts, newParticipant)
+		}
+
+		store.Events[id] = event
+		saveToDisk("events.json", store.Events)
+		c.JSON(200, gin.H{"message": "Invited"})
 	})
 
-	// PUT /events/:id - Update an event
-	r.PUT("/events/:id", func(c *gin.Context) {
+	r.POST("/events/:id/join", func(c *gin.Context) {
 		id := c.Param("id")
-		var eventData map[string]interface{}
-
-		if err := c.BindJSON(&eventData); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
+		userID := c.GetHeader("Authorization")
+		if userID == "" {
+			c.JSON(401, gin.H{"error": "Login required"})
 			return
 		}
 
 		store.Lock()
-		store.Events[id] = eventData
-		store.Unlock()
-		store.Save()
+		defer store.Unlock()
+		event, exists := store.Events[id]
+		if !exists {
+			c.JSON(404, gin.H{"error": "Not found"})
+			return
+		}
 
-		c.JSON(http.StatusOK, eventData)
+		for _, p := range event.Participants {
+			if p == userID {
+				c.JSON(200, gin.H{"message": "Already joined"})
+				return
+			}
+		}
+
+		event.Participants = append(event.Participants, userID)
+
+		var myUsername string
+		for _, u := range store.Users {
+			if u.ID == userID {
+				myUsername = u.Username
+				break
+			}
+		}
+
+		if parts, ok := event.Data["participants"].([]interface{}); ok {
+			newParticipant := map[string]interface{}{
+				"id":           userID,
+				"name":         myUsername,
+				"availability": map[string]bool{},
+			}
+			event.Data["participants"] = append(parts, newParticipant)
+		}
+
+		store.Events[id] = event
+		saveToDisk("events.json", store.Events)
+		c.JSON(200, gin.H{"message": "Joined"})
+	})
+
+	r.POST("/events/:id/leave", func(c *gin.Context) {
+		id := c.Param("id")
+		userID := c.GetHeader("Authorization")
+		store.Lock()
+		defer store.Unlock()
+		event, exists := store.Events[id]
+		if !exists {
+			c.JSON(404, gin.H{"error": "Not found"})
+			return
+		}
+
+		newParticipants := []string{}
+		found := false
+		for _, p := range event.Participants {
+			if p == userID {
+				found = true
+			} else {
+				newParticipants = append(newParticipants, p)
+			}
+		}
+		if !found {
+			c.JSON(400, gin.H{"error": "Not in event"})
+			return
+		}
+		event.Participants = newParticipants
+
+		if parts, ok := event.Data["participants"].([]interface{}); ok {
+			newPartsJSON := []interface{}{}
+			for _, p := range parts {
+				if pMap, ok := p.(map[string]interface{}); ok {
+					if pMap["id"] != userID {
+						newPartsJSON = append(newPartsJSON, p)
+					}
+				}
+			}
+			event.Data["participants"] = newPartsJSON
+		}
+
+		store.Events[id] = event
+		saveToDisk("events.json", store.Events)
+		c.JSON(200, gin.H{"message": "Left event"})
+	})
+
+	r.GET("/my-events", func(c *gin.Context) {
+		userID := c.GetHeader("Authorization")
+		if userID == "" {
+			c.JSON(401, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		myEvents := []interface{}{}
+		store.RLock()
+		for _, event := range store.Events {
+			isParticipant := false
+			for _, p := range event.Participants {
+				if p == userID {
+					isParticipant = true
+				}
+			}
+			if event.CreatorID == userID || isParticipant {
+				ed := make(map[string]interface{})
+				for k, v := range event.Data {
+					ed[k] = v
+				}
+				ed["isOwner"] = (event.CreatorID == userID)
+				myEvents = append(myEvents, ed)
+			}
+		}
+		store.RUnlock()
+		c.JSON(200, myEvents)
 	})
 
 	log.Println("Server running on http://localhost:8080")

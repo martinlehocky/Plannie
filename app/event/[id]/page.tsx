@@ -2,16 +2,27 @@
 
 import { use, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { AvailabilityGrid } from "@/components/availability-grid"
-import { Share2, Users, Calendar, Trophy } from "lucide-react"
+import { Share2, Users, Calendar, Trophy, LogIn, Trash2, UserPlus, Globe } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { format } from "date-fns"
+import { useRouter } from "next/navigation"
+import { Input } from "@/components/ui/input"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 type Participant = {
   id: string
@@ -29,104 +40,172 @@ type EventData = {
   duration: number
   timezone: string
   participants: Participant[]
+  creatorId?: string
 }
 
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { toast } = useToast()
+  const router = useRouter()
+
   const [eventData, setEventData] = useState<EventData | null>(null)
-  const [participantName, setParticipantName] = useState("")
   const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(null)
-  const [showSignIn, setShowSignIn] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [isCreator, setIsCreator] = useState(false)
+  const [isParticipant, setIsParticipant] = useState(false)
+
+  // State for user preferences
+  const [userTimezone, setUserTimezone] = useState("")
+
+  const [inviteUsername, setInviteUsername] = useState("")
+
+  const fetchEventData = async () => {
+    const userId = localStorage.getItem("userId")
+    const username = localStorage.getItem("username")
+    setIsLoggedIn(!!userId)
+
+    // Load timezone preference (or default to system)
+    const savedTz = localStorage.getItem("preferredTimezone")
+    setUserTimezone(savedTz || Intl.DateTimeFormat().resolvedOptions().timeZone)
+
+    try {
+      const res = await fetch(`http://localhost:8080/events/${id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setEventData(data)
+
+        if (userId && data.creatorId === userId) {
+          setIsCreator(true)
+        }
+
+        const existing = data.participants.find((p: any) => p.id === userId)
+        if (existing) {
+          setIsParticipant(true)
+          setCurrentParticipant(existing)
+        } else {
+          setIsParticipant(false)
+          if (userId && username) {
+            setCurrentParticipant({ id: userId, name: username, availability: {} })
+          }
+        }
+      } else {
+        setEventData(null)
+      }
+    } catch (error) {
+      console.error("Failed to fetch event", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchEvent = async () => {
-      try {
-        const res = await fetch(`http://localhost:8080/events/${id}`)
-        if (res.ok) {
-          const data = await res.json()
-          setEventData(data)
-        } else {
-          setEventData(null)
-        }
-      } catch (error) {
-        console.error("Failed to fetch event", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchEvent()
+    fetchEventData()
   }, [id])
-
-  const handleSignIn = () => {
-    if (!participantName || !eventData) return
-
-    const existingParticipant = eventData.participants.find((p) => p.name === participantName)
-
-    if (existingParticipant) {
-      setCurrentParticipant(existingParticipant)
-    } else {
-      const newParticipant: Participant = {
-        id: Math.random().toString(36).substring(7),
-        name: participantName,
-        availability: {},
-      }
-      setCurrentParticipant(newParticipant)
-    }
-    setShowSignIn(false)
-  }
 
   const handleSaveAvailability = async (availability: Record<string, boolean>) => {
     if (!eventData || !currentParticipant) return
-
     const updatedParticipant = { ...currentParticipant, availability }
     const updatedParticipants = eventData.participants.filter((p) => p.id !== currentParticipant.id)
     updatedParticipants.push(updatedParticipant)
 
     const updatedEvent = { ...eventData, participants: updatedParticipants }
+    const userId = localStorage.getItem("userId")
 
     try {
       const res = await fetch(`http://localhost:8080/events/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': userId || ""
+        },
         body: JSON.stringify(updatedEvent),
       })
-
       if (res.ok) {
         setEventData(updatedEvent)
-        // Also update local currentParticipant so if they edit again, they have latest state
         setCurrentParticipant(updatedParticipant)
-        toast({
-          title: "Availability Saved",
-          description: "Your availability has been updated successfully.",
-        })
-      } else {
-        throw new Error("Backend save failed")
+        toast({ title: "Availability Saved", description: "Updated successfully." })
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save availability. Check connection.",
-        variant: "destructive",
+      toast({ title: "Error", variant: "destructive" })
+    }
+  }
+
+  const handleJoin = async () => {
+    const userId = localStorage.getItem("userId")
+    try {
+      const res = await fetch(`http://localhost:8080/events/${id}/join`, {
+        method: "POST",
+        headers: { "Authorization": userId || "" }
       })
+      if (res.ok) {
+        toast({ title: "Joined!", description: "You can now mark your availability." })
+        await fetchEventData()
+      } else {
+        const d = await res.json()
+        toast({ title: "Error", description: d.error || "Could not join.", variant: "destructive" })
+      }
+    } catch (e) {
+      console.error(e)
+      toast({ title: "Connection Error", variant: "destructive" })
+    }
+  }
+
+  const handleLeave = async () => {
+    const userId = localStorage.getItem("userId")
+    const res = await fetch(`http://localhost:8080/events/${id}/leave`, {
+      method: "POST",
+      headers: { "Authorization": userId || "" }
+    })
+    if (res.ok) {
+      toast({ title: "Left Event", description: "You have been removed." })
+      router.push("/dashboard")
+    }
+  }
+
+  const handleDelete = async () => {
+    try {
+      const userId = localStorage.getItem("userId")
+      const res = await fetch(`http://localhost:8080/events/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": userId || "" }
+      })
+      if (res.ok) {
+        toast({ title: "Event Deleted" })
+        router.push("/dashboard")
+      } else {
+        toast({ title: "Error", description: "Only the creator can delete this.", variant: "destructive" })
+      }
+    } catch (e) { console.error(e) }
+  }
+
+  const handleInvite = async () => {
+    if (!inviteUsername) return
+    const userId = localStorage.getItem("userId")
+    const res = await fetch(`http://localhost:8080/events/${id}/invite`, {
+      method: "POST",
+      headers: { "Authorization": userId || "", "Content-Type": "application/json" },
+      body: JSON.stringify({ username: inviteUsername })
+    })
+    if (res.ok) {
+      toast({ title: "Invited!", description: `${inviteUsername} has been added.` })
+      setInviteUsername("")
+      fetchEventData()
+    } else {
+      const d = await res.json()
+      toast({ title: "Error", description: d.error, variant: "destructive" })
     }
   }
 
   const handleShare = () => {
     const url = window.location.href
     navigator.clipboard.writeText(url)
-    toast({
-      title: "Link Copied!",
-      description: "Share this link with your group.",
-    })
+    toast({ title: "Link Copied!", description: "Share this link with your group." })
   }
 
   const getBestTimes = () => {
     if (!eventData) return []
     const allSlots: Record<string, string[]> = {}
-
     eventData.participants.forEach((participant) => {
       Object.entries(participant.availability).forEach(([slot, isAvailable]) => {
         if (isAvailable) {
@@ -135,34 +214,35 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         }
       })
     })
-
     return Object.entries(allSlots)
         .map(([slot, names]) => ({ slot, count: names.length, names }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 3)
   }
 
-  if (loading) {
-    return <div className="flex h-screen items-center justify-center">Loading event...</div>
+  // Format helper for display
+  const formatTimeInTz = (dateString: string) => {
+    try {
+      // Parse the slot string (yyyy-MM-dd-HH:mm) back to date
+      // NOTE: Slot strings are stored in local key format.
+      // We construct a date object from it, then display it in the user's TZ.
+      const [y, m, d, h, min] = dateString.split(/[-:]/).map(Number)
+      // Construct date in LOCAL system time (which matches how slots were generated)
+      const date = new Date(y, m - 1, d, h, min)
+      return date.toLocaleTimeString([], {
+        timeZone: userTimezone,
+        hour: 'numeric',
+        minute: '2-digit',
+        month: 'short',
+        day: 'numeric'
+      })
+    } catch (e) {
+      return dateString
+    }
   }
 
-  if (!eventData) {
-    return (
-        <div className="flex h-screen items-center justify-center">
-          <Card className="w-[350px]">
-            <CardHeader>
-              <CardTitle>Event not found</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p>The event you are looking for does not exist or has been removed.</p>
-              <Button className="w-full mt-4" onClick={() => (window.location.href = "/")}>
-                Create New Event
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-    )
-  }
+  if (loading) return <div className="flex h-screen items-center justify-center">Loading...</div>
+  if (!eventData) return <div>Event not found</div>
 
   const bestTimes = getBestTimes()
 
@@ -173,84 +253,106 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         </div>
 
         <div className="max-w-7xl mx-auto grid gap-8">
-          {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h1 className="text-3xl md:text-4xl font-bold">{eventData.name}</h1>
-              <div className="flex items-center gap-2 text-muted-foreground mt-2">
+              <div className="flex flex-wrap items-center gap-2 text-muted-foreground mt-2">
                 <Calendar className="h-4 w-4" />
                 <span>
                 {format(new Date(eventData.dateRange.from), "MMM d")} -{" "}
                   {format(new Date(eventData.dateRange.to), "MMM d, yyyy")}
               </span>
+
+                {/* Timezone Indicator */}
+                <div className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full text-xs font-medium ml-2">
+                  <Globe className="h-3 w-3" />
+                  <span>{userTimezone.replace(/_/g, " ")}</span>
+                </div>
               </div>
             </div>
-            <Button onClick={handleShare} variant="outline" className="gap-2">
-              <Share2 className="h-4 w-4" />
-              Share Event
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => router.push("/dashboard")}>Dashboard</Button>
+              {isParticipant && !isCreator && (
+                  <Button variant="outline" onClick={handleLeave} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                    Leave
+                  </Button>
+              )}
+              <Button onClick={handleShare} className="gap-2">
+                <Share2 className="h-4 w-4" /> Share
+              </Button>
+              {isCreator && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Event?</AlertDialogTitle>
+                        <AlertDialogDescription>This will permanently delete this event.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+              )}
+            </div>
           </div>
 
           <div className="grid lg:grid-cols-[350px_1fr] gap-8">
-            {/* Sidebar */}
             <div className="space-y-6">
-              {/* Sign In Card */}
+              {isCreator && (
+                  <Card>
+                    <CardHeader><CardTitle className="text-sm flex items-center gap-2"><UserPlus className="h-4 w-4"/> Invite User</CardTitle></CardHeader>
+                    <CardContent className="flex gap-2">
+                      <Input
+                          placeholder="Username"
+                          value={inviteUsername}
+                          onChange={(e) => setInviteUsername(e.target.value)}
+                          className="h-9"
+                      />
+                      <Button size="sm" onClick={handleInvite}>Add</Button>
+                    </CardContent>
+                  </Card>
+              )}
+
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Your Identity</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="text-lg">Your Identity</CardTitle></CardHeader>
                 <CardContent>
-                  {showSignIn ? (
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="name">Sign In</Label>
-                          <Input
-                              id="name"
-                              placeholder="Your Name"
-                              value={participantName}
-                              onChange={(e) => setParticipantName(e.target.value)}
-                              onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
-                              className="h-10 md:h-11"
-                          />
+                  {isLoggedIn && currentParticipant ? (
+                      <div className="flex items-center gap-3">
+                        <Avatar><AvatarFallback>{currentParticipant.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Signed in as</p>
+                          <p className="font-medium">{currentParticipant.name}</p>
                         </div>
-                        <Button className="w-full" onClick={handleSignIn} disabled={!participantName}>
-                          Continue
-                        </Button>
                       </div>
                   ) : (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback>{currentParticipant?.name.charAt(0).toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <div className="font-medium">
-                            <p className="text-sm text-muted-foreground">Signed in as</p>
-                            <p>{currentParticipant?.name}</p>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => setShowSignIn(true)}>
-                          Switch user
+                      <div className="space-y-4">
+                        <p className="text-sm text-muted-foreground">You must be logged in to participate.</p>
+                        <Button className="w-full gap-2" onClick={() => router.push("/login")}>
+                          <LogIn className="h-4 w-4" /> Sign In
                         </Button>
                       </div>
                   )}
                 </CardContent>
               </Card>
 
-              {/* Best Times */}
               {bestTimes.length > 0 && (
                   <Card className="border-primary/20 bg-primary/5">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-lg text-primary">
-                        <Trophy className="h-5 w-5" />
-                        Best Times
+                        <Trophy className="h-5 w-5" /> Best Times
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       {bestTimes.map((time, index) => (
                           <div key={time.slot} className="flex items-start justify-between gap-4 p-3 rounded-lg bg-background border">
                             <div>
+                              {/* Display Best Time in correct timezone */}
                               <div className="font-semibold text-primary">
-                                {format(new Date(time.slot.split("-").slice(0, 3).join("-") + "T" + time.slot.split("-")[3]), "MMM d, h:mm a")}
+                                {formatTimeInTz(time.slot)}
                               </div>
                               <div className="text-sm text-muted-foreground mt-1">{time.names.join(", ")}</div>
                             </div>
@@ -263,54 +365,50 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   </Card>
               )}
 
-              {/* Participants List */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
-                    <Users className="h-5 w-5" />
-                    Participants ({eventData.participants.length})
+                    <Users className="h-5 w-5" /> Participants ({eventData.participants.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
-                    {eventData.participants.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No participants yet</p>
-                    ) : (
-                        eventData.participants.map((participant) => (
-                            <Badge key={participant.id} variant="secondary" className="px-3 py-1 text-sm">
-                              <Avatar className="h-4 w-4 mr-2">
-                                <AvatarFallback className="text-[10px]">
-                                  {participant.name.charAt(0).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              {participant.name}
-                            </Badge>
-                        ))
-                    )}
+                    {eventData.participants.map((participant) => (
+                        <Badge key={participant.id} variant="secondary" className="px-3 py-1 text-sm">
+                          {participant.name}
+                        </Badge>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Availability Grid */}
             <div className="space-y-6">
-              {!showSignIn && currentParticipant ? (
+              {!isLoggedIn ? (
+                  <Card className="h-full flex items-center justify-center min-h-[400px] border-dashed">
+                    <div className="text-center space-y-4">
+                      <h3 className="text-lg font-semibold">Please Sign In</h3>
+                      <Button onClick={() => router.push("/login")}>Sign In Now</Button>
+                    </div>
+                  </Card>
+              ) : isParticipant ? (
                   <AvailabilityGrid
                       dateRange={{
                         from: new Date(eventData.dateRange.from),
                         to: new Date(eventData.dateRange.to),
                       }}
                       duration={eventData.duration}
-                      currentParticipant={currentParticipant}
+                      currentParticipant={currentParticipant!}
                       allParticipants={eventData.participants}
                       onSave={handleSaveAvailability}
+                      timezone={userTimezone} // Pass preferred timezone
                   />
               ) : (
-                  <Card className="h-full flex items-center justify-center min-h-[400px] border-dashed">
-                    <div className="text-center space-y-2">
-                      <Users className="h-12 w-12 mx-auto text-muted-foreground/50" />
-                      <h3 className="text-lg font-semibold">Sign in to mark your availability</h3>
-                      <p className="text-muted-foreground">Enter your name in the sidebar to get started</p>
+                  <Card className="h-full flex items-center justify-center min-h-[400px]">
+                    <div className="text-center space-y-4">
+                      <h3 className="text-2xl font-semibold">You're Invited!</h3>
+                      <p className="text-muted-foreground">Join this event to let the group know when you're free.</p>
+                      <Button size="lg" onClick={handleJoin} className="w-full max-w-xs">Join Event</Button>
                     </div>
                   </Card>
               )}

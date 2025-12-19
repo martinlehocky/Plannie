@@ -1,35 +1,61 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
-import { CalendarIcon, Clock } from "lucide-react"
+import { Clock } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import type { DateRange } from "react-day-picker"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
 
 export default function Home() {
   const router = useRouter()
+  const { toast } = useToast()
+
   const [eventName, setEventName] = useState("")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const [duration, setDuration] = useState("30")
+  const [customDuration, setCustomDuration] = useState("") // New State
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  // Check login status on mount
+  useEffect(() => {
+    const userId = localStorage.getItem("userId")
+    setIsLoggedIn(!!userId)
+  }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem("userId")
+    localStorage.removeItem("username")
+    setIsLoggedIn(false)
+    toast({ title: "Signed Out", description: "See you next time!" })
+  }
 
   const handleCreateEvent = async () => {
-    if (!eventName || !dateRange?.from || !dateRange?.to) {
-      return
+    if (!eventName || !dateRange?.from || !dateRange?.to) return
+
+    // Calculate final duration
+    let finalDuration = Number.parseInt(duration)
+    if (duration === "custom") {
+      finalDuration = Number.parseInt(customDuration)
+      if (isNaN(finalDuration) || finalDuration <= 0) {
+        toast({ title: "Invalid Duration", description: "Please enter a valid number of minutes.", variant: "destructive" })
+        return
+      }
     }
 
     setIsSubmitting(true)
 
-    // Generate a unique event ID
     const eventId = Math.random().toString(36).substring(7)
+    const userId = localStorage.getItem("userId") || ""
 
     const eventData = {
       id: eventId,
@@ -38,17 +64,17 @@ export default function Home() {
         from: dateRange.from.toISOString(),
         to: dateRange.to.toISOString(),
       },
-      duration: Number.parseInt(duration),
+      duration: finalDuration,
       timezone,
       participants: [],
     }
 
     try {
-      // Replaces: localStorage.setItem(`event-${eventId}`, JSON.stringify(eventData))
       const response = await fetch('http://localhost:8080/events', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': userId // Send User ID to backend
         },
         body: JSON.stringify(eventData),
       })
@@ -60,7 +86,11 @@ export default function Home() {
       router.push(`/event/${eventId}`)
     } catch (error) {
       console.error("Error creating event:", error)
-      alert("Could not create event. Please ensure the backend is running.")
+      toast({
+        title: "Error",
+        description: "Could not create event. Ensure backend is running.",
+        variant: "destructive"
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -68,7 +98,22 @@ export default function Home() {
 
   return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 md:p-8 relative">
-        <div className="absolute top-4 right-4 md:top-8 md:right-8">
+        {/* Top Bar */}
+        <div className="absolute top-4 right-4 md:top-8 md:right-8 flex gap-4 items-center">
+          {isLoggedIn ? (
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => router.push("/dashboard")}>
+                  My Dashboard
+                </Button>
+                <Button variant="ghost" onClick={handleLogout}>
+                  Sign Out
+                </Button>
+              </div>
+          ) : (
+              <Button variant="ghost" onClick={() => router.push("/login")}>
+                Sign In / Register
+              </Button>
+          )}
           <ThemeToggle />
         </div>
 
@@ -111,8 +156,16 @@ export default function Home() {
                           <SelectItem value="60">1 hour</SelectItem>
                           <SelectItem value="90">1.5 hours</SelectItem>
                           <SelectItem value="120">2 hours</SelectItem>
+                          <SelectItem value="custom">Custom</SelectItem> {/* New Option */}
                         </SelectContent>
                       </Select>
+
+                      {/* Custom Input appears below/overlay if chosen, or just replaces logic?
+                          Your layout is tight (grid-cols-2), so I'll render it *below* the select if active,
+                          or conditionally render the Input *instead* of Timezone if needed?
+
+                          Actually, putting it right under the select is safest for your layout.
+                      */}
                     </div>
 
                     <div className="space-y-2">
@@ -125,6 +178,21 @@ export default function Home() {
                       />
                     </div>
                   </div>
+
+                  {/* Custom Duration Input Field - Only visible when 'custom' is selected */}
+                  {duration === "custom" && (
+                      <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                        <Label>Custom Duration (minutes)</Label>
+                        <Input
+                            type="number"
+                            placeholder="e.g. 45"
+                            value={customDuration}
+                            onChange={(e) => setCustomDuration(e.target.value)}
+                            className="h-11 md:h-12"
+                        />
+                      </div>
+                  )}
+
                 </div>
 
                 <div className="space-y-2">
@@ -156,10 +224,6 @@ export default function Home() {
               </Button>
             </CardContent>
           </Card>
-
-          <p className="text-center text-muted-foreground text-sm">
-            No sign-up required. Share the link with your group to get started.
-          </p>
         </div>
       </div>
   )

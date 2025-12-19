@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Toggle } from "@/components/ui/toggle"
-import { format, eachDayOfInterval, setHours, setMinutes } from "date-fns"
-import { MousePointer2, Hand, Save } from "lucide-react"
+import { format, eachDayOfInterval, startOfDay, addMinutes } from "date-fns"
+import { MousePointer2, Hand, Save, Globe } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type DateRange = {
@@ -26,58 +26,106 @@ type AvailabilityGridProps = {
   currentParticipant: Participant
   allParticipants: Participant[]
   onSave: (availability: Record<string, boolean>) => void
+  timezone: string
 }
 
 export function AvailabilityGrid({
-  dateRange,
-  duration,
-  currentParticipant,
-  allParticipants,
-  onSave,
-}: AvailabilityGridProps) {
+                                   dateRange,
+                                   duration,
+                                   currentParticipant,
+                                   allParticipants,
+                                   onSave,
+                                   timezone,
+                                 }: AvailabilityGridProps) {
   const [availability, setAvailability] = useState<Record<string, boolean>>(currentParticipant.availability || {})
   const [isPainting, setIsPainting] = useState(false)
   const [paintMode, setPaintMode] = useState<boolean | null>(null)
   const [scrollMode, setScrollMode] = useState(false)
   const gridRef = useRef<HTMLDivElement>(null)
 
-  const dates = eachDayOfInterval({ start: dateRange.from, end: dateRange.to })
-  const timeSlots: Date[] = []
-  const startHour = 9
-  const endHour = 17
+  // 1. Generate Visual Grid Structure (Viewer's Local Perspective)
+  const { displayDates, displayTimes } = useMemo(() => {
+    // Dates
+    const days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to })
 
-  // Generate time slots
-  for (let hour = startHour; hour <= endHour; hour++) {
-    for (let minute = 0; minute < 60; minute += duration) {
-      if (hour === endHour && minute > 0) break
-      const time = setMinutes(setHours(new Date(), hour), minute)
-      timeSlots.push(time)
+    // Times (24h)
+    const times: Date[] = []
+    const baseDate = startOfDay(new Date())
+    for (let i = 0; i < 24 * 60; i += duration) {
+      times.push(addMinutes(baseDate, i))
+    }
+
+    return { displayDates: days, displayTimes: times }
+  }, [dateRange, duration])
+
+  // 2. Robust Timezone Conversion
+  const getAbsoluteKey = (day: Date, time: Date) => {
+    // Visual Components we want
+    const y = day.getFullYear()
+    const m = day.getMonth()
+    const d = day.getDate()
+    const h = time.getHours()
+    const min = time.getMinutes()
+
+    // 1. Create a "Guess" timestamp (assuming UTC matches Visual)
+    let guess = new Date(Date.UTC(y, m, d, h, min))
+
+    // 2. Check what this Guess looks like in the TARGET Timezone
+    // (This tells us the offset between UTC and Target at that specific moment)
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: 'numeric', hour12: false
+    }).formatToParts(guess)
+
+    // Parse the formatted parts
+    const getPart = (type: string) => {
+      const p = parts.find(p => p.type === type)
+      return p ? parseInt(p.value) : 0
+    }
+
+    // Note: formatToParts returns "24" for midnight sometimes in some browsers, handle carefully
+    let ph = getPart('hour')
+    if (ph === 24) ph = 0
+
+    // Construct the "Visual Time" that our Guess resulted in
+    const resultTimeInUTC = Date.UTC(getPart('year'), getPart('month') - 1, getPart('day'), ph, getPart('minute'))
+    const wantedTimeInUTC = Date.UTC(y, m, d, h, min)
+
+    // 3. Calculate difference and adjust
+    const diff = wantedTimeInUTC - resultTimeInUTC
+
+    // 4. Create correct absolute date
+    const correctDate = new Date(guess.getTime() + diff)
+
+    return correctDate.toISOString()
+  }
+
+  // 3. Resolve Data for Cell
+  const getCellData = (day: Date, time: Date) => {
+    const key = getAbsoluteKey(day, time)
+
+    const availableCount = allParticipants.filter((p) => p.availability[key]).length
+    return {
+      key,
+      count: availableCount,
+      total: allParticipants.length,
+      myVal: availability[key],
+      participants: allParticipants.filter((p) => p.availability[key]).map((p) => p.name)
     }
   }
 
-  const getSlotKey = (date: Date, time: Date) => {
-    return `${format(date, "yyyy-MM-dd")}-${format(time, "HH:mm")}`
-  }
-
-  const getSlotAvailability = (date: Date, time: Date) => {
-    const key = getSlotKey(date, time)
-    const availableCount = allParticipants.filter((p) => p.availability[key]).length
-    return { count: availableCount, total: allParticipants.length }
-  }
-
-  const handleMouseDown = (date: Date, time: Date) => {
+  const handleMouseDown = (key: string, currentVal: boolean) => {
     if (scrollMode) return
-    const key = getSlotKey(date, time)
-    const newValue = !availability[key]
-    setAvailability({ ...availability, [key]: newValue })
+    const newValue = !currentVal
+    setAvailability(prev => ({ ...prev, [key]: newValue }))
     setIsPainting(true)
     setPaintMode(newValue)
   }
 
-  const handleMouseEnter = (date: Date, time: Date) => {
+  const handleMouseEnter = (key: string) => {
     if (!isPainting || scrollMode || paintMode === null) return
-    const key = getSlotKey(date, time)
-    setAvailability({ ...availability, [key]: paintMode })
+    setAvailability(prev => ({ ...prev, [key]: paintMode }))
   }
 
   const handleMouseUp = () => {
@@ -90,158 +138,125 @@ export function AvailabilityGrid({
     return () => document.removeEventListener("mouseup", handleMouseUp)
   }, [])
 
-  const handleSave = () => {
-    onSave(availability)
-  }
-
-  const getSlotOpacity = (count: number, total: number) => {
-    if (total === 0) return 0
-    const ratio = count / total
-    return ratio
-  }
-
-  const getParticipantsForSlot = (date: Date, time: Date) => {
-    const key = getSlotKey(date, time)
-    return allParticipants.filter((p) => p.availability[key]).map((p) => p.name)
-  }
-
   return (
-    <Card>
-      <CardHeader className="px-3 md:px-6 pb-3 md:pb-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 md:gap-4">
-          <CardTitle className="text-lg md:text-xl lg:text-2xl">Mark Your Availability</CardTitle>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Toggle
-              pressed={scrollMode}
-              onPressedChange={setScrollMode}
-              variant="outline"
-              size="sm"
-              className="gap-2 flex-1 sm:flex-initial h-9 md:h-10"
-            >
-              {scrollMode ? (
-                <>
-                  <Hand className="w-4 h-4" />
-                  <span className="text-xs md:text-sm">Scroll</span>
-                </>
-              ) : (
-                <>
-                  <MousePointer2 className="w-4 h-4" />
-                  <span className="text-xs md:text-sm">Paint</span>
-                </>
-              )}
+      <Card className="w-full">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div>
+            <CardTitle className="text-xl">Mark Your Availability</CardTitle>
+            <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+              <Globe className="h-3 w-3" />
+              Times shown in {timezone || "Local Time"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Toggle pressed={scrollMode} onPressedChange={setScrollMode}>
+              {scrollMode ? <><Hand className="h-4 w-4 mr-2" />Scroll</> : <><MousePointer2 className="h-4 w-4 mr-2" />Paint</>}
             </Toggle>
-            <Button onClick={handleSave} className="gap-2 flex-1 sm:flex-initial h-9 md:h-10 text-xs md:text-sm">
-              <Save className="w-4 h-4" />
-              Save
+            <Button onClick={() => onSave(availability)} size="sm">
+              <Save className="h-4 w-4 mr-2" /> Save
             </Button>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent className="px-3 md:px-6">
-        <div className="overflow-x-auto -mx-3 md:mx-0 px-3 md:px-0" ref={gridRef}>
-          <div className="min-w-[500px] sm:min-w-[600px]">
-            {/* Header Row */}
-            <div
-              className="grid gap-0.5 md:gap-1 mb-0.5 md:mb-1"
-              style={{ gridTemplateColumns: `60px repeat(${dates.length}, 1fr)` }}
-            >
-              <div className="sticky left-0 z-10 bg-card" />
-              {dates.map((date) => (
-                <div
-                  key={date.toISOString()}
-                  className="text-center p-1.5 md:p-2 font-semibold text-xs md:text-sm bg-muted rounded-md md:rounded-lg sticky top-0 z-10"
-                >
-                  <div>{format(date, "EEE")}</div>
-                  <div className="text-[10px] md:text-xs text-muted-foreground">{format(date, "MMM d")}</div>
-                </div>
-              ))}
+        </CardHeader>
+        <CardContent>
+          <div
+              ref={gridRef}
+              className={cn(
+                  "relative overflow-auto border rounded-lg max-h-[600px] select-none shadow-inner",
+                  scrollMode ? "touch-pan-x touch-pan-y" : "touch-none"
+              )}
+          >
+            <div className="min-w-[800px]">
+              {/* Header Row (Days) */}
+              <div className="grid sticky top-0 z-10 bg-background border-b shadow-sm"
+                   style={{ gridTemplateColumns: `100px repeat(${displayDates.length}, 1fr)` }}>
+                <div className="p-4 font-semibold text-muted-foreground bg-muted/30 border-r text-center">Time</div>
+                {displayDates.map((date) => (
+                    <div key={date.toString()} className="p-4 text-center border-l bg-muted/30">
+                      <div className="font-semibold">{format(date, "EEE")}</div>
+                      <div className="text-sm text-muted-foreground">{format(date, "MMM d")}</div>
+                    </div>
+                ))}
+              </div>
+
+              {/* Grid Body (Rows = Times) */}
+              <div className="divide-y">
+                {displayTimes.map((time, timeIndex) => (
+                    <div key={timeIndex}
+                         className="grid hover:bg-muted/5 transition-colors"
+                         style={{ gridTemplateColumns: `100px repeat(${displayDates.length}, 1fr)` }}>
+
+                      {/* Time Label */}
+                      <div className="p-3 text-sm font-medium text-muted-foreground flex items-center justify-center border-r bg-muted/5">
+                        {format(time, "h:mm a")}
+                      </div>
+
+                      {/* Cells */}
+                      {displayDates.map((date) => {
+                        const { key, count, total, myVal, participants } = getCellData(date, time)
+                        const opacity = total === 0 ? 0 : count / total
+
+                        return (
+                            <div key={key} className="p-1 border-l relative h-12">
+                              <TooltipProvider>
+                                <Tooltip delayDuration={0}>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                        onMouseDown={() => handleMouseDown(key, !!myVal)}
+                                        onMouseEnter={() => handleMouseEnter(key)}
+                                        className={cn(
+                                            "w-full h-full rounded-md border-2 transition-all relative overflow-hidden",
+                                            scrollMode ? "cursor-grab" : "cursor-pointer active:scale-95",
+                                            myVal
+                                                ? "bg-primary border-primary shadow-sm"
+                                                : "bg-muted/30 border-border hover:border-primary/50",
+                                        )}
+                                        style={{
+                                          backgroundColor: myVal
+                                              ? undefined
+                                              : opacity > 0 ? `rgba(34, 197, 94, ${opacity * 0.4})` : undefined,
+                                        }}
+                                    >
+                                      {myVal && <div className="absolute inset-0 bg-primary/10 animate-pulse" />}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="z-50 text-xs">
+                                    <p className="font-semibold mb-1">{format(date, "MMM d")} at {format(time, "h:mm a")}</p>
+                                    {participants.length > 0 ? (
+                                        <>
+                                          <p className="text-green-600 font-medium mb-1">{count}/{total} available</p>
+                                          <p className="text-muted-foreground max-w-[150px] flex flex-wrap gap-1">
+                                            {participants.join(", ")}
+                                          </p>
+                                        </>
+                                    ) : <p className="text-muted-foreground">No one available</p>}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                        )
+                      })}
+                    </div>
+                ))}
+              </div>
             </div>
+          </div>
 
-            {/* Time Slots */}
-            <TooltipProvider delayDuration={200}>
-              {timeSlots.map((time) => (
-                <div
-                  key={time.toISOString()}
-                  className="grid gap-0.5 md:gap-1 mb-0.5 md:mb-1"
-                  style={{ gridTemplateColumns: `60px repeat(${dates.length}, 1fr)` }}
-                >
-                  <div className="text-[10px] md:text-xs text-right pr-1.5 md:pr-2 py-2 font-medium text-muted-foreground sticky left-0 z-10 bg-card">
-                    {format(time, "h:mm a")}
-                  </div>
-                  {dates.map((date) => {
-                    const key = getSlotKey(date, time)
-                    const isMyAvailability = availability[key]
-                    const { count, total } = getSlotAvailability(date, time)
-                    const opacity = getSlotOpacity(count, total)
-                    const participants = getParticipantsForSlot(date, time)
-
-                    return (
-                      <Tooltip key={key}>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            onMouseDown={() => handleMouseDown(date, time)}
-                            onMouseEnter={() => handleMouseEnter(date, time)}
-                            onTouchStart={(e) => {
-                              e.preventDefault()
-                              handleMouseDown(date, time)
-                            }}
-                            className={cn(
-                              "h-10 md:h-12 min-h-[40px] md:min-h-[48px] rounded-md md:rounded-lg border-2 transition-all relative overflow-hidden touch-none",
-                              scrollMode ? "cursor-default" : "cursor-pointer active:scale-95",
-                              isMyAvailability
-                                ? "bg-primary border-primary"
-                                : "bg-muted/30 border-border hover:border-primary/50 active:border-primary/50",
-                            )}
-                            style={{
-                              backgroundColor: isMyAvailability ? undefined : `rgba(34, 197, 94, ${opacity * 0.3})`,
-                            }}
-                          >
-                            {isMyAvailability && <div className="absolute inset-0 bg-primary opacity-100" />}
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent className="text-xs md:text-sm max-w-[200px] md:max-w-none">
-                          <div className="space-y-1">
-                            <p className="font-semibold">
-                              {format(date, "MMM d")} at {format(time, "h:mm a")}
-                            </p>
-                            {participants.length > 0 ? (
-                              <>
-                                <p className="text-[10px] md:text-xs text-muted-foreground">
-                                  {count}/{total} available
-                                </p>
-                                <p className="text-[10px] md:text-xs">{participants.join(", ")}</p>
-                              </>
-                            ) : (
-                              <p className="text-[10px] md:text-xs text-muted-foreground">No one available</p>
-                            )}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    )
-                  })}
-                </div>
-              ))}
-            </TooltipProvider>
+          {/* Legend */}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-primary border border-primary"></div>
+              <span>Your Availability</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-green-500/30 border border-green-500/30"></div>
+              <span>Group (darker = more people)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-muted/30 border border-border"></div>
+              <span>Unavailable</span>
+            </div>
           </div>
-        </div>
-
-        {/* Legend */}
-        <div className="mt-4 md:mt-6 flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 md:gap-4 text-xs md:text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 md:w-6 md:h-6 rounded bg-primary border-2 border-primary flex-shrink-0" />
-            <span>Your Availability</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 md:w-6 md:h-6 rounded bg-primary/30 border-2 border-border flex-shrink-0" />
-            <span>Group (darker = more people)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 md:w-6 md:h-6 rounded bg-muted/30 border-2 border-border flex-shrink-0" />
-            <span>Unavailable</span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
   )
 }

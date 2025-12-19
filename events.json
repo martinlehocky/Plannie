@@ -1,33 +1,38 @@
 {
-  "w4axqp": {
-    "dateRange": {
-      "from": "2025-12-22T23:00:00.000Z",
-      "to": "2025-12-25T23:00:00.000Z"
-    },
-    "duration": 30,
-    "id": "w4axqp",
-    "name": "Test",
-    "participants": [
-      {
-        "availability": {
-          "2025-12-23-10:00": true,
-          "2025-12-23-10:30": true
-        },
-        "id": "rd7lvl",
-        "name": "Finn"
+  "3kqr7": {
+    "id": "3kqr7",
+    "creatorId": "e5462d6a-af24-4504-af84-b4622705982d",
+    "data": {
+      "creatorId": "e5462d6a-af24-4504-af84-b4622705982d",
+      "dateRange": {
+        "from": "2025-12-21T23:00:00.000Z",
+        "to": "2025-12-24T23:00:00.000Z"
       },
-      {
-        "availability": {
-          "2025-12-23-09:00": true,
-          "2025-12-23-09:30": true,
-          "2025-12-23-10:00": true,
-          "2025-12-23-10:30": true,
-          "2025-12-23-11:00": false
-        },
-        "id": "1g8bed",
-        "name": "Martin"
-      }
-    ],
-    "timezone": "Europe/Bratislava"
+      "duration": 30,
+      "id": "3kqr7",
+      "name": "Test2",
+      "participants": [
+        {
+          "availability": {
+            "2025-12-22T01:30:00.000Z": false
+          },
+          "id": "e5462d6a-af24-4504-af84-b4622705982d",
+          "name": "Martin"
+        }
+      ],
+      "timezone": "Europe/Bratislava"
+    },
+    "participants": [
+      "e5462d6a-af24-4504-af84-b4622705982d"
+    ]
+  },
+  "w4axqp": {
+    "id": "w4axqp",
+    "creatorId": "",
+    "data": null,
+    "participants": [
+      "",
+      ""
+    ]
   }
 }
