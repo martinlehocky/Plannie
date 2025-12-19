@@ -1,13 +1,61 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Toggle } from "@/components/ui/toggle"
-import { format, eachDayOfInterval, setHours, setMinutes } from "date-fns"
-import { MousePointer2, Hand, Save, Globe } from "lucide-react"
+import { format, eachDayOfInterval, startOfDay, addDays, subDays, isBefore, isAfter, isSameDay } from "date-fns"
 import { cn } from "@/lib/utils"
+
+// --- Helper: Calculate Visual Date ---
+// We need to know "What date is this UTC key in the Target Timezone?"
+function getVisualDate(utcKey: string, targetTimezone: string): Date {
+  // 1. Parse UTC Key to Timestamp
+  const ts = new Date(utcKey).getTime()
+
+  // 2. Format to parts in Target TZ
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: targetTimezone,
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric'
+  })
+
+  const parts = formatter.formatToParts(new Date(ts))
+  const p: Record<string, number> = {}
+  parts.forEach(({ type, value }) => {
+    if (type !== 'literal') p[type] = parseInt(value, 10)
+  })
+
+  // Return the "Visual" date (Midnight of that day)
+  return new Date(p.year, p.month - 1, p.day)
+}
+
+// ... (Previous createUtcKey implementation stays here) ...
+function createUtcKey(date: Date, hour: number, minute: number, targetTimezone: string): string {
+  const year = date.getFullYear()
+  const month = date.getMonth()
+  const day = date.getDate()
+  const candidateTimestamp = Date.UTC(year, month, day, hour, minute, 0, 0)
+
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: targetTimezone,
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+    hour12: false
+  })
+
+  const refDate = new Date(candidateTimestamp)
+  const parts = formatter.formatToParts(refDate)
+  const p: Record<string, number> = {}
+  parts.forEach(({ type, value }) => {
+    if (type !== 'literal') p[type] = parseInt(value, 10)
+  })
+
+  const visualDateInTarget = new Date(Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute))
+  const diff = visualDateInTarget.getTime() - refDate.getTime()
+  const desiredUtcTime = candidateTimestamp - diff
+
+  return new Date(desiredUtcTime).toISOString()
+}
 
 type DateRange = {
   from: Date
@@ -22,16 +70,16 @@ type Participant = {
 
 type AvailabilityGridProps = {
   dateRange: DateRange
-  duration: number
+  duration?: number
   currentParticipant: Participant
   allParticipants: Participant[]
   onSave: (availability: Record<string, boolean>) => void
-  timezone: string // New Prop
+  timezone: string
 }
 
 export function AvailabilityGrid({
                                    dateRange,
-                                   duration,
+                                   duration = 30,
                                    currentParticipant,
                                    allParticipants,
                                    onSave,
@@ -43,48 +91,78 @@ export function AvailabilityGrid({
   const [scrollMode, setScrollMode] = useState(false)
   const gridRef = useRef<HTMLDivElement>(null)
 
-  const dates = eachDayOfInterval({ start: dateRange.from, end: dateRange.to })
-  const timeSlots: Date[] = []
+  // --- DYNAMIC DATE EXPANSION LOGIC ---
+  const expandedDates = useMemo(() => {
+    let start = dateRange.from
+    let end = dateRange.to
 
-  const startHour = 9
-  const endHour = 17
+    // 1. Collect ALL active keys from all participants
+    const allKeys = new Set<string>()
+    allParticipants.forEach(p => {
+      Object.keys(p.availability).forEach(k => {
+        if (p.availability[k]) allKeys.add(k)
+      })
+    })
+    // Also include my current unsaved changes
+    Object.keys(availability).forEach(k => {
+      if (availability[k]) allKeys.add(k)
+    })
 
-  // Generate time slots (Using system local time as base reference for "slots")
-  // Note: This simplistic generation assumes 9-5 in LOCAL time.
-  // Ideally, this should be generated based on the EVENT's timezone if we want to enforce 9-5 in event time.
-  // But for now, we generate absolute points in time.
-  for (let hour = startHour; hour <= endHour; hour++) {
+    // 2. Check each key: "Does this fall outside the current range in MY timezone?"
+    allKeys.forEach(key => {
+      // Convert UTC Key -> Visual Date in User's Timezone
+      const visualDate = getVisualDate(key, timezone)
+
+      // Check boundaries
+      if (isBefore(visualDate, start)) {
+        start = visualDate // Extend backwards
+      }
+      if (isAfter(visualDate, end)) {
+        end = visualDate // Extend forwards
+      }
+    })
+
+    return eachDayOfInterval({ start, end })
+  }, [dateRange, allParticipants, availability, timezone])
+
+  // Times (0-24)
+  const timeRows: { hour: number; minute: number; label: string }[] = []
+  const startHour = 0
+  const endHour = 24
+  const baseDate = startOfDay(new Date())
+
+  for (let hour = startHour; hour < endHour; hour++) {
     for (let minute = 0; minute < 60; minute += duration) {
-      if (hour === endHour && minute > 0) break
-      const time = setMinutes(setHours(new Date(), hour), minute)
-      timeSlots.push(time)
+      const d = new Date(baseDate)
+      d.setHours(hour)
+      d.setMinutes(minute)
+      timeRows.push({
+        hour,
+        minute,
+        label: format(d, "h:mm a")
+      })
     }
   }
 
-  const getSlotKey = (date: Date, time: Date) => {
-    // Keys must remain consistent regardless of display timezone!
-    // We use ISO-like local format for keys to ensure database consistency.
-    return `${format(date, "yyyy-MM-dd")}-${format(time, "HH:mm")}`
-  }
-
-  const getSlotAvailability = (date: Date, time: Date) => {
-    const key = getSlotKey(date, time)
+  const getSlotStatus = (date: Date, hour: number, minute: number) => {
+    const key = createUtcKey(date, hour, minute, timezone)
+    const isMyAvailability = availability[key]
     const availableCount = allParticipants.filter((p) => p.availability[key]).length
-    return { count: availableCount, total: allParticipants.length }
+    const participants = allParticipants.filter((p) => p.availability[key]).map((p) => p.name)
+    return { key, isMyAvailability, availableCount, total: allParticipants.length, participants }
   }
 
-  const handleMouseDown = (date: Date, time: Date) => {
+  // ... (Handlers handleMouseDown, etc. remain the same) ...
+  const handleMouseDown = (key: string, currentVal: boolean) => {
     if (scrollMode) return
-    const key = getSlotKey(date, time)
-    const newValue = !availability[key]
+    const newValue = !currentVal
     setAvailability({ ...availability, [key]: newValue })
     setIsPainting(true)
     setPaintMode(newValue)
   }
 
-  const handleMouseEnter = (date: Date, time: Date) => {
+  const handleMouseEnter = (key: string) => {
     if (!isPainting || scrollMode || paintMode === null) return
-    const key = getSlotKey(date, time)
     setAvailability({ ...availability, [key]: paintMode })
   }
 
@@ -98,128 +176,115 @@ export function AvailabilityGrid({
     return () => document.removeEventListener("mouseup", handleMouseUp)
   }, [])
 
-  const handleSave = () => {
-    onSave(availability)
-  }
+  const handleSave = () => onSave(availability)
 
   const getSlotOpacity = (count: number, total: number) => {
     if (total === 0) return 0
     return count / total
   }
 
-  const getParticipantsForSlot = (date: Date, time: Date) => {
-    const key = getSlotKey(date, time)
-    return allParticipants.filter((p) => p.availability[key]).map((p) => p.name)
-  }
-
-  // Format Helper
-  const formatTime = (date: Date) => {
-    try {
-      return date.toLocaleTimeString([], { timeZone: timezone, hour: 'numeric', minute: '2-digit' })
-    } catch (e) {
-      return format(date, "h:mm a") // Fallback
-    }
-  }
-
   return (
-      <Card className="w-full">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+      <div className="flex flex-col space-y-4">
+        <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-xl">Mark Your Availability</CardTitle>
-            <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-              <Globe className="h-3 w-3" />
-              Times shown in {timezone}
+            <h3 className="text-lg font-medium">Mark Your Availability</h3>
+            <p className="text-sm text-muted-foreground">
+              Times shown in {timezone.replace(/_/g, " ")}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Toggle pressed={scrollMode} onPressedChange={setScrollMode}>
-              {scrollMode ? <><Hand className="h-4 w-4 mr-2" />Scroll</> : <><MousePointer2 className="h-4 w-4 mr-2" />Paint</>}
-            </Toggle>
+          <div className="flex items-center space-x-2">
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setScrollMode(!scrollMode)}
+                className={scrollMode ? "bg-accent text-accent-foreground" : ""}
+            >
+              {scrollMode ? <>Scroll Mode</> : <>Paint Mode</>}
+            </Button>
             <Button onClick={handleSave} size="sm">
-              <Save className="h-4 w-4 mr-2" /> Save
+              Save
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div
-              ref={gridRef}
-              className={cn(
-                  "relative overflow-auto border rounded-lg max-h-[600px] select-none shadow-inner",
-                  scrollMode ? "touch-pan-x touch-pan-y" : "touch-none"
-              )}
-          >
-            <div className="min-w-[800px]">
-              <div className="grid grid-cols-[100px_repeat(auto-fit,minmax(100px,1fr))] sticky top-0 z-10 bg-background border-b shadow-sm">
-                <div className="p-4 font-semibold text-muted-foreground bg-muted/30">Time</div>
-                {dates.map((date) => (
-                    <div key={date.toString()} className="p-4 text-center border-l bg-muted/30">
-                      <div className="font-semibold">{format(date, "EEE")}</div>
-                      <div className="text-sm text-muted-foreground">{format(date, "MMM d")}</div>
-                    </div>
-                ))}
-              </div>
+        </div>
 
-              <div className="divide-y">
-                {timeSlots.map((time) => (
-                    <div key={time.toString()} className="grid grid-cols-[100px_repeat(auto-fit,minmax(100px,1fr))] hover:bg-muted/5 transition-colors">
-                      <div className="p-3 text-sm font-medium text-muted-foreground flex items-center justify-center border-r bg-muted/5">
-                        {/* Display Time in Preferred Timezone */}
-                        {formatTime(time)}
-                      </div>
-                      {dates.map((date) => {
-                        const key = getSlotKey(date, time)
-                        const isMyAvailability = availability[key]
-                        const { count, total } = getSlotAvailability(date, time)
-                        const opacity = getSlotOpacity(count, total)
-                        const participants = getParticipantsForSlot(date, time)
-
-                        return (
-                            <div key={key} className="p-1 border-l relative">
-                              <TooltipProvider>
-                                <Tooltip delayDuration={0}>
-                                  <TooltipTrigger asChild>
-                                    <div
-                                        onMouseDown={() => handleMouseDown(date, time)}
-                                        onMouseEnter={() => handleMouseEnter(date, time)}
-                                        className={cn(
-                                            "h-10 md:h-12 min-h-[40px] md:min-h-[48px] rounded-md md:rounded-lg border-2 transition-all relative overflow-hidden",
-                                            scrollMode ? "cursor-grab" : "cursor-pointer active:scale-95",
-                                            isMyAvailability
-                                                ? "bg-primary border-primary shadow-sm"
-                                                : "bg-muted/30 border-border hover:border-primary/50",
-                                        )}
-                                        style={{
-                                          backgroundColor: isMyAvailability
-                                              ? undefined
-                                              : opacity > 0 ? `rgba(34, 197, 94, ${opacity * 0.4})` : undefined,
-                                        }}
-                                    >
-                                      {isMyAvailability && <div className="absolute inset-0 bg-primary/10 animate-pulse" />}
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="z-50 text-xs">
-                                    {/* Tooltip also needs correct timezone display */}
-                                    <p className="font-semibold mb-1">{format(date, "MMM d")} at {formatTime(time)}</p>
-                                    {participants.length > 0 ? (
-                                        <>
-                                          <p className="text-green-600 font-medium mb-1">{count}/{total} available</p>
-                                          <p className="text-muted-foreground max-w-[150px] flex flex-wrap gap-1">
-                                            {participants.join(", ")}
-                                          </p>
-                                        </>
-                                    ) : <p className="text-muted-foreground">No one available</p>}
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
-                        )
-                      })}
-                    </div>
-                ))}
+        <div
+            ref={gridRef}
+            className={cn(
+                "rounded-md border overflow-auto max-h-[600px] relative",
+                scrollMode ? "cursor-grab" : "cursor-default"
+            )}
+        >
+          <div className="min-w-max">
+            <div className="flex sticky top-0 z-20 bg-background border-b">
+              <div className="w-20 shrink-0 p-2 text-xs font-medium text-muted-foreground bg-background sticky left-0 z-30">
+                Time
               </div>
+              {/* USE EXPANDED DATES HERE */}
+              {expandedDates.map((date) => (
+                  <div key={date.toString()} className="w-32 md:w-40 shrink-0 p-2 text-center border-l bg-background">
+                    <div className="text-xs font-medium text-muted-foreground">{format(date, "EEE")}</div>
+                    <div className="text-sm font-bold">{format(date, "MMM d")}</div>
+                  </div>
+              ))}
             </div>
+
+            {timeRows.map(({ hour, minute, label }) => (
+                <div key={`${hour}-${minute}`} className="flex border-b last:border-0">
+                  <div className="w-20 shrink-0 p-2 text-xs text-right text-muted-foreground sticky left-0 bg-background z-10 border-r flex items-center justify-end">
+                    {label}
+                  </div>
+
+                  {/* USE EXPANDED DATES HERE */}
+                  {expandedDates.map((date) => {
+                    const { key, isMyAvailability, availableCount, total, participants } = getSlotStatus(date, hour, minute)
+                    const opacity = getSlotOpacity(availableCount, total)
+
+                    return (
+                        <TooltipProvider key={key}>
+                          <Tooltip delayDuration={0}>
+                            <TooltipTrigger asChild>
+                              <div
+                                  onMouseDown={() => handleMouseDown(key, !!isMyAvailability)}
+                                  onMouseEnter={() => handleMouseEnter(key)}
+                                  className={cn(
+                                      "w-32 md:w-40 h-10 md:h-12 shrink-0 border-l transition-all relative",
+                                      scrollMode ? "cursor-grab" : "cursor-pointer active:scale-95",
+                                      isMyAvailability
+                                          ? "bg-primary border-primary shadow-sm z-0"
+                                          : "bg-muted/30 border-border hover:border-primary/50"
+                                  )}
+                                  style={{
+                                    backgroundColor: isMyAvailability
+                                        ? undefined
+                                        : opacity > 0
+                                            ? `rgba(34, 197, 94, ${opacity * 0.4})`
+                                            : undefined,
+                                  }}
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="text-xs">
+                                <p className="font-semibold">
+                                  {format(date, "MMM d")} at {label}
+                                </p>
+                                {participants.length > 0 ? (
+                                    <>
+                                      <p className="text-green-600 mb-1">{availableCount}/{total} available</p>
+                                      <p className="text-muted-foreground">{participants.join(", ")}</p>
+                                    </>
+                                ) : (
+                                    <p className="text-muted-foreground">No one available</p>
+                                )}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                    )
+                  })}
+                </div>
+            ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
   )
 }
