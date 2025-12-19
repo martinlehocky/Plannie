@@ -1,20 +1,20 @@
 {
-  "3kqr7": {
-    "id": "3kqr7",
+  "rjg0de": {
+    "id": "rjg0de",
     "creatorId": "e5462d6a-af24-4504-af84-b4622705982d",
     "data": {
       "creatorId": "e5462d6a-af24-4504-af84-b4622705982d",
       "dateRange": {
-        "from": "2025-12-21T23:00:00.000Z",
-        "to": "2025-12-24T23:00:00.000Z"
+        "from": "2025-12-23T23:00:00.000Z",
+        "to": "2025-12-26T23:00:00.000Z"
       },
       "duration": 30,
-      "id": "3kqr7",
-      "name": "Test2",
+      "id": "rjg0de",
+      "name": "Test",
       "participants": [
         {
           "availability": {
-            "2025-12-22T01:30:00.000Z": false
+            "2025-12-24-09:00": true
           },
           "id": "e5462d6a-af24-4504-af84-b4622705982d",
           "name": "Martin"
