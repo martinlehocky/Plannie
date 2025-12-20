@@ -327,7 +327,6 @@ func main() {
 			return
 		}
 
-		// Ensure the creator exists
 		store.RLock()
 		creator, ok := store.Users[creatorID]
 		store.RUnlock()
@@ -344,7 +343,6 @@ func main() {
 
 		participants := []string{creatorID}
 
-		// Add creator to participant list in event data
 		if input["participants"] == nil {
 			input["participants"] = []interface{}{}
 		}
@@ -383,21 +381,46 @@ func main() {
 		c.JSON(200, res)
 	})
 
+	// Updated: enforce auth and creator-only disabledSlots updates; preserve disabledSlots for non-creators
 	r.PUT("/events/:id", func(c *gin.Context) {
 		id := c.Param("id")
+		userID := c.GetHeader("Authorization")
+		if userID == "" {
+			c.JSON(401, gin.H{"error": "Unauthorized"})
+			return
+		}
+
 		var input map[string]interface{}
 		if err := c.BindJSON(&input); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid JSON"})
 			return
 		}
+
 		store.Lock()
+		defer store.Unlock()
+
 		event, exists := store.Events[id]
 		if !exists {
-			store.Unlock()
 			c.JSON(404, gin.H{"error": "Not found"})
 			return
 		}
+
+		isCreator := event.CreatorID == userID
+
+		if ds, present := input["disabledSlots"]; present {
+			if !isCreator {
+				c.JSON(403, gin.H{"error": "Only creator can change disabled slots"})
+				return
+			}
+			event.Data["disabledSlots"] = ds
+		} else {
+			if existing := event.Data["disabledSlots"]; existing != nil {
+				input["disabledSlots"] = existing
+			}
+		}
+
 		event.Data = input
+
 		if parts, ok := input["participants"].([]interface{}); ok {
 			newParts := []string{}
 			for _, p := range parts {
@@ -409,8 +432,8 @@ func main() {
 			}
 			event.Participants = newParts
 		}
+
 		store.Events[id] = event
-		store.Unlock()
 		saveToDisk("events.json", store.Events)
 
 		go sseHub.broadcast(id, mustJSON(input))

@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { AvailabilityGrid } from "@/components/availability-grid"
-import { Share2, Users, Calendar, Trophy, LogIn, Trash2, UserPlus, Globe, ChevronDown, ChevronUp } from "lucide-react"
+import { Share2, Users, Calendar, Trophy, LogIn, Trash2, UserPlus, Globe, ChevronDown, ChevronUp, Ban } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
@@ -42,6 +42,7 @@ type EventData = {
   timezone: string
   participants: Participant[]
   creatorId?: string
+  disabledSlots?: string[]
 }
 
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
@@ -55,6 +56,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [isCreator, setIsCreator] = useState(false)
   const [isParticipant, setIsParticipant] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [disableMode, setDisableMode] = useState(false)
+  const [resetDisabledLoading, setResetDisabledLoading] = useState(false)
 
   const [userTimezone, setUserTimezone] = useState("")
   const [inviteUsername, setInviteUsername] = useState("")
@@ -63,7 +66,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const userId = localStorage.getItem("userId")
     const username = localStorage.getItem("username")
     setIsLoggedIn(!!userId)
-    if (userId && data.creatorId === userId) setIsCreator(true)
+    setIsCreator(userId !== null && data.creatorId === userId)
     const existing = data.participants.find((p: any) => p.id === userId)
     if (existing) {
       setIsParticipant(true)
@@ -86,6 +89,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       const res = await fetch(`http://localhost:8080/events/${id}`)
       if (res.ok) {
         const data: EventData = await res.json()
+        data.disabledSlots = data.disabledSlots || []
         setEventData(data)
         syncUserState(data)
       } else {
@@ -107,6 +111,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     es.addEventListener("update", (e: MessageEvent) => {
       try {
         const data: EventData = JSON.parse(e.data)
+        data.disabledSlots = data.disabledSlots || []
         setEventData(data)
         syncUserState(data)
       } catch (err) {
@@ -121,11 +126,55 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   const handleSaveAvailability = async (availability: Record<string, boolean>) => {
     if (!eventData || !currentParticipant) return
-    const updatedParticipant = { ...currentParticipant, availability }
-    const updatedParticipants = eventData.participants.filter((p) => p.id !== currentParticipant.id)
-    updatedParticipants.push(updatedParticipant)
-    const updatedEvent = { ...eventData, participants: updatedParticipants }
+    const disabled = eventData.disabledSlots || []
+
+    const cleaned: Record<string, boolean> = {}
+    Object.entries(availability).forEach(([k, v]) => {
+      if (!disabled.includes(k) && v) cleaned[k] = v
+    })
+
+    const updatedParticipant = { ...currentParticipant, availability: cleaned }
+    const updatedParticipants = eventData.participants.filter((p) => p.id !== currentParticipant.id).concat(updatedParticipant)
+
+    // Build payload; strip disabledSlots for non-creators
+    const payload: Partial<EventData> & { participants: Participant[] } = {
+      ...eventData,
+      participants: updatedParticipants,
+    }
+    if (!isCreator) {
+      delete (payload as any).disabledSlots
+    }
+
     const userId = localStorage.getItem("userId")
+
+    try {
+      const res = await fetch(`http://localhost:8080/events/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: userId || "" },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        setEventData({ ...eventData, participants: updatedParticipants })
+        setCurrentParticipant(updatedParticipant)
+        toast({ title: "Availability Saved", description: "Updated successfully." })
+      } else {
+        const d = await res.json().catch(() => ({}))
+        toast({ title: "Error", description: d.error || "Could not save", variant: "destructive" })
+      }
+    } catch (error) {
+      toast({ title: "Error", variant: "destructive" })
+    }
+  }
+
+  const handleToggleDisabled = async (slotKey: string) => {
+    if (!eventData || !isCreator) return
+    const userId = localStorage.getItem("userId")
+    const current = new Set(eventData.disabledSlots || [])
+    if (current.has(slotKey)) current.delete(slotKey)
+    else current.add(slotKey)
+    const disabledSlots = Array.from(current)
+
+    const updatedEvent: EventData = { ...eventData, disabledSlots }
 
     try {
       const res = await fetch(`http://localhost:8080/events/${id}`, {
@@ -135,13 +184,39 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       })
       if (res.ok) {
         setEventData(updatedEvent)
-        setCurrentParticipant(updatedParticipant)
-        toast({ title: "Availability Saved", description: "Updated successfully." })
+        toast({ title: current.has(slotKey) ? "Slot disabled" : "Slot enabled" })
       } else {
-        toast({ title: "Error", variant: "destructive" })
+        const d = await res.json()
+        toast({ title: "Error", description: d.error, variant: "destructive" })
       }
     } catch (error) {
       toast({ title: "Error", variant: "destructive" })
+    }
+  }
+
+  const handleResetDisabled = async () => {
+    if (!eventData || !isCreator) return
+    setResetDisabledLoading(true)
+    const userId = localStorage.getItem("userId")
+    const updatedEvent: EventData = { ...eventData, disabledSlots: [] }
+
+    try {
+      const res = await fetch(`http://localhost:8080/events/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: userId || "" },
+        body: JSON.stringify(updatedEvent),
+      })
+      if (res.ok) {
+        setEventData(updatedEvent)
+        toast({ title: "Disabled times reset" })
+      } else {
+        const d = await res.json()
+        toast({ title: "Error", description: d.error, variant: "destructive" })
+      }
+    } catch (error) {
+      toast({ title: "Error", variant: "destructive" })
+    } finally {
+      setResetDisabledLoading(false)
     }
   }
 
@@ -258,50 +333,55 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   return (
       <div className="min-h-screen bg-background flex flex-col lg:h-screen lg:overflow-hidden">
         <div className="mx-auto w-full max-w-7xl flex flex-col flex-1 lg:h-full">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 border-b shrink-0 gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b bg-card/50 backdrop-blur-sm shrink-0 gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="min-w-0 flex-1">
-                <h1 className="text-lg sm:text-xl font-bold truncate">{eventData.name}</h1>
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-3 w-3 shrink-0" />
-                    <span>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{eventData.name}</h1>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-medium">
                     {format(new Date(eventData.dateRange.from), "MMM d")} - {format(new Date(eventData.dateRange.to), "MMM d")}
                   </span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Globe className="h-3 w-3 shrink-0" />
-                    <span className="capitalize truncate max-w-[120px]">{userTimezone.replace(/_/g, " ")}</span>
+                  <div className="flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 shrink-0" />
+                    <span className="capitalize truncate max-w-[140px] font-medium">{userTimezone.replace(/_/g, " ")}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               <ThemeToggle />
-              <Button size="sm" variant="outline" onClick={() => router.push("/dashboard")} className="text-xs px-2 sm:px-3">
+              <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => router.push("/dashboard")}
+                  className="text-xs px-3 h-9 font-medium"
+              >
                 <span className="hidden sm:inline">Dashboard</span>
                 <span className="sm:hidden">Home</span>
               </Button>
               {isParticipant && !isCreator && (
-                  <Button size="sm" variant="destructive" onClick={handleLeave} className="text-xs px-2 sm:px-3">
+                  <Button size="sm" variant="destructive" onClick={handleLeave} className="text-xs px-3 h-9 font-medium">
                     Leave
                   </Button>
               )}
-              <Button size="sm" variant="outline" onClick={handleShare} className="px-2 sm:px-3">
+              <Button size="sm" variant="outline" onClick={handleShare} className="px-3 h-9 bg-transparent">
                 <Share2 className="h-4 w-4" />
               </Button>
               {isCreator && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="destructive" className="px-2 sm:px-3">
+                      <Button size="sm" variant="destructive" className="px-3 h-9">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent className="mx-4 max-w-sm">
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete Event?</AlertDialogTitle>
-                        <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+                        <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -313,17 +393,17 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto lg:overflow-hidden p-3 sm:p-4">
-            <div className="flex flex-col lg:grid lg:grid-cols-[260px_1fr] gap-3 sm:gap-4 h-full">
+          <div className="flex-1 overflow-auto lg:overflow-hidden p-4 bg-background">
+            <div className="flex flex-col lg:grid lg:grid-cols-[280px_1fr] gap-4 h-full">
               <div className="lg:overflow-y-auto lg:h-full">
                 <Collapsible open={sidebarOpen} onOpenChange={setSidebarOpen} className="lg:hidden">
                   <CollapsibleTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between mb-3">
+                    <Button variant="outline" className="w-full justify-between mb-3 h-10 font-medium bg-transparent">
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4" />
                         <span>{eventData.participants.length} Participants</span>
                         {bestTimes.length > 0 && (
-                            <Badge variant="secondary" className="text-[10px]">
+                            <Badge variant="secondary" className="text-[10px] font-semibold">
                               Best: {bestTimes[0].count}/{eventData.participants.length}
                             </Badge>
                         )}
@@ -331,7 +411,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       {sidebarOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </Button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-2.5 mb-3">
+                  <CollapsibleContent className="space-y-3 mb-3">
                     <SidebarContent
                         eventData={eventData}
                         currentParticipant={currentParticipant}
@@ -350,7 +430,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   </CollapsibleContent>
                 </Collapsible>
 
-                <div className="hidden lg:block space-y-2.5">
+                <div className="hidden lg:block space-y-3">
                   <SidebarContent
                       eventData={eventData}
                       currentParticipant={currentParticipant}
@@ -369,8 +449,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 </div>
               </div>
 
-              <Card className="overflow-hidden flex flex-col shadow-sm min-h-[400px] lg:min-h-0">
-                <CardContent className="p-2 sm:p-4 flex-1 overflow-auto min-h-0">
+              <Card className="overflow-hidden flex flex-col shadow-sm min-h-[400px] lg:min-h-0 border-border/50">
+                <CardContent className="p-4 flex-1 overflow-auto min-h-0">
                   {isLoggedIn && currentParticipant ? (
                       <AvailabilityGrid
                           dateRange={{
@@ -382,12 +462,19 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                           allParticipants={eventData.participants}
                           onSave={handleSaveAvailability}
                           timezone={userTimezone}
+                          disabledSlots={eventData.disabledSlots || []}
+                          isCreator={isCreator}
+                          disableMode={disableMode}
+                          onToggleDisabled={handleToggleDisabled}
+                          onToggleDisableMode={() => setDisableMode((v) => !v)}
+                          onResetDisabled={handleResetDisabled}
+                          resetDisabledLoading={resetDisabledLoading}
                       />
                   ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                        <LogIn className="h-10 w-10 text-muted-foreground mb-3" />
-                        <h3 className="text-base font-semibold">Please Sign In</h3>
-                        <p className="text-sm text-muted-foreground mb-3">You must be logged in to participate.</p>
+                      <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                        <LogIn className="h-12 w-12 text-muted-foreground mb-4" />
+                        <h3 className="text-lg font-semibold">Please Sign In</h3>
+                        <p className="text-sm text-muted-foreground mt-2 mb-4">You must be logged in to participate.</p>
                         <Button size="sm" onClick={() => router.push("/login")}>
                           Sign In Now
                         </Button>
@@ -436,16 +523,16 @@ function SidebarContent({
   return (
       <>
         {isLoggedIn && currentParticipant && (
-            <Card className="shadow-sm">
-              <CardContent className="p-3">
-                <div className="flex items-center gap-2.5">
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+            <Card className="shadow-sm border-border/50">
+              <CardContent className="p-3.5">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10 shrink-0 border-2 border-primary/20">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
                       {currentParticipant.name[0].toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[9px] uppercase tracking-wide text-muted-foreground font-medium">You</div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">You</div>
                     <div className="text-sm font-semibold truncate">{currentParticipant.name}</div>
                   </div>
                 </div>
@@ -453,21 +540,22 @@ function SidebarContent({
             </Card>
         )}
 
-        <Card className="shadow-sm">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-              <Trophy className="h-3.5 w-3.5 text-yellow-500 shrink-0" /> Best Times
+        <Card className="shadow-sm border-border/50">
+          <CardHeader className="p-3.5 pb-2">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+              <Trophy className="h-4 w-4 text-yellow-500 shrink-0" /> Best Times
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-3 pt-0 space-y-2">
+          <CardContent className="p-3.5 pt-0 space-y-2.5">
             {bestTimes.length > 0 ? (
                 bestTimes.map((time, i) => (
-                    <div key={i} className="rounded-md border bg-card/50 p-2 space-y-1">
+                    <div
+                        key={i}
+                        className="rounded-lg border bg-card p-2.5 space-y-1.5 shadow-sm hover:shadow transition-shadow"
+                    >
                       <div className="flex items-center justify-between gap-2">
-                        <div className="text-xs font-semibold text-green-600 dark:text-green-400 truncate">
-                          {formatTimeInTz(time.slot)}
-                        </div>
-                        <Badge variant="secondary" className="shrink-0 text-[10px] h-5 px-1.5">
+                        <div className="text-xs font-semibold text-success truncate">{formatTimeInTz(time.slot)}</div>
+                        <Badge variant="secondary" className="shrink-0 text-[10px] h-5 px-2 font-semibold">
                           {time.count}/{eventData.participants.length}
                         </Badge>
                       </div>
@@ -475,7 +563,7 @@ function SidebarContent({
                     </div>
                 ))
             ) : (
-                <div className="text-xs text-muted-foreground text-center py-3">No overlaps yet</div>
+                <div className="text-xs text-muted-foreground text-center py-4">No overlaps yet</div>
             )}
 
             {allBestTimes.length > 0 && (
@@ -483,7 +571,7 @@ function SidebarContent({
                   <Button
                       variant="outline"
                       size="sm"
-                      className="w-full justify-between text-xs"
+                      className="w-full justify-between text-xs bg-transparent"
                       onClick={() => setShowBestTimesDetails((v) => !v)}
                   >
                     {showBestTimesDetails ? "Hide all best times" : "View all best times"}
@@ -510,18 +598,18 @@ function SidebarContent({
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="flex items-center justify-between text-sm font-semibold">
+        <Card className="shadow-sm border-border/50">
+          <CardHeader className="p-3.5 pb-2">
+            <CardTitle className="flex items-center justify-between text-base font-semibold">
               <div className="flex items-center gap-2">
-                <Users className="h-3.5 w-3.5 shrink-0" /> Participants
+                <Users className="h-4 w-4 shrink-0" /> Participants
               </div>
-              <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+              <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold">
                 {eventData.participants.length}
               </Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-3 pt-0 space-y-1.5">
+          <CardContent className="p-3.5 pt-0 space-y-1.5">
             <div className="space-y-1 max-h-40 overflow-y-auto">
               {eventData.participants.map((p) => (
                   <div key={p.id} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-muted/50 transition-colors">
@@ -533,7 +621,7 @@ function SidebarContent({
               ))}
             </div>
             {!isLoggedIn && (
-                <Button className="w-full mt-1.5" size="sm" variant="outline" onClick={() => router.push("/login")}>
+                <Button className="w-full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
                   <LogIn className="h-3 w-3 mr-1.5" />
                   Sign In
                 </Button>
@@ -547,13 +635,13 @@ function SidebarContent({
         </Card>
 
         {isCreator && (
-            <Card className="shadow-sm">
-              <CardHeader className="p-3 pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <UserPlus className="h-3.5 w-3.5 shrink-0" /> Invite
+            <Card className="shadow-sm border-border/50">
+              <CardHeader className="p-3.5 pb-2">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                  <UserPlus className="h-4 w-4 shrink-0" /> Invite
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-3 pt-0">
+              <CardContent className="p-3.5 pt-0">
                 <div className="flex gap-1.5">
                   <Input
                       className="text-xs h-8"
