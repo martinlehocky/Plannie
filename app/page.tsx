@@ -97,133 +97,144 @@ export default function Home() {
   }
 
   return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 md:p-8 relative">
-        {/* Top Bar */}
-        <div className="absolute top-4 right-4 md:top-8 md:right-8 flex gap-4 items-center">
+      <div className="min-h-screen bg-background flex flex-col md:justify-center relative">
+        {/* Top Bar - Static flow on mobile, Absolute on Desktop */}
+        <div className="w-full flex justify-end items-center gap-2 p-4 md:absolute md:top-8 md:right-8 md:p-0 z-50">
           {isLoggedIn ? (
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => router.push("/dashboard")}>
+              <div className="flex items-center gap-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:h-10 md:px-4 md:py-2 text-xs md:text-sm"
+                    onClick={() => router.push("/dashboard")}
+                >
                   My Dashboard
                 </Button>
-                <Button variant="ghost" onClick={handleLogout}>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="md:h-10 md:px-4 md:py-2 text-xs md:text-sm"
+                    onClick={handleLogout}
+                >
                   Sign Out
                 </Button>
               </div>
           ) : (
-              <Button variant="ghost" onClick={() => router.push("/login")}>
+              <Button
+                  variant="ghost"
+                  size="sm"
+                  className="md:h-10 md:px-4 md:py-2 text-xs md:text-sm"
+                  onClick={() => router.push("/login")}
+              >
                 Sign In / Register
               </Button>
           )}
           <ThemeToggle />
         </div>
 
-        <div className="w-full max-w-4xl grid gap-8">
-          <div className="text-center space-y-2">
-            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight lg:text-7xl">Find the Perfect Time</h1>
-            <p className="text-xl text-muted-foreground md:text-2xl">Modern group scheduling made simple</p>
-          </div>
+        {/* Main Content Wrapper - Centered in remaining space */}
+        <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 w-full">
+          <div className="w-full max-w-4xl grid gap-8">
+            <div className="text-center space-y-2">
+              <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight lg:text-7xl">Find the Perfect Time</h1>
+              <p className="text-xl text-muted-foreground md:text-2xl">Modern group scheduling made simple</p>
+            </div>
 
-          <Card className="border-2 shadow-lg">
-            <CardHeader>
-              <CardTitle>Create New Event</CardTitle>
-              <CardDescription>Set up your event details and select available dates</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="eventName">Event Name</Label>
-                    <Input
-                        id="eventName"
-                        placeholder="e.g., Team Standup, Birthday Party"
-                        value={eventName}
-                        onChange={(e) => setEventName(e.target.value)}
-                        className="text-base md:text-lg h-11 md:h-12"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+            <Card className="border-2 shadow-lg">
+              <CardHeader>
+                <CardTitle>Create New Event</CardTitle>
+                <CardDescription>Set up your event details and select available dates</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Duration</Label>
-                      <Select value={duration} onValueChange={setDuration}>
-                        <SelectTrigger className="h-11 md:h-12">
-                          <Clock className="mr-2 h-4 w-4" />
-                          <SelectValue placeholder="Duration" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="15">15 minutes</SelectItem>
-                          <SelectItem value="30">30 minutes</SelectItem>
-                          <SelectItem value="60">1 hour</SelectItem>
-                          <SelectItem value="90">1.5 hours</SelectItem>
-                          <SelectItem value="120">2 hours</SelectItem>
-                          <SelectItem value="custom">Custom</SelectItem> {/* New Option */}
-                        </SelectContent>
-                      </Select>
-
-                      {/* Custom Input appears below/overlay if chosen, or just replaces logic?
-                          Your layout is tight (grid-cols-2), so I'll render it *below* the select if active,
-                          or conditionally render the Input *instead* of Timezone if needed?
-
-                          Actually, putting it right under the select is safest for your layout.
-                      */}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Time Zone</Label>
+                      <Label htmlFor="eventName">Event Name</Label>
                       <Input
-                          value={timezone}
-                          onChange={(e) => setTimezone(e.target.value)}
-                          className="h-11 md:h-12"
-                          disabled
+                          id="eventName"
+                          placeholder="e.g., Team Standup, Birthday Party"
+                          value={eventName}
+                          onChange={(e) => setEventName(e.target.value)}
+                          className="text-base md:text-lg h-11 md:h-12"
                       />
                     </div>
-                  </div>
 
-                  {/* Custom Duration Input Field - Only visible when 'custom' is selected */}
-                  {duration === "custom" && (
-                      <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                        <Label>Custom Duration (minutes)</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Duration</Label>
+                        <Select value={duration} onValueChange={setDuration}>
+                          <SelectTrigger className="h-11 md:h-12">
+                            <Clock className="mr-2 h-4 w-4" />
+                            <SelectValue placeholder="Duration" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="15">15 minutes</SelectItem>
+                            <SelectItem value="30">30 minutes</SelectItem>
+                            <SelectItem value="60">1 hour</SelectItem>
+                            <SelectItem value="90">1.5 hours</SelectItem>
+                            <SelectItem value="120">2 hours</SelectItem>
+                            <SelectItem value="custom">Custom</SelectItem> {/* New Option */}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Time Zone</Label>
                         <Input
-                            type="number"
-                            placeholder="e.g. 45"
-                            value={customDuration}
-                            onChange={(e) => setCustomDuration(e.target.value)}
+                            value={timezone}
+                            onChange={(e) => setTimezone(e.target.value)}
                             className="h-11 md:h-12"
+                            disabled
                         />
                       </div>
-                  )}
+                    </div>
 
-                </div>
+                    {/* Custom Duration Input Field */}
+                    {duration === "custom" && (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                          <Label>Custom Duration (minutes)</Label>
+                          <Input
+                              type="number"
+                              placeholder="e.g. 45"
+                              value={customDuration}
+                              onChange={(e) => setCustomDuration(e.target.value)}
+                              className="h-11 md:h-12"
+                          />
+                        </div>
+                    )}
 
-                <div className="space-y-2">
-                  <Label>Select Date Range</Label>
-                  <div className="border rounded-md p-4 flex justify-center bg-card">
-                    <Calendar
-                        mode="range"
-                        selected={dateRange}
-                        onSelect={setDateRange}
-                        className="rounded-md"
-                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                    />
                   </div>
-                  {dateRange?.from && dateRange?.to && (
-                      <p className="text-sm text-muted-foreground text-center">
-                        Selected: {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
-                      </p>
-                  )}
-                </div>
-              </div>
 
-              <Button
-                  size="lg"
-                  className="w-full text-lg h-12 md:h-14"
-                  onClick={handleCreateEvent}
-                  disabled={!eventName || !dateRange?.from || !dateRange?.to || isSubmitting}
-              >
-                {isSubmitting ? "Creating..." : "Create Event"}
-              </Button>
-            </CardContent>
-          </Card>
+                  <div className="space-y-2">
+                    <Label>Select Date Range</Label>
+                    <div className="border rounded-md p-4 flex justify-center bg-card">
+                      <Calendar
+                          mode="range"
+                          selected={dateRange}
+                          onSelect={setDateRange}
+                          className="rounded-md"
+                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                      />
+                    </div>
+                    {dateRange?.from && dateRange?.to && (
+                        <p className="text-sm text-muted-foreground text-center">
+                          Selected: {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
+                        </p>
+                    )}
+                  </div>
+                </div>
+
+                <Button
+                    size="lg"
+                    className="w-full text-lg h-12 md:h-14"
+                    onClick={handleCreateEvent}
+                    disabled={!eventName || !dateRange?.from || !dateRange?.to || isSubmitting}
+                >
+                  {isSubmitting ? "Creating..." : "Create Event"}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
   )
