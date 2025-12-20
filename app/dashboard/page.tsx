@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { format } from "date-fns"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
-import { LogOut, Trash2, Settings, Plus } from "lucide-react" // Added Plus icon
+import { LogOut, Trash2, Settings, Plus, ArrowLeft } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
     AlertDialog,
@@ -33,11 +34,15 @@ interface Event {
 export default function Dashboard() {
     const [events, setEvents] = useState<Event[]>([])
     const [loading, setLoading] = useState(true)
+    const [username, setUsername] = useState("")
     const router = useRouter()
     const { toast } = useToast()
 
     useEffect(() => {
         const userId = localStorage.getItem("userId")
+        const storedUsername = localStorage.getItem("username") || ""
+        setUsername(storedUsername)
+
         if (!userId) {
             router.push("/login")
             return
@@ -46,7 +51,7 @@ export default function Dashboard() {
         const fetchEvents = async () => {
             try {
                 const res = await fetch("http://localhost:8080/my-events", {
-                    headers: { "Authorization": userId }
+                    headers: { Authorization: userId },
                 })
                 if (res.ok) {
                     const data = await res.json()
@@ -63,6 +68,7 @@ export default function Dashboard() {
         }
 
         fetchEvents()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const handleLogout = () => {
@@ -77,11 +83,11 @@ export default function Dashboard() {
             const userId = localStorage.getItem("userId")
             const res = await fetch(`http://localhost:8080/events/${eventId}`, {
                 method: "DELETE",
-                headers: { "Authorization": userId || "" }
+                headers: { Authorization: userId || "" },
             })
 
             if (res.ok) {
-                setEvents(events.filter(ev => ev.id !== eventId))
+                setEvents(events.filter((ev) => ev.id !== eventId))
                 toast({ title: "Event deleted", description: "The event has been permanently removed." })
             } else {
                 const data = await res.json()
@@ -96,36 +102,56 @@ export default function Dashboard() {
     if (loading) return <div className="min-h-screen flex items-center justify-center">Loading dashboard...</div>
 
     return (
-        <div className="min-h-screen bg-background flex flex-col relative">
-            {/* Top Bar: Static on mobile, Absolute on desktop */}
-            <div className="w-full flex justify-end items-center gap-2 p-4 md:absolute md:top-8 md:right-8 md:p-0 z-50">
-                <Button variant="ghost" size="sm" onClick={() => router.push("/settings")}>
-                    <Settings className="h-4 w-4" />
+        <div className="min-h-screen bg-background">
+            {/* Header */}
+            <div className="w-full flex justify-between items-center gap-2 p-4">
+                {/* Back to Home button on the left */}
+                <Button variant="ghost" size="sm" className="gap-2" asChild>
+                    <Link href="/">
+                        <ArrowLeft className="h-4 w-4" />
+                        <span className="hidden md:inline">Back to Home</span>
+                        <span className="md:hidden">Home</span>
+                    </Link>
                 </Button>
 
-                <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
-                    <LogOut className="h-4 w-4" />
-                    <span className="hidden md:inline">Sign Out</span>
-                </Button>
-                <ThemeToggle />
+                {/* Right-side controls */}
+                <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground hidden sm:inline">
+            Signed in as <span className="font-semibold text-foreground">{username || "you"}</span>
+          </span>
+
+                    <Link href="/settings">
+                        <Button variant="ghost" size="sm">
+                            <Settings className="h-4 w-4" />
+                        </Button>
+                    </Link>
+
+                    <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
+                        <LogOut className="h-4 w-4" />
+                        <span className="hidden md:inline">Sign Out</span>
+                    </Button>
+                    <ThemeToggle />
+                </div>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1 w-full max-w-4xl mx-auto space-y-6 p-4 md:p-8">
+            {/* Main content */}
+            <div className="w-full max-w-4xl mx-auto space-y-6 p-4 md:p-8">
                 <div className="flex items-center justify-between">
                     <h1 className="text-3xl font-bold">My Events</h1>
-                    <Button onClick={() => router.push("/")} className="gap-2">
-                        <Plus className="h-4 w-4" />
-                        <span className="hidden md:inline">New Event</span>
-                        <span className="md:hidden">New</span>
+                    <Button className="gap-2" asChild>
+                        <Link href="/create">
+                            <Plus className="h-4 w-4" />
+                            <span className="hidden md:inline">New Event</span>
+                            <span className="md:hidden">New</span>
+                        </Link>
                     </Button>
                 </div>
 
                 {events.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                         <p>No events found.</p>
-                        <Button variant="link" onClick={() => router.push("/")} className="underline hover:text-primary">
-                            Create your first event
+                        <Button variant="link" className="underline hover:text-primary" asChild>
+                            <Link href="/create">Create your first event</Link>
                         </Button>
                     </div>
                 ) : (
@@ -154,8 +180,7 @@ export default function Dashboard() {
                                                 <AlertDialogHeader>
                                                     <AlertDialogTitle>Delete Event?</AlertDialogTitle>
                                                     <AlertDialogDescription>
-                                                        This action cannot be undone. This will permanently delete
-                                                        "{event.name}" for all participants.
+                                                        This action cannot be undone. This will permanently delete "{event.name}" for all participants.
                                                     </AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>

@@ -23,11 +23,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 type Participant = {
   id: string
@@ -134,7 +130,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     try {
       const res = await fetch(`http://localhost:8080/events/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "Authorization": userId || "" },
+        headers: { "Content-Type": "application/json", Authorization: userId || "" },
         body: JSON.stringify(updatedEvent),
       })
       if (res.ok) {
@@ -153,7 +149,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const userId = localStorage.getItem("userId")
     const res = await fetch(`http://localhost:8080/events/${id}/join`, {
       method: "POST",
-      headers: { "Authorization": userId || "" },
+      headers: { Authorization: userId || "" },
     })
     if (res.ok) {
       toast({ title: "Joined!", description: "You can now mark your availability." })
@@ -168,7 +164,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const userId = localStorage.getItem("userId")
     const res = await fetch(`http://localhost:8080/events/${id}/leave`, {
       method: "POST",
-      headers: { "Authorization": userId || "" },
+      headers: { Authorization: userId || "" },
     })
     if (res.ok) {
       router.push("/dashboard")
@@ -180,7 +176,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const userId = localStorage.getItem("userId")
     const res = await fetch(`http://localhost:8080/events/${id}`, {
       method: "DELETE",
-      headers: { "Authorization": userId || "" },
+      headers: { Authorization: userId || "" },
     })
     if (res.ok) {
       router.push("/dashboard")
@@ -193,7 +189,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const userId = localStorage.getItem("userId")
     const res = await fetch(`http://localhost:8080/events/${id}/invite`, {
       method: "POST",
-      headers: { "Authorization": userId || "", "Content-Type": "application/json" },
+      headers: { Authorization: userId || "", "Content-Type": "application/json" },
       body: JSON.stringify({ username: inviteUsername }),
     })
     if (res.ok) {
@@ -208,7 +204,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     toast({ title: "Link Copied!" })
   }
 
-  const getBestTimes = () => {
+  const getBestTimes = (limit?: number) => {
     if (!eventData) return []
     const allSlots: Record<string, string[]> = {}
     eventData.participants.forEach((participant) => {
@@ -219,10 +215,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         }
       })
     })
-    return Object.entries(allSlots)
+    const sorted = Object.entries(allSlots)
         .map(([slot, names]) => ({ slot, count: names.length, names }))
         .sort((a, b) => b.count - a.count)
-        .slice(0, 3)
+    return typeof limit === "number" ? sorted.slice(0, limit) : sorted
   }
 
   const formatTimeInTz = (slotKey: string) => {
@@ -256,7 +252,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>
   if (!eventData) return <div className="flex items-center justify-center min-h-screen">Event not found</div>
 
-  const bestTimes = getBestTimes()
+  const bestTimes = getBestTimes(3)
+  const allBestTimes = getBestTimes()
 
   return (
       <div className="min-h-screen bg-background flex flex-col lg:h-screen lg:overflow-hidden">
@@ -342,6 +339,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         isParticipant={isParticipant}
                         isCreator={isCreator}
                         bestTimes={bestTimes}
+                        allBestTimes={allBestTimes}
                         formatTimeInTz={formatTimeInTz}
                         inviteUsername={inviteUsername}
                         setInviteUsername={setInviteUsername}
@@ -360,6 +358,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       isParticipant={isParticipant}
                       isCreator={isCreator}
                       bestTimes={bestTimes}
+                      allBestTimes={allBestTimes}
                       formatTimeInTz={formatTimeInTz}
                       inviteUsername={inviteUsername}
                       setInviteUsername={setInviteUsername}
@@ -410,6 +409,7 @@ function SidebarContent({
                           isParticipant,
                           isCreator,
                           bestTimes,
+                          allBestTimes,
                           formatTimeInTz,
                           inviteUsername,
                           setInviteUsername,
@@ -423,6 +423,7 @@ function SidebarContent({
   isParticipant: boolean
   isCreator: boolean
   bestTimes: { slot: string; count: number; names: string[] }[]
+  allBestTimes: { slot: string; count: number; names: string[] }[]
   formatTimeInTz: (slot: string) => string
   inviteUsername: string
   setInviteUsername: (v: string) => void
@@ -430,6 +431,8 @@ function SidebarContent({
   handleJoin: () => void
   router: ReturnType<typeof useRouter>
 }) {
+  const [showBestTimesDetails, setShowBestTimesDetails] = useState(false)
+
   return (
       <>
         {isLoggedIn && currentParticipant && (
@@ -456,7 +459,7 @@ function SidebarContent({
               <Trophy className="h-3.5 w-3.5 text-yellow-500 shrink-0" /> Best Times
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-3 pt-0 space-y-1.5">
+          <CardContent className="p-3 pt-0 space-y-2">
             {bestTimes.length > 0 ? (
                 bestTimes.map((time, i) => (
                     <div key={i} className="rounded-md border bg-card/50 p-2 space-y-1">
@@ -468,13 +471,41 @@ function SidebarContent({
                           {time.count}/{eventData.participants.length}
                         </Badge>
                       </div>
-                      <div className="text-[10px] text-muted-foreground line-clamp-1">
-                        {time.names.join(", ")}
-                      </div>
+                      <div className="text-[10px] text-muted-foreground line-clamp-1">{time.names.join(", ")}</div>
                     </div>
                 ))
             ) : (
                 <div className="text-xs text-muted-foreground text-center py-3">No overlaps yet</div>
+            )}
+
+            {allBestTimes.length > 0 && (
+                <div className="space-y-2">
+                  <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-between text-xs"
+                      onClick={() => setShowBestTimesDetails((v) => !v)}
+                  >
+                    {showBestTimesDetails ? "Hide all best times" : "View all best times"}
+                    {showBestTimesDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  </Button>
+
+                  {showBestTimesDetails && (
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 border rounded-md p-2 bg-card/40">
+                        {allBestTimes.map((time, i) => (
+                            <div key={i} className="rounded-sm p-2 bg-muted/40 space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-[11px] font-semibold truncate">{formatTimeInTz(time.slot)}</div>
+                                <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                                  {time.count}/{eventData.participants.length}
+                                </Badge>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">{time.names.join(", ")}</div>
+                            </div>
+                        ))}
+                      </div>
+                  )}
+                </div>
             )}
           </CardContent>
         </Card>

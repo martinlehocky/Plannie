@@ -1,241 +1,291 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar } from "@/components/ui/calendar"
-import { Clock } from "lucide-react"
-import { ThemeToggle } from "@/components/theme-toggle"
-import type { DateRange } from "react-day-picker"
-import { format } from "date-fns"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useToast } from "@/hooks/use-toast"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Calendar, Clock, Users, Share2, Sparkles, Zap } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
-export default function Home() {
-  const router = useRouter()
-  const { toast } = useToast()
+export default function LandingPage() {
+    const router = useRouter()
+    const [isLoggedIn, setIsLoggedIn] = useState(false)
+    const [username, setUsername] = useState("")
 
-  const [eventName, setEventName] = useState("")
-  const [dateRange, setDateRange] = useState<DateRange | undefined>()
-  const [duration, setDuration] = useState("30")
-  const [customDuration, setCustomDuration] = useState("") // New State
-  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+    useEffect(() => {
+        const userId = localStorage.getItem("userId")
+        const storedUsername = localStorage.getItem("username") || ""
+        setIsLoggedIn(!!userId)
+        setUsername(storedUsername)
+    }, [])
 
-  // Check login status on mount
-  useEffect(() => {
-    const userId = localStorage.getItem("userId")
-    setIsLoggedIn(!!userId)
-  }, [])
-
-  const handleLogout = () => {
-    localStorage.removeItem("userId")
-    localStorage.removeItem("username")
-    setIsLoggedIn(false)
-    toast({ title: "Signed Out", description: "See you next time!" })
-  }
-
-  const handleCreateEvent = async () => {
-    if (!eventName || !dateRange?.from || !dateRange?.to) return
-
-    // Calculate final duration
-    let finalDuration = Number.parseInt(duration)
-    if (duration === "custom") {
-      finalDuration = Number.parseInt(customDuration)
-      if (isNaN(finalDuration) || finalDuration <= 0) {
-        toast({ title: "Invalid Duration", description: "Please enter a valid number of minutes.", variant: "destructive" })
-        return
-      }
+    const handleSignOut = () => {
+        localStorage.removeItem("userId")
+        localStorage.removeItem("username")
+        setIsLoggedIn(false)
+        setUsername("")
+        // Stay on landing page (no redirect)
     }
 
-    setIsSubmitting(true)
-
-    const eventId = Math.random().toString(36).substring(7)
-    const userId = localStorage.getItem("userId") || ""
-
-    const eventData = {
-      id: eventId,
-      name: eventName,
-      dateRange: {
-        from: dateRange.from.toISOString(),
-        to: dateRange.to.toISOString(),
-      },
-      duration: finalDuration,
-      timezone,
-      participants: [],
-    }
-
-    try {
-      const response = await fetch('http://localhost:8080/events', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': userId // Send User ID to backend
-        },
-        body: JSON.stringify(eventData),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to create event')
-      }
-
-      router.push(`/event/${eventId}`)
-    } catch (error) {
-      console.error("Error creating event:", error)
-      toast({
-        title: "Error",
-        description: "Could not create event. Ensure backend is running.",
-        variant: "destructive"
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  return (
-      <div className="min-h-screen bg-background flex flex-col md:justify-center relative">
-        {/* Top Bar - Static flow on mobile, Absolute on Desktop */}
-        <div className="w-full flex justify-end items-center gap-2 p-4 md:absolute md:top-8 md:right-8 md:p-0 z-50">
-          {isLoggedIn ? (
-              <div className="flex items-center gap-2">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="md:h-10 md:px-4 md:py-2 text-xs md:text-sm"
-                    onClick={() => router.push("/dashboard")}
-                >
-                  My Dashboard
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="md:h-10 md:px-4 md:py-2 text-xs md:text-sm"
-                    onClick={handleLogout}
-                >
-                  Sign Out
-                </Button>
-              </div>
-          ) : (
-              <Button
-                  variant="ghost"
-                  size="sm"
-                  className="md:h-10 md:px-4 md:py-2 text-xs md:text-sm"
-                  onClick={() => router.push("/login")}
-              >
-                Sign In / Register
-              </Button>
-          )}
-          <ThemeToggle />
-        </div>
-
-        {/* Main Content Wrapper - Centered in remaining space */}
-        <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 w-full">
-          <div className="w-full max-w-4xl grid gap-8">
-            <div className="text-center space-y-2">
-              <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight lg:text-7xl">Find the Perfect Time</h1>
-              <p className="text-xl text-muted-foreground md:text-2xl">Modern group scheduling made simple</p>
-            </div>
-
-            <Card className="border-2 shadow-lg">
-              <CardHeader>
-                <CardTitle>Create New Event</CardTitle>
-                <CardDescription>Set up your event details and select available dates</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="eventName">Event Name</Label>
-                      <Input
-                          id="eventName"
-                          placeholder="e.g., Team Standup, Birthday Party"
-                          value={eventName}
-                          onChange={(e) => setEventName(e.target.value)}
-                          className="text-base md:text-lg h-11 md:h-12"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Duration</Label>
-                        <Select value={duration} onValueChange={setDuration}>
-                          <SelectTrigger className="h-11 md:h-12">
-                            <Clock className="mr-2 h-4 w-4" />
-                            <SelectValue placeholder="Duration" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="15">15 minutes</SelectItem>
-                            <SelectItem value="30">30 minutes</SelectItem>
-                            <SelectItem value="60">1 hour</SelectItem>
-                            <SelectItem value="90">1.5 hours</SelectItem>
-                            <SelectItem value="120">2 hours</SelectItem>
-                            <SelectItem value="custom">Custom</SelectItem> {/* New Option */}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Time Zone</Label>
-                        <Input
-                            value={timezone}
-                            onChange={(e) => setTimezone(e.target.value)}
-                            className="h-11 md:h-12"
-                            disabled
-                        />
-                      </div>
-                    </div>
-
-                    {/* Custom Duration Input Field */}
-                    {duration === "custom" && (
-                        <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                          <Label>Custom Duration (minutes)</Label>
-                          <Input
-                              type="number"
-                              placeholder="e.g. 45"
-                              value={customDuration}
-                              onChange={(e) => setCustomDuration(e.target.value)}
-                              className="h-11 md:h-12"
-                          />
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+            {/* Header */}
+            <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b">
+                <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                            <Calendar className="w-5 h-5 text-primary-foreground" />
                         </div>
-                    )}
-
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Select Date Range</Label>
-                    <div className="border rounded-md p-4 flex justify-center bg-card">
-                      <Calendar
-                          mode="range"
-                          selected={dateRange}
-                          onSelect={setDateRange}
-                          className="rounded-md"
-                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                      />
+                        <span className="font-bold text-xl">When2Meet</span>
                     </div>
-                    {dateRange?.from && dateRange?.to && (
-                        <p className="text-sm text-muted-foreground text-center">
-                          Selected: {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
-                        </p>
-                    )}
-                  </div>
-                </div>
 
-                <Button
-                    size="lg"
-                    className="w-full text-lg h-12 md:h-14"
-                    onClick={handleCreateEvent}
-                    disabled={!eventName || !dateRange?.from || !dateRange?.to || isSubmitting}
-                >
-                  {isSubmitting ? "Creating..." : "Create Event"}
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+                    <div className="flex items-center gap-3">
+                        {isLoggedIn && (
+                            <span className="text-sm text-muted-foreground hidden sm:inline">
+                Signed in as <span className="font-semibold text-foreground">{username || "you"}</span>
+              </span>
+                        )}
+
+                        {isLoggedIn && (
+                            <Link href="/dashboard">
+                                <Button variant="outline" size="sm" className="font-semibold">
+                                    My Dashboard
+                                </Button>
+                            </Link>
+                        )}
+
+                        <Link href="/create">
+                            <Button size="sm" className="font-semibold">
+                                Create Event
+                            </Button>
+                        </Link>
+
+                        {isLoggedIn ? (
+                            <Button variant="ghost" size="sm" className="font-semibold" onClick={handleSignOut}>
+                                Sign Out
+                            </Button>
+                        ) : (
+                            <Link href="/login">
+                                <Button variant="ghost" size="sm" className="font-semibold">
+                                    Sign In / Register
+                                </Button>
+                            </Link>
+                        )}
+
+                        {/* Theme toggle last on the right */}
+                        <ThemeToggle />
+                    </div>
+                </div>
+            </header>
+
+            {/* Hero Section */}
+            <section className="pt-32 pb-16 px-4">
+                <div className="container mx-auto max-w-6xl text-center space-y-8">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary border border-primary/20">
+                        <Sparkles className="w-4 h-4" />
+                        <span className="text-sm font-medium">Modern Group Scheduling</span>
+                    </div>
+
+                    <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-balance">
+                        Find the Perfect Time
+                        <br />
+                        <span className="text-primary">Everyone Can Meet</span>
+                    </h1>
+
+                    <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-balance">
+                        Coordinate meetings effortlessly. Select your availability, share a link, and watch as the best times emerge
+                        through beautiful heatmap visualization.
+                    </p>
+
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
+                        <Link href="/create">
+                            <Button size="lg" className="h-14 px-8 text-lg font-semibold">
+                                <Calendar className="w-5 h-5 mr-2" />
+                                Create Free Event
+                            </Button>
+                        </Link>
+                        <Button variant="outline" size="lg" className="h-14 px-8 text-lg font-semibold bg-transparent" asChild>
+                            <a href="#features">Learn More</a>
+                        </Button>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">No sign-up required • Free forever • Works on any device</p>
+                </div>
+            </section>
+
+            {/* Features Section */}
+            <section id="features" className="py-16 px-4">
+                <div className="container mx-auto max-w-6xl">
+                    <div className="text-center mb-12">
+                        <h2 className="text-3xl md:text-5xl font-bold mb-4">Why Choose When2Meet?</h2>
+                        <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+                            Built for teams, clubs, friends, and anyone who needs to coordinate schedules without the hassle.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                            <CardHeader>
+                                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                                    <Zap className="w-6 h-6 text-primary" />
+                                </div>
+                                <CardTitle className="text-xl">Lightning Fast</CardTitle>
+                                <CardDescription className="text-base">
+                                    Create events in seconds. No complicated setup or lengthy forms. Just pick dates and share.
+                                </CardDescription>
+                            </CardHeader>
+                        </Card>
+
+                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                            <CardHeader>
+                                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                                    <Users className="w-6 h-6 text-primary" />
+                                </div>
+                                <CardTitle className="text-xl">Visual Heatmap</CardTitle>
+                                <CardDescription className="text-base">
+                                    See group availability at a glance with our intuitive heatmap. Darker colors mean more people available.
+                                </CardDescription>
+                            </CardHeader>
+                        </Card>
+
+                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                            <CardHeader>
+                                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                                    <Share2 className="w-6 h-6 text-primary" />
+                                </div>
+                                <CardTitle className="text-xl">Easy Sharing</CardTitle>
+                                <CardDescription className="text-base">
+                                    Share a simple link with your group. No accounts needed, works on any device, anywhere.
+                                </CardDescription>
+                            </CardHeader>
+                        </Card>
+
+                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                            <CardHeader>
+                                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                                    <Calendar className="w-6 h-6 text-primary" />
+                                </div>
+                                <CardTitle className="text-xl">Smart Dates</CardTitle>
+                                <CardDescription className="text-base">
+                                    Automatically expands to show all dates you need. Add more dates dynamically as needed.
+                                </CardDescription>
+                            </CardHeader>
+                        </Card>
+
+                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                            <CardHeader>
+                                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                                    <Clock className="w-6 h-6 text-primary" />
+                                </div>
+                                <CardTitle className="text-xl">Time Zones</CardTitle>
+                                <CardDescription className="text-base">
+                                    Automatically handles time zones. Everyone sees times in their local time zone.
+                                </CardDescription>
+                            </CardHeader>
+                        </Card>
+
+                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                            <CardHeader>
+                                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                                    <Sparkles className="w-6 h-6 text-primary" />
+                                </div>
+                                <CardTitle className="text-xl">Modern Design</CardTitle>
+                                <CardDescription className="text-base">
+                                    Beautiful, mobile-responsive interface with dark mode support. Looks great everywhere.
+                                </CardDescription>
+                            </CardHeader>
+                        </Card>
+                    </div>
+                </div>
+            </section>
+
+            {/* How It Works */}
+            <section className="py-16 px-4 bg-muted/30">
+                <div className="container mx-auto max-w-4xl">
+                    <div className="text-center mb-12">
+                        <h2 className="text-3xl md:text-5xl font-bold mb-4">How It Works</h2>
+                        <p className="text-muted-foreground text-lg">Getting started takes less than a minute</p>
+                    </div>
+
+                    <div className="space-y-8">
+                        <div className="flex gap-6 items-start">
+                            <div className="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-xl">
+                                1
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-semibold mb-2">Create Your Event</h3>
+                                <p className="text-muted-foreground">
+                                    Give your event a name, select the date range, and set the meeting duration. That's it!
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-6 items-start">
+                            <div className="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-xl">
+                                2
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-semibold mb-2">Share the Link</h3>
+                                <p className="text-muted-foreground">
+                                    Copy the event link and share it with your group via email, Slack, WhatsApp, or any messaging app.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-6 items-start">
+                            <div className="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-xl">
+                                3
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-semibold mb-2">Select Availability</h3>
+                                <p className="text-muted-foreground">
+                                    Each person clicks and drags to mark when they're available. Changes are saved automatically.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-6 items-start">
+                            <div className="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-xl">
+                                4
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-semibold mb-2">Find Best Time</h3>
+                                <p className="text-muted-foreground">
+                                    Watch the heatmap update in real-time. Darker times mean more people available. Pick the best time!
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* CTA Section */}
+            <section className="py-20 px-4">
+                <div className="container mx-auto max-w-4xl text-center">
+                    <Card className="border-2 shadow-2xl bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+                        <CardContent className="pt-12 pb-12 space-y-6">
+                            <h2 className="text-3xl md:text-5xl font-bold text-balance">Ready to Schedule Your Next Meeting?</h2>
+                            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                                Join thousands of teams coordinating schedules with When2Meet. No credit card required.
+                            </p>
+                            <Link href="/create">
+                                <Button size="lg" className="h-14 px-10 text-lg font-semibold">
+                                    <Calendar className="w-5 h-5 mr-2" />
+                                    Create Your First Event
+                                </Button>
+                            </Link>
+                        </CardContent>
+                    </Card>
+                </div>
+            </section>
+
+            {/* Footer */}
+            <footer className="border-t py-8 px-4">
+                <div className="container mx-auto text-center text-sm text-muted-foreground">
+                    <p>Made with ❤️ for better scheduling</p>
+                </div>
+            </footer>
         </div>
-      </div>
-  )
+    )
 }

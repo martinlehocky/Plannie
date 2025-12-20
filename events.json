@@ -19,25 +19,69 @@
     "id": "l4gl8d",
     "creatorId": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
     "data": {
+      "creatorId": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
       "dateRange": {
         "from": "2025-12-22T23:00:00.000Z",
         "to": "2025-12-26T23:00:00.000Z"
       },
+      "disabledSlots": [
+        "2025-12-23T06:30:00.000Z"
+      ],
       "duration": 30,
       "id": "l4gl8d",
       "name": "Meeting",
       "participants": [
         {
-          "availability": {},
+          "availability": {
+            "2025-12-23T00:00:00.000Z": true
+          },
           "id": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
           "name": "MartinTest"
+        },
+        {
+          "availability": {
+            "2025-12-22T20:00:00.000Z": true,
+            "2025-12-23T07:00:00.000Z": true,
+            "2025-12-23T07:30:00.000Z": true,
+            "2025-12-24T03:00:00.000Z": true,
+            "2025-12-24T03:30:00.000Z": true,
+            "2025-12-24T04:30:00.000Z": true,
+            "2025-12-25T04:00:00.000Z": true,
+            "2025-12-25T06:30:00.000Z": true,
+            "2025-12-26T03:00:00.000Z": true,
+            "2025-12-26T05:30:00.000Z": true,
+            "2025-12-26T06:30:00.000Z": true,
+            "2025-12-27T03:00:00.000Z": true,
+            "2025-12-27T03:30:00.000Z": true,
+            "2025-12-27T04:00:00.000Z": true,
+            "2025-12-27T05:00:00.000Z": true
+          },
+          "id": "e5462d6a-af24-4504-af84-b4622705982d",
+          "name": "Martin"
         }
       ],
       "timezone": "Europe/Bratislava"
     },
     "participants": [
-      "f4c65040-d412-44ef-89aa-2e95bb0e6105"
+      "f4c65040-d412-44ef-89aa-2e95bb0e6105",
+      "e5462d6a-af24-4504-af84-b4622705982d"
     ]
+  },
+  "m4b349": {
+    "id": "m4b349",
+    "creatorId": "",
+    "data": {
+      "dateRange": {
+        "from": "2025-12-21T23:00:00.000Z",
+        "to": "2025-12-24T23:00:00.000Z"
+      },
+      "duration": 30,
+      "id": "m4b349",
+      "name": "Saaaa",
+      "participants": [],
+      "timezone": "Europe/Bratislava"
+    },
+    "participants": []
   },
   "rri93j": {
     "id": "rri93j",
@@ -90,12 +134,18 @@
           },
           "id": "e5462d6a-af24-4504-af84-b4622705982d",
           "name": "Martin"
+        },
+        {
+          "availability": {},
+          "id": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
+          "name": "MartinTest"
         }
       ],
       "timezone": "Europe/Bratislava"
     },
     "participants": [
-      "e5462d6a-af24-4504-af84-b4622705982d"
+      "e5462d6a-af24-4504-af84-b4622705982d",
+      "f4c65040-d412-44ef-89aa-2e95bb0e6105"
     ]
   }
 }

@@ -1,4 +1,3 @@
-// go
 package main
 
 import (
@@ -321,34 +320,41 @@ func main() {
 			c.JSON(400, gin.H{"error": "Invalid JSON"})
 			return
 		}
-		id := input["id"].(string)
+
 		creatorID := c.GetHeader("Authorization")
+		if creatorID == "" {
+			c.JSON(401, gin.H{"error": "Login required"})
+			return
+		}
 
-		participants := []string{}
-		if creatorID != "" {
-			participants = append(participants, creatorID)
+		// Ensure the creator exists
+		store.RLock()
+		creator, ok := store.Users[creatorID]
+		store.RUnlock()
+		if !ok {
+			c.JSON(401, gin.H{"error": "Invalid user"})
+			return
+		}
 
-			var myUsername string
-			store.RLock()
-			for _, u := range store.Users {
-				if u.ID == creatorID {
-					myUsername = u.Username
-					break
-				}
-			}
-			store.RUnlock()
+		id, _ := input["id"].(string)
+		if id == "" {
+			c.JSON(400, gin.H{"error": "Missing event id"})
+			return
+		}
 
+		participants := []string{creatorID}
+
+		// Add creator to participant list in event data
+		if input["participants"] == nil {
+			input["participants"] = []interface{}{}
+		}
+		if list, ok := input["participants"].([]interface{}); ok {
 			newParticipant := map[string]interface{}{
 				"id":           creatorID,
-				"name":         myUsername,
+				"name":         creator.Username,
 				"availability": map[string]bool{},
 			}
-			if input["participants"] == nil {
-				input["participants"] = []interface{}{}
-			}
-			if list, ok := input["participants"].([]interface{}); ok {
-				input["participants"] = append(list, newParticipant)
-			}
+			input["participants"] = append(list, newParticipant)
 		}
 
 		store.Lock()
