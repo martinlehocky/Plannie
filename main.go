@@ -2,21 +2,112 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/time/rate"
 )
 
+// --- JWT AUTH HELPERS ---
+
+var jwtSecret []byte
+
+func init() {
+	_ = godotenv.Load() // optional .env
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		log.Fatal("FATAL: JWT_SECRET environment variable is not set")
+	}
+	jwtSecret = []byte(secret)
+}
+
+type Claims struct {
+	UserID   string `json:"uid"`
+	Username string `json:"uname"`
+	jwt.RegisteredClaims
+}
+
+func signToken(userID, username string, ttl time.Duration) (string, error) {
+	claims := &Claims{
+		UserID:   userID,
+		Username: username,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(jwtSecret)
+}
+
+func verifyToken(tok string) (*Claims, error) {
+	if len(jwtSecret) == 0 {
+		return nil, errors.New("JWT_SECRET not set")
+	}
+	parsed, err := jwt.ParseWithClaims(tok, &Claims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return jwtSecret, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if claims, ok := parsed.Claims.(*Claims); ok && parsed.Valid {
+		return claims, nil
+	}
+	return nil, errors.New("invalid token")
+}
+
+func authnMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		h := c.GetHeader("Authorization")
+		if !strings.HasPrefix(h, "Bearer ") {
+			c.AbortWithStatusJSON(401, gin.H{"error": "Unauthorized"})
+			return
+		}
+		token := strings.TrimPrefix(h, "Bearer ")
+		if token == "" {
+			c.AbortWithStatusJSON(401, gin.H{"error": "Unauthorized"})
+			return
+		}
+		claims, err := verifyToken(token)
+		if err != nil {
+			c.AbortWithStatusJSON(401, gin.H{"error": "Unauthorized"})
+			return
+		}
+		c.Set("userID", claims.UserID)
+		c.Set("username", claims.Username)
+		c.Next()
+	}
+}
+
+func ctxUserID(c *gin.Context) string {
+	if v, ok := c.Get("userID"); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
 // --- RATE LIMITING ---
+
 type visitor struct {
 	limiter  *rate.Limiter
 	lastSeen time.Time
@@ -66,6 +157,7 @@ func rateLimitMiddleware() gin.HandlerFunc {
 }
 
 // --- SSE HUB ---
+
 type hub struct {
 	subs map[string]map[chan []byte]struct{}
 	mu   sync.Mutex
@@ -105,6 +197,7 @@ func (h *hub) broadcast(id string, msg []byte) {
 }
 
 // --- DATA STRUCTURES ---
+
 type User struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
@@ -118,7 +211,18 @@ type Event struct {
 	Participants []string               `json:"participants"`
 }
 
+type EventUpdate struct {
+	ID            string                   `json:"id"`
+	Name          string                   `json:"name"`
+	DateRange     map[string]string        `json:"dateRange"`
+	Duration      float64                  `json:"duration"`
+	Timezone      string                   `json:"timezone"`
+	Participants  []map[string]interface{} `json:"participants"`
+	DisabledSlots []string                 `json:"disabledSlots,omitempty"`
+}
+
 // --- STORAGE ---
+
 type DataStore struct {
 	sync.RWMutex
 	Events map[string]Event
@@ -133,9 +237,35 @@ var (
 	sseHub = newHub()
 )
 
+// --- PERSISTENCE HELPERS ---
+
+func atomicWrite(filename string, data []byte) error {
+	dir := filepath.Dir(filename)
+	tmp, err := ioutil.TempFile(dir, "tmp-*.json")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, filename)
+}
+
 func saveToDisk(filename string, data interface{}) {
 	file, _ := json.MarshalIndent(data, "", "  ")
-	_ = ioutil.WriteFile(filename, file, 0644)
+	_ = atomicWrite(filename, file)
 }
 
 func loadFromDisk() {
@@ -154,39 +284,28 @@ func mustJSON(v interface{}) []byte {
 }
 
 // --- MAIN ---
+
 func main() {
 	loadFromDisk()
 	go cleanupVisitors()
 
 	r := gin.Default()
 
+	// Body size limit (1MB)
+	r.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+		c.Next()
+	})
+
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:3000"}
+	config.AllowOrigins = []string{"http://localhost:3000"} // tighten in prod
 	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	r.Use(cors.New(config))
 	r.Use(rateLimitMiddleware())
 
-	// --- SSE subscribe ---
-	r.GET("/events/:id/stream", func(c *gin.Context) {
-		id := c.Param("id")
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Connection", "keep-alive")
-
-		ch := sseHub.add(id)
-		defer sseHub.remove(id, ch)
-
-		c.Stream(func(w io.Writer) bool {
-			if msg, ok := <-ch; ok {
-				c.SSEvent("update", string(msg))
-				return true
-			}
-			return false
-		})
-	})
-
 	// --- AUTH ---
+
 	r.POST("/register", func(c *gin.Context) {
 		var input struct {
 			Username string `json:"username"`
@@ -200,7 +319,7 @@ func main() {
 		defer store.Unlock()
 		for _, u := range store.Users {
 			if u.Username == input.Username {
-				c.JSON(400, gin.H{"error": "Username taken"})
+				c.JSON(400, gin.H{"error": "Unable to register with that username"})
 				return
 			}
 		}
@@ -225,7 +344,8 @@ func main() {
 		for _, u := range store.Users {
 			if u.Username == input.Username {
 				if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(input.Password)); err == nil {
-					c.JSON(200, gin.H{"token": u.ID, "username": u.Username})
+					tok, _ := signToken(u.ID, u.Username, 24*time.Hour)
+					c.JSON(200, gin.H{"token": tok, "username": u.Username})
 					return
 				}
 			}
@@ -233,13 +353,12 @@ func main() {
 		c.JSON(401, gin.H{"error": "Invalid credentials"})
 	})
 
-	r.PUT("/users/me", func(c *gin.Context) {
-		userID := c.GetHeader("Authorization")
-		if userID == "" {
-			c.JSON(401, gin.H{"error": "Unauthorized"})
-			return
-		}
+	// Protected group
+	auth := r.Group("/")
+	auth.Use(authnMiddleware())
 
+	auth.PUT("/users/me", func(c *gin.Context) {
+		userID := ctxUserID(c)
 		var input struct {
 			Username    string `json:"username"`
 			OldPassword string `json:"oldPassword"`
@@ -259,19 +378,25 @@ func main() {
 			return
 		}
 
+		updatedUser := user
 		nameChanged := false
+
 		if input.Username != "" && input.Username != user.Username {
 			for _, u := range store.Users {
 				if u.Username == input.Username {
-					c.JSON(400, gin.H{"error": "Username taken"})
+					c.JSON(400, gin.H{"error": "Unable to update username"})
 					return
 				}
 			}
-			user.Username = input.Username
+			updatedUser.Username = input.Username
 			nameChanged = true
 		}
 
 		if input.NewPassword != "" {
+			if len(input.NewPassword) < 8 {
+				c.JSON(400, gin.H{"error": "Password must be at least 8 characters"})
+				return
+			}
 			if input.OldPassword == "" {
 				c.JSON(400, gin.H{"error": "Current password required to set new password"})
 				return
@@ -281,10 +406,10 @@ func main() {
 				return
 			}
 			hashed, _ := bcrypt.GenerateFromPassword([]byte(input.NewPassword), 10)
-			user.Password = string(hashed)
+			updatedUser.Password = string(hashed)
 		}
 
-		store.Users[userID] = user
+		store.Users[userID] = updatedUser
 		saveToDisk("users.json", store.Users)
 
 		if nameChanged {
@@ -295,7 +420,7 @@ func main() {
 					for _, p := range parts {
 						if pMap, ok := p.(map[string]interface{}); ok {
 							if pMap["id"] == userID {
-								pMap["name"] = user.Username
+								pMap["name"] = updatedUser.Username
 								updated = true
 							}
 							newParts = append(newParts, pMap)
@@ -310,18 +435,61 @@ func main() {
 			saveToDisk("events.json", store.Events)
 		}
 
-		c.JSON(200, gin.H{"username": user.Username})
+		c.JSON(200, gin.H{"username": updatedUser.Username})
+	})
+
+	// --- SSE subscribe (protected & participant/creator only) ---
+	auth.GET("/events/:id/stream", func(c *gin.Context) {
+		id := c.Param("id")
+		userID := ctxUserID(c)
+
+		store.RLock()
+		ev, ok := store.Events[id]
+		store.RUnlock()
+		if !ok {
+			c.JSON(404, gin.H{"error": "Not found"})
+			return
+		}
+		allowed := ev.CreatorID == userID
+		if !allowed {
+			for _, pid := range ev.Participants {
+				if pid == userID {
+					allowed = true
+					break
+				}
+			}
+		}
+		if !allowed {
+			c.JSON(403, gin.H{"error": "Forbidden"})
+			return
+		}
+
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+
+		ch := sseHub.add(id)
+		defer sseHub.remove(id, ch)
+
+		c.Stream(func(w io.Writer) bool {
+			if msg, ok := <-ch; ok {
+				c.SSEvent("update", string(msg))
+				return true
+			}
+			return false
+		})
 	})
 
 	// --- EVENTS ---
-	r.POST("/events", func(c *gin.Context) {
+
+	auth.POST("/events", func(c *gin.Context) {
 		var input map[string]interface{}
 		if err := c.BindJSON(&input); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid JSON"})
 			return
 		}
 
-		creatorID := c.GetHeader("Authorization")
+		creatorID := ctxUserID(c)
 		if creatorID == "" {
 			c.JSON(401, gin.H{"error": "Login required"})
 			return
@@ -355,6 +523,8 @@ func main() {
 			input["participants"] = append(list, newParticipant)
 		}
 
+		input["creatorId"] = creatorID
+
 		store.Lock()
 		store.Events[id] = Event{ID: id, CreatorID: creatorID, Data: input, Participants: participants}
 		store.Unlock()
@@ -381,18 +551,21 @@ func main() {
 		c.JSON(200, res)
 	})
 
-	// Updated: enforce auth and creator-only disabledSlots updates; preserve disabledSlots for non-creators
-	r.PUT("/events/:id", func(c *gin.Context) {
+	auth.PUT("/events/:id", func(c *gin.Context) {
 		id := c.Param("id")
-		userID := c.GetHeader("Authorization")
+		userID := ctxUserID(c)
 		if userID == "" {
 			c.JSON(401, gin.H{"error": "Unauthorized"})
 			return
 		}
 
-		var input map[string]interface{}
-		if err := c.BindJSON(&input); err != nil {
+		var input EventUpdate
+		if err := c.ShouldBindJSON(&input); err != nil {
 			c.JSON(400, gin.H{"error": "Invalid JSON"})
+			return
+		}
+		if input.ID == "" || input.Name == "" || input.DateRange == nil || input.DateRange["from"] == "" || input.DateRange["to"] == "" || input.Duration <= 0 || input.Timezone == "" {
+			c.JSON(400, gin.H{"error": "Missing required fields"})
 			return
 		}
 
@@ -407,42 +580,98 @@ func main() {
 
 		isCreator := event.CreatorID == userID
 
-		if ds, present := input["disabledSlots"]; present {
-			if !isCreator {
-				c.JSON(403, gin.H{"error": "Only creator can change disabled slots"})
-				return
-			}
-			event.Data["disabledSlots"] = ds
-		} else {
-			if existing := event.Data["disabledSlots"]; existing != nil {
-				input["disabledSlots"] = existing
-			}
-		}
-
-		event.Data = input
-
-		if parts, ok := input["participants"].([]interface{}); ok {
+		if isCreator {
 			newParts := []string{}
-			for _, p := range parts {
-				if pMap, ok := p.(map[string]interface{}); ok {
-					if pid, ok := pMap["id"].(string); ok {
+			if len(input.Participants) > 0 {
+				for _, p := range input.Participants {
+					if pid, ok := p["id"].(string); ok && pid != "" {
 						newParts = append(newParts, pid)
 					}
 				}
 			}
-			event.Participants = newParts
+
+			event.Data = map[string]interface{}{
+				"id":           input.ID,
+				"name":         input.Name,
+				"dateRange":    input.DateRange,
+				"duration":     input.Duration,
+				"timezone":     input.Timezone,
+				"participants": input.Participants,
+				"creatorId":    event.CreatorID,
+			}
+			if input.DisabledSlots != nil {
+				event.Data["disabledSlots"] = input.DisabledSlots
+			}
+			if len(newParts) > 0 {
+				event.Participants = newParts
+			}
+
+			store.Events[id] = event
+			saveToDisk("events.json", store.Events)
+			go sseHub.broadcast(id, mustJSON(event.Data))
+			c.JSON(200, event.Data)
+			return
 		}
+
+		// Non-creator: allow only updating their own availability
+		partsRaw, ok := event.Data["participants"].([]interface{})
+		if !ok {
+			c.JSON(403, gin.H{"error": "Forbidden: Not a participant"})
+			return
+		}
+
+		var incomingAvail map[string]bool
+		for _, p := range input.Participants {
+			if pid, ok := p["id"].(string); ok && pid == userID {
+				if avail, ok := p["availability"].(map[string]interface{}); ok {
+					incomingAvail = map[string]bool{}
+					for k, v := range avail {
+						if b, ok := v.(bool); ok && b {
+							incomingAvail[k] = true
+						}
+					}
+				}
+				break
+			}
+		}
+
+		if incomingAvail == nil {
+			c.JSON(200, event.Data)
+			return
+		}
+
+		updatedParts := []interface{}{}
+		updated := false
+		for _, p := range partsRaw {
+			if pMap, ok := p.(map[string]interface{}); ok {
+				if pMap["id"] == userID {
+					pMap["availability"] = incomingAvail
+					updated = true
+				}
+				updatedParts = append(updatedParts, pMap)
+			}
+		}
+		if !updated {
+			c.JSON(403, gin.H{"error": "Forbidden: Not a participant"})
+			return
+		}
+
+		event.Data["participants"] = updatedParts
+		if ds, ok := event.Data["disabledSlots"]; ok {
+			event.Data["disabledSlots"] = ds
+		}
+		event.Data["creatorId"] = event.CreatorID
 
 		store.Events[id] = event
 		saveToDisk("events.json", store.Events)
 
-		go sseHub.broadcast(id, mustJSON(input))
-		c.JSON(200, input)
+		go sseHub.broadcast(id, mustJSON(event.Data))
+		c.JSON(200, event.Data)
 	})
 
-	r.DELETE("/events/:id", func(c *gin.Context) {
+	auth.DELETE("/events/:id", func(c *gin.Context) {
 		id := c.Param("id")
-		userID := c.GetHeader("Authorization")
+		userID := ctxUserID(c)
 		store.Lock()
 		defer store.Unlock()
 		event, exists := store.Events[id]
@@ -462,9 +691,9 @@ func main() {
 	})
 
 	// --- INVITES / JOIN / LEAVE ---
-	r.POST("/events/:id/invite", func(c *gin.Context) {
+	auth.POST("/events/:id/invite", func(c *gin.Context) {
 		id := c.Param("id")
-		creatorID := c.GetHeader("Authorization")
+		creatorID := ctxUserID(c)
 		var input struct {
 			Username string `json:"username"`
 		}
@@ -494,7 +723,7 @@ func main() {
 			}
 		}
 		if targetUserID == "" {
-			c.JSON(404, gin.H{"error": "User not found"})
+			c.JSON(200, gin.H{"message": "Invite processed"})
 			return
 		}
 		for _, p := range event.Participants {
@@ -513,6 +742,7 @@ func main() {
 			}
 			event.Data["participants"] = append(parts, newParticipant)
 		}
+		event.Data["creatorId"] = event.CreatorID
 
 		store.Events[id] = event
 		saveToDisk("events.json", store.Events)
@@ -521,9 +751,9 @@ func main() {
 		c.JSON(200, gin.H{"message": "Invited"})
 	})
 
-	r.POST("/events/:id/join", func(c *gin.Context) {
+	auth.POST("/events/:id/join", func(c *gin.Context) {
 		id := c.Param("id")
-		userID := c.GetHeader("Authorization")
+		userID := ctxUserID(c)
 		if userID == "" {
 			c.JSON(401, gin.H{"error": "Login required"})
 			return
@@ -561,6 +791,7 @@ func main() {
 			}
 			event.Data["participants"] = append(parts, newParticipant)
 		}
+		event.Data["creatorId"] = event.CreatorID
 
 		store.Events[id] = event
 		saveToDisk("events.json", store.Events)
@@ -569,9 +800,9 @@ func main() {
 		c.JSON(200, gin.H{"message": "Joined"})
 	})
 
-	r.POST("/events/:id/leave", func(c *gin.Context) {
+	auth.POST("/events/:id/leave", func(c *gin.Context) {
 		id := c.Param("id")
-		userID := c.GetHeader("Authorization")
+		userID := ctxUserID(c)
 		store.Lock()
 		defer store.Unlock()
 		event, exists := store.Events[id]
@@ -606,6 +837,7 @@ func main() {
 			}
 			event.Data["participants"] = newPartsJSON
 		}
+		event.Data["creatorId"] = event.CreatorID
 
 		store.Events[id] = event
 		saveToDisk("events.json", store.Events)
@@ -614,8 +846,8 @@ func main() {
 		c.JSON(200, gin.H{"message": "Left event"})
 	})
 
-	r.GET("/my-events", func(c *gin.Context) {
-		userID := c.GetHeader("Authorization")
+	auth.GET("/my-events", func(c *gin.Context) {
+		userID := ctxUserID(c)
 		if userID == "" {
 			c.JSON(401, gin.H{"error": "Unauthorized"})
 			return
@@ -636,6 +868,7 @@ func main() {
 					ed[k] = v
 				}
 				ed["isOwner"] = (event.CreatorID == userID)
+				ed["creatorId"] = event.CreatorID
 				myEvents = append(myEvents, ed)
 			}
 		}

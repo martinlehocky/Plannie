@@ -8,12 +8,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { ArrowLeft, Save, ShieldCheck, Globe } from "lucide-react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select" // Import Select
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 // ZXCVBN Imports
-import { zxcvbn, zxcvbnOptions } from '@zxcvbn-ts/core'
-import * as zxcvbnCommonPackage from '@zxcvbn-ts/language-common'
-import * as zxcvbnEnPackage from '@zxcvbn-ts/language-en'
+import { zxcvbn, zxcvbnOptions } from "@zxcvbn-ts/core"
+import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
+import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en"
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
 const options = {
     translations: zxcvbnEnPackage.translations,
@@ -30,34 +32,30 @@ export default function SettingsPage() {
     const { toast } = useToast()
 
     const [username, setUsername] = useState("")
-    const [preferredTimezone, setPreferredTimezone] = useState("") // New State
-
-    // Password Fields
+    const [preferredTimezone, setPreferredTimezone] = useState("")
     const [oldPassword, setOldPassword] = useState("")
     const [newPassword, setNewPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
-
-    // Validation
     const [loading, setLoading] = useState(false)
     const [score, setScore] = useState(0)
     const [crackTime, setCrackTime] = useState("")
     const [passwordsMatch, setPasswordsMatch] = useState(true)
 
-    // Load initial data
+    // Load initial data & enforce auth
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            setUsername(localStorage.getItem("username") || "")
-            // Default to system, or load saved
-            const systemTz = Intl.DateTimeFormat().resolvedOptions().timeZone
-            const savedTz = localStorage.getItem("preferredTimezone")
-            setPreferredTimezone(savedTz || systemTz)
+        const token = localStorage.getItem("token")
+        if (!token) {
+            router.replace("/login")
+            return
         }
-    }, [])
+        setUsername(localStorage.getItem("username") || "")
+        const systemTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const savedTz = localStorage.getItem("preferredTimezone")
+        setPreferredTimezone(savedTz || systemTz)
+    }, [router])
 
-    // Get all timezones
-    const timezones = Intl.supportedValuesOf('timeZone')
+    const timezones = Intl.supportedValuesOf("timeZone")
 
-    // ... (Password validation effect matches previous code) ...
     useEffect(() => {
         if (newPassword) {
             const result = zxcvbn(newPassword)
@@ -71,21 +69,32 @@ export default function SettingsPage() {
     }, [newPassword, confirmPassword])
 
     const getScoreColor = () => {
-        switch(score) {
-            case 0: return "bg-red-500"
-            case 1: return "bg-orange-500"
-            case 2: return "bg-yellow-500"
-            case 3: return "bg-blue-500"
-            case 4: return "bg-green-500"
-            default: return "bg-gray-200"
+        switch (score) {
+            case 0:
+                return "bg-red-500"
+            case 1:
+                return "bg-orange-500"
+            case 2:
+                return "bg-yellow-500"
+            case 3:
+                return "bg-blue-500"
+            case 4:
+                return "bg-green-500"
+            default:
+                return "bg-gray-200"
         }
     }
 
     const handleSave = async () => {
-        // 1. Save Timezone locally (no backend needed for this visual preference)
+        const token = localStorage.getItem("token")
+        if (!token) {
+            router.replace("/login")
+            return
+        }
+
+        // Save timezone locally
         localStorage.setItem("preferredTimezone", preferredTimezone)
 
-        // 2. Validate Password stuff
         if (newPassword) {
             if (!passwordsMatch) {
                 toast({ title: "Error", description: "New passwords do not match.", variant: "destructive" })
@@ -98,32 +107,32 @@ export default function SettingsPage() {
         }
 
         setLoading(true)
-        const userId = localStorage.getItem("userId")
-
         try {
-            const res = await fetch("http://localhost:8080/users/me", {
+            const res = await fetch(`${API_BASE}/users/me`, {
                 method: "PUT",
                 headers: {
-                    "Authorization": userId || "",
-                    "Content-Type": "application/json"
+                    "Authorization": `Bearer ${token}`,
+                    "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    username: username,
-                    oldPassword: oldPassword,
-                    newPassword: newPassword || undefined
-                })
+                    username,
+                    oldPassword: oldPassword || undefined,
+                    newPassword: newPassword || undefined,
+                }),
             })
 
+            const data = await res.json().catch(() => ({}))
             if (res.ok) {
-                const data = await res.json()
-                localStorage.setItem("username", data.username)
+                if (data.username) {
+                    localStorage.setItem("username", data.username)
+                    setUsername(data.username)
+                }
                 toast({ title: "Success", description: "Settings updated successfully." })
                 setOldPassword("")
                 setNewPassword("")
                 setConfirmPassword("")
             } else {
-                const data = await res.json()
-                toast({ title: "Error", description: data.error, variant: "destructive" })
+                toast({ title: "Error", description: data.error || "Failed to update settings", variant: "destructive" })
             }
         } catch (e) {
             toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
@@ -145,7 +154,6 @@ export default function SettingsPage() {
                     <CardDescription>Manage your account and preferences.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-
                     {/* General Settings */}
                     <div className="space-y-4">
                         <h3 className="text-sm font-medium flex items-center gap-2 text-primary">
@@ -153,11 +161,7 @@ export default function SettingsPage() {
                         </h3>
                         <div className="space-y-2">
                             <Label htmlFor="username">Username</Label>
-                            <Input
-                                id="username"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                            />
+                            <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} />
                         </div>
 
                         <div className="space-y-2">

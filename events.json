@@ -60,49 +60,5 @@
       "timezone": "Europe/Bratislava"
     },
     "participants": []
-  },
-  "rri93j": {
-    "id": "rri93j",
-    "creatorId": "e5462d6a-af24-4504-af84-b4622705982d",
-    "data": {
-      "creatorId": "e5462d6a-af24-4504-af84-b4622705982d",
-      "dateRange": {
-        "from": "2025-12-21T23:00:00.000Z",
-        "to": "2025-12-24T23:00:00.000Z"
-      },
-      "disabledSlots": [
-        "2025-12-21T23:00:00.000Z"
-      ],
-      "duration": 30,
-      "id": "rri93j",
-      "name": "Aaaaa",
-      "participants": [
-        {
-          "availability": {
-            "2025-12-21T23:30:00.000Z": true,
-            "2025-12-22T23:30:00.000Z": true,
-            "2025-12-23T23:30:00.000Z": true,
-            "2025-12-24T23:30:00.000Z": true
-          },
-          "id": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
-          "name": "MartinTest"
-        },
-        {
-          "availability": {
-            "2025-12-21T23:30:00.000Z": true,
-            "2025-12-22T23:30:00.000Z": true,
-            "2025-12-23T23:30:00.000Z": true,
-            "2025-12-24T23:30:00.000Z": true
-          },
-          "id": "e5462d6a-af24-4504-af84-b4622705982d",
-          "name": "Martin"
-        }
-      ],
-      "timezone": "Europe/Bratislava"
-    },
-    "participants": [
-      "f4c65040-d412-44ef-89aa-2e95bb0e6105",
-      "e5462d6a-af24-4504-af84-b4622705982d"
-    ]
   }
 }

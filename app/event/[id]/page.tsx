@@ -1,13 +1,25 @@
 "use client"
 
-import { use, useEffect, useState } from "react"
+import { use, useEffect, useMemo, useState } from "react"
+import { EventSourcePolyfill } from "event-source-polyfill"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { AvailabilityGrid } from "@/components/availability-grid"
-import { Share2, Users, Calendar, Trophy, LogIn, Trash2, UserPlus, Globe, ChevronDown, ChevronUp, Ban } from "lucide-react"
+import {
+  Share2,
+  Users,
+  Calendar,
+  Trophy,
+  LogIn,
+  Trash2,
+  UserPlus,
+  Globe,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
@@ -24,6 +36,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
 type Participant = {
   id: string
@@ -45,6 +59,20 @@ type EventData = {
   disabledSlots?: string[]
 }
 
+type TokenClaims = { uid?: string; uname?: string }
+
+function decodeToken(token: string | null): TokenClaims {
+  if (!token) return {}
+  const parts = token.split(".")
+  if (parts.length !== 3) return {}
+  try {
+    const json = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
+    return JSON.parse(json)
+  } catch {
+    return {}
+  }
+}
+
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { toast } = useToast()
@@ -62,19 +90,25 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [userTimezone, setUserTimezone] = useState("")
   const [inviteUsername, setInviteUsername] = useState("")
 
+  const token = useMemo(() => (typeof window !== "undefined" ? localStorage.getItem("token") : null), [])
+  const tokenClaims = useMemo(() => decodeToken(token), [token])
+  const userId = tokenClaims.uid || null
+  const usernameClaim = tokenClaims.uname || null
+
   const syncUserState = (data: EventData) => {
-    const userId = localStorage.getItem("userId")
-    const username = localStorage.getItem("username")
-    setIsLoggedIn(!!userId)
-    setIsCreator(userId !== null && data.creatorId === userId)
-    const existing = data.participants.find((p: any) => p.id === userId)
+    const loggedIn = !!token
+    setIsLoggedIn(loggedIn)
+    setIsCreator(loggedIn && userId !== null && data.creatorId === userId)
+
+    const existing = data.participants.find((p) => p.id === userId)
     if (existing) {
       setIsParticipant(true)
       setCurrentParticipant(existing)
     } else {
       setIsParticipant(false)
-      if (userId && username) {
-        setCurrentParticipant({ id: userId, name: username, availability: {} })
+      if (loggedIn && userId) {
+        const name = localStorage.getItem("username") || usernameClaim || "You"
+        setCurrentParticipant({ id: userId, name, availability: {} })
       } else {
         setCurrentParticipant(null)
       }
@@ -86,7 +120,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     setUserTimezone(savedTz || Intl.DateTimeFormat().resolvedOptions().timeZone)
 
     try {
-      const res = await fetch(`http://localhost:8080/events/${id}`)
+      const res = await fetch(`${API_BASE}/events/${id}`)
       if (res.ok) {
         const data: EventData = await res.json()
         data.disabledSlots = data.disabledSlots || []
@@ -106,8 +140,19 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     fetchEventData()
   }, [id])
 
+  // SSE with Authorization header (no token in URL)
   useEffect(() => {
-    const es = new EventSource(`http://localhost:8080/events/${id}/stream`)
+    const tok = typeof window !== "undefined" ? localStorage.getItem("token") : null
+    if (!tok) {
+      router.replace("/login")
+      return
+    }
+
+    const es = new EventSourcePolyfill(`${API_BASE}/events/${id}/stream`, {
+      headers: { Authorization: `Bearer ${tok}` },
+      withCredentials: false,
+    })
+
     es.addEventListener("update", (e: MessageEvent) => {
       try {
         const data: EventData = JSON.parse(e.data)
@@ -122,12 +167,17 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       es.close()
     }
     return () => es.close()
-  }, [id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, router])
 
   const handleSaveAvailability = async (availability: Record<string, boolean>) => {
     if (!eventData || !currentParticipant) return
-    const disabled = eventData.disabledSlots || []
+    if (!token) {
+      router.push("/login")
+      return
+    }
 
+    const disabled = eventData.disabledSlots || []
     const cleaned: Record<string, boolean> = {}
     Object.entries(availability).forEach(([k, v]) => {
       if (!disabled.includes(k) && v) cleaned[k] = v
@@ -136,7 +186,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const updatedParticipant = { ...currentParticipant, availability: cleaned }
     const updatedParticipants = eventData.participants.filter((p) => p.id !== currentParticipant.id).concat(updatedParticipant)
 
-    // Build payload; strip disabledSlots for non-creators
     const payload: Partial<EventData> & { participants: Participant[] } = {
       ...eventData,
       participants: updatedParticipants,
@@ -145,12 +194,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       delete (payload as any).disabledSlots
     }
 
-    const userId = localStorage.getItem("userId")
-
     try {
-      const res = await fetch(`http://localhost:8080/events/${id}`, {
+      const res = await fetch(`${API_BASE}/events/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: userId || "" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       })
       if (res.ok) {
@@ -167,8 +217,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const handleToggleDisabled = async (slotKey: string) => {
-    if (!eventData || !isCreator) return
-    const userId = localStorage.getItem("userId")
+    if (!eventData || !isCreator || !token) return
     const current = new Set(eventData.disabledSlots || [])
     if (current.has(slotKey)) current.delete(slotKey)
     else current.add(slotKey)
@@ -177,9 +226,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const updatedEvent: EventData = { ...eventData, disabledSlots }
 
     try {
-      const res = await fetch(`http://localhost:8080/events/${id}`, {
+      const res = await fetch(`${API_BASE}/events/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: userId || "" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(updatedEvent),
       })
       if (res.ok) {
@@ -195,15 +244,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const handleResetDisabled = async () => {
-    if (!eventData || !isCreator) return
+    if (!eventData || !isCreator || !token) return
     setResetDisabledLoading(true)
-    const userId = localStorage.getItem("userId")
     const updatedEvent: EventData = { ...eventData, disabledSlots: [] }
 
     try {
-      const res = await fetch(`http://localhost:8080/events/${id}`, {
+      const res = await fetch(`${API_BASE}/events/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: userId || "" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(updatedEvent),
       })
       if (res.ok) {
@@ -221,10 +269,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const handleJoin = async () => {
-    const userId = localStorage.getItem("userId")
-    const res = await fetch(`http://localhost:8080/events/${id}/join`, {
+    if (!token) {
+      router.push("/login")
+      return
+    }
+    const res = await fetch(`${API_BASE}/events/${id}/join`, {
       method: "POST",
-      headers: { Authorization: userId || "" },
+      headers: { Authorization: `Bearer ${token}` },
     })
     if (res.ok) {
       toast({ title: "Joined!", description: "You can now mark your availability." })
@@ -236,10 +287,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const handleLeave = async () => {
-    const userId = localStorage.getItem("userId")
-    const res = await fetch(`http://localhost:8080/events/${id}/leave`, {
+    if (!token) {
+      router.push("/login")
+      return
+    }
+    const res = await fetch(`${API_BASE}/events/${id}/leave`, {
       method: "POST",
-      headers: { Authorization: userId || "" },
+      headers: { Authorization: `Bearer ${token}` },
     })
     if (res.ok) {
       router.push("/dashboard")
@@ -248,10 +302,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const handleDelete = async () => {
-    const userId = localStorage.getItem("userId")
-    const res = await fetch(`http://localhost:8080/events/${id}`, {
+    if (!token) return
+    const res = await fetch(`${API_BASE}/events/${id}`, {
       method: "DELETE",
-      headers: { Authorization: userId || "" },
+      headers: { Authorization: `Bearer ${token}` },
     })
     if (res.ok) {
       router.push("/dashboard")
@@ -260,11 +314,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const handleInvite = async () => {
-    if (!inviteUsername) return
-    const userId = localStorage.getItem("userId")
-    const res = await fetch(`http://localhost:8080/events/${id}/invite`, {
+    if (!inviteUsername || !token) return
+    const res = await fetch(`${API_BASE}/events/${id}/invite`, {
       method: "POST",
-      headers: { Authorization: userId || "", "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ username: inviteUsername }),
     })
     if (res.ok) {

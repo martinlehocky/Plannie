@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo, useCallback, memo } from "react"
+import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -86,6 +86,7 @@ const SlotCell = memo(function SlotCell({
                                             disableMode,
                                             isCreator,
                                             disableTooltip,
+                                            scrollMode,
                                             onMouseDown,
                                             onMouseEnter,
                                             onTouchStart,
@@ -100,11 +101,23 @@ const SlotCell = memo(function SlotCell({
     disableMode: boolean
     isCreator: boolean
     disableTooltip: boolean
+    scrollMode: boolean
     onMouseDown: (e: React.MouseEvent) => void
     onMouseEnter: () => void
     onTouchStart: (e: React.TouchEvent) => void
 }) {
-    const opacity = total === 0 ? 0 : availableCount / total
+    const intensity = total === 0 ? 0 : availableCount / total
+    // Purple close to #7a70ff (hsl ~ 245,100%,72), wide lightness ramp for visible contrast
+    const lightness = 86 - intensity * 44 // 86% -> 42%
+    const gradient = shouldUseGradient(intensity, isDisabled, isMyAvailability, scrollMode)
+        ? `linear-gradient(145deg,
+        hsl(245 92% ${lightness + 2}%),
+        hsl(245 94% ${lightness}%),
+        hsl(245 96% ${lightness - 2}%)
+      )`
+        : undefined
+    const shadowAlpha = 0.06 + intensity * 0.38
+    const shouldUsePurple = !isDisabled && availableCount > 0 && (scrollMode || !isMyAvailability)
 
     const cell = (
         <div
@@ -112,24 +125,22 @@ const SlotCell = memo(function SlotCell({
             className={cn(
                 "w-32 md:w-40 shrink-0 h-10 border-l border-border/40 relative cursor-pointer",
                 "transition-all duration-150 ease-out rounded-md",
-                "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:shadow-[0_4px_18px_-10px_rgba(0,0,0,0.35)]",
+                "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
                 "backdrop-blur-sm bg-background/60",
                 isDisabled
                     ? "bg-muted/50 cursor-not-allowed line-through text-muted-foreground"
-                    : isMyAvailability
+                    : isMyAvailability && !scrollMode
                         ? "bg-gradient-to-br from-primary/90 via-primary/80 to-primary/90 hover:from-primary hover:to-primary/95 text-primary-foreground"
                         : availableCount > 0
-                            ? "hover:bg-emerald-100/70 dark:hover:bg-emerald-900/30"
+                            ? "text-slate-50"
                             : "bg-muted/30 hover:bg-muted/50",
                 disableMode && isCreator && "ring-1 ring-primary/60"
             )}
             style={
-                !isMyAvailability && availableCount > 0 && !isDisabled
+                shouldUsePurple
                     ? {
-                        background: `linear-gradient(145deg,
-          rgba(34,197,94,${opacity * 0.18}) 0%,
-          rgba(52,211,153,${opacity * 0.22}) 35%,
-          rgba(16,185,129,${opacity * 0.18}) 70%)`,
+                        background: gradient,
+                        boxShadow: `inset 0 0 0 1px rgba(0,0,0,${shadowAlpha}), inset 0 12px 32px -14px rgba(0,0,0,${shadowAlpha + 0.14})`,
                     }
                     : undefined
             }
@@ -143,25 +154,16 @@ const SlotCell = memo(function SlotCell({
                 </div>
             )}
 
-            {availableCount > 0 && !isMyAvailability && !isDisabled && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-[10px] font-semibold text-green-700 dark:text-green-300">{availableCount}</span>
-                </div>
-            )}
-
-            {isMyAvailability && availableCount > 0 && !isDisabled && (
-                <div className="absolute top-1 right-1">
-          <span className="text-[9px] font-bold text-primary-foreground/90 bg-primary-foreground/20 px-1 rounded">
-            +{availableCount}
-          </span>
+            {/* Top-right count in a rounded black translucent chip */}
+            {availableCount > 0 && !isDisabled && (
+                <div className="absolute top-1 right-1 px-1.5 py-[1px] rounded bg-black/55 text-[9px] font-bold text-white leading-none">
+                    +{availableCount}
                 </div>
             )}
         </div>
     )
 
-    if (disableTooltip) {
-        return cell
-    }
+    if (disableTooltip) return cell
 
     return (
         <Tooltip open={isPainting ? false : undefined}>
@@ -206,6 +208,15 @@ const SlotCell = memo(function SlotCell({
         </Tooltip>
     )
 })
+
+function shouldUseGradient(
+    intensity: number,
+    isDisabled: boolean,
+    isMyAvailability: boolean,
+    scrollMode: boolean
+): boolean {
+    return !isDisabled && intensity > 0 && (scrollMode || !isMyAvailability)
+}
 
 export function AvailabilityGrid({
                                      dateRange,
@@ -480,7 +491,7 @@ export function AvailabilityGrid({
                     }}
                     onTouchMove={handleTouchMove}
                 >
-                    <div className="min-w-max overflow-auto h-full">
+                    <div className="min-w-max overflow-auto hfull">
                         <div className="flex sticky top-0 z-20 bg-background/95 backdrop-blur-md border-b shadow-sm">
                             <div className="w-20 md:w-24 shrink-0 p-2 md:p-3 text-[10px] md:text-xs font-semibold uppercase tracking-wide text-muted-foreground/70 bg-background/95 backdrop-blur-md sticky left-0 z-30 border-r border-border/40 flex items-center">
                                 Time
@@ -518,6 +529,7 @@ export function AvailabilityGrid({
                                             disableMode={disableMode}
                                             isCreator={isCreator}
                                             disableTooltip={disableMode && isCreator}
+                                            scrollMode={scrollMode}
                                             onMouseDown={(e) => handleMouseDown(e, key, isMyAvailability, isDisabled)}
                                             onMouseEnter={() => handleMouseEnter(key, isDisabled)}
                                             onTouchStart={(e) => handleTouchStart(e, key, isMyAvailability, isDisabled)}
@@ -536,7 +548,7 @@ export function AvailabilityGrid({
                     <span className="whitespace-nowrap">Your Availability</span>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-background/70 backdrop-blur-sm border border-border/40 shadow-sm">
-                    <div className="w-3 h-3 md:w-4 md:h-4 rounded bg-gradient-to-br from-green-200 to-green-300 dark:from-green-800 dark:to-green-700 shadow-sm shrink-0" />
+                    <div className="w-3 h-3 md:w-4 md:h-4 rounded bg-gradient-to-br from-purple-200 to-purple-300 dark:from-purple-800 dark:to-purple-700 shadow-sm shrink-0" />
                     <span className="whitespace-nowrap">Others Available</span>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-background/70 backdrop-blur-sm border border-border/40 shadow-sm">

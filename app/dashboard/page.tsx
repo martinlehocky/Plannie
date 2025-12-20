@@ -21,6 +21,8 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
+
 interface Event {
     id: string
     name: string
@@ -39,19 +41,19 @@ export default function Dashboard() {
     const { toast } = useToast()
 
     useEffect(() => {
-        const userId = localStorage.getItem("userId")
+        const token = localStorage.getItem("token")
         const storedUsername = localStorage.getItem("username") || ""
         setUsername(storedUsername)
 
-        if (!userId) {
+        if (!token) {
             router.push("/login")
             return
         }
 
         const fetchEvents = async () => {
             try {
-                const res = await fetch("http://localhost:8080/my-events", {
-                    headers: { Authorization: userId },
+                const res = await fetch(`${API_BASE}/my-events`, {
+                    headers: { Authorization: `Bearer ${token}` },
                 })
                 if (res.ok) {
                     const data = await res.json()
@@ -72,18 +74,22 @@ export default function Dashboard() {
     }, [])
 
     const handleLogout = () => {
-        localStorage.removeItem("userId")
+        localStorage.removeItem("token")
         localStorage.removeItem("username")
         router.push("/login")
     }
 
     const handleDelete = async (e: React.MouseEvent, eventId: string) => {
         e.stopPropagation()
+        const token = localStorage.getItem("token")
+        if (!token) {
+            router.push("/login")
+            return
+        }
         try {
-            const userId = localStorage.getItem("userId")
-            const res = await fetch(`http://localhost:8080/events/${eventId}`, {
+            const res = await fetch(`${API_BASE}/events/${eventId}`, {
                 method: "DELETE",
-                headers: { Authorization: userId || "" },
+                headers: { Authorization: `Bearer ${token}` },
             })
 
             if (res.ok) {
