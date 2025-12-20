@@ -283,6 +283,24 @@ func mustJSON(v interface{}) []byte {
 	return b
 }
 
+// --- UTILITIES ---
+
+// normalizeParts converts participant slices to []interface{} so appends work regardless of stored shape.
+func normalizeParts(val interface{}) []interface{} {
+	switch v := val.(type) {
+	case []interface{}:
+		return v
+	case []map[string]interface{}:
+		res := make([]interface{}, 0, len(v))
+		for _, m := range v {
+			res = append(res, m)
+		}
+		return res
+	default:
+		return []interface{}{}
+	}
+}
+
 // --- MAIN ---
 
 func main() {
@@ -596,7 +614,7 @@ func main() {
 				"dateRange":    input.DateRange,
 				"duration":     input.Duration,
 				"timezone":     input.Timezone,
-				"participants": input.Participants,
+				"participants": normalizeParts(input.Participants),
 				"creatorId":    event.CreatorID,
 			}
 			if input.DisabledSlots != nil {
@@ -614,11 +632,7 @@ func main() {
 		}
 
 		// Non-creator: allow only updating their own availability
-		partsRaw, ok := event.Data["participants"].([]interface{})
-		if !ok {
-			c.JSON(403, gin.H{"error": "Forbidden: Not a participant"})
-			return
-		}
+		partsRaw := normalizeParts(event.Data["participants"])
 
 		var incomingAvail map[string]bool
 		for _, p := range input.Participants {
@@ -734,14 +748,14 @@ func main() {
 		}
 
 		event.Participants = append(event.Participants, targetUserID)
-		if parts, ok := event.Data["participants"].([]interface{}); ok {
-			newParticipant := map[string]interface{}{
-				"id":           targetUserID,
-				"name":         targetUsername,
-				"availability": map[string]bool{},
-			}
-			event.Data["participants"] = append(parts, newParticipant)
+
+		parts := normalizeParts(event.Data["participants"])
+		newParticipant := map[string]interface{}{
+			"id":           targetUserID,
+			"name":         targetUsername,
+			"availability": map[string]bool{},
 		}
+		event.Data["participants"] = append(parts, newParticipant)
 		event.Data["creatorId"] = event.CreatorID
 
 		store.Events[id] = event
@@ -783,14 +797,13 @@ func main() {
 			}
 		}
 
-		if parts, ok := event.Data["participants"].([]interface{}); ok {
-			newParticipant := map[string]interface{}{
-				"id":           userID,
-				"name":         myUsername,
-				"availability": map[string]bool{},
-			}
-			event.Data["participants"] = append(parts, newParticipant)
+		parts := normalizeParts(event.Data["participants"])
+		newParticipant := map[string]interface{}{
+			"id":           userID,
+			"name":         myUsername,
+			"availability": map[string]bool{},
 		}
+		event.Data["participants"] = append(parts, newParticipant)
 		event.Data["creatorId"] = event.CreatorID
 
 		store.Events[id] = event

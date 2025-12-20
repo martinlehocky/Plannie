@@ -15,34 +15,49 @@
     },
     "participants": []
   },
-  "l4gl8d": {
-    "id": "l4gl8d",
-    "creatorId": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
+  "jezxsn": {
+    "id": "jezxsn",
+    "creatorId": "e5462d6a-af24-4504-af84-b4622705982d",
     "data": {
-      "creatorId": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
+      "creatorId": "e5462d6a-af24-4504-af84-b4622705982d",
       "dateRange": {
-        "from": "2025-12-22T23:00:00.000Z",
-        "to": "2025-12-26T23:00:00.000Z"
+        "from": "2025-12-24T23:00:00.000Z",
+        "to": "2025-12-24T23:00:00.000Z"
       },
-      "disabledSlots": [
-        "2025-12-23T06:30:00.000Z"
-      ],
+      "disabledSlots": [],
       "duration": 30,
-      "id": "l4gl8d",
-      "name": "Meeting",
+      "id": "jezxsn",
+      "name": "TestEvent",
       "participants": [
         {
           "availability": {
-            "2025-12-23T00:00:00.000Z": true
+            "2025-12-25T00:00:00.000Z": true,
+            "2025-12-25T00:30:00.000Z": true,
+            "2025-12-25T01:00:00.000Z": true,
+            "2025-12-25T01:30:00.000Z": true,
+            "2025-12-25T02:00:00.000Z": true,
+            "2025-12-25T02:30:00.000Z": true,
+            "2025-12-25T03:00:00.000Z": true
           },
           "id": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
           "name": "MartinTest"
+        },
+        {
+          "availability": {
+            "2025-12-24T23:00:00.000Z": true,
+            "2025-12-25T00:30:00.000Z": true,
+            "2025-12-25T01:00:00.000Z": true,
+            "2025-12-25T03:30:00.000Z": true
+          },
+          "id": "e5462d6a-af24-4504-af84-b4622705982d",
+          "name": "Martin"
         }
       ],
       "timezone": "Europe/Bratislava"
     },
     "participants": [
-      "f4c65040-d412-44ef-89aa-2e95bb0e6105"
+      "f4c65040-d412-44ef-89aa-2e95bb0e6105",
+      "e5462d6a-af24-4504-af84-b4622705982d"
     ]
   },
   "m4b349": {
@@ -60,5 +75,30 @@
       "timezone": "Europe/Bratislava"
     },
     "participants": []
+  },
+  "yoizck": {
+    "id": "yoizck",
+    "creatorId": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
+    "data": {
+      "creatorId": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
+      "dateRange": {
+        "from": "2025-12-22T23:00:00.000Z",
+        "to": "2025-12-26T23:00:00.000Z"
+      },
+      "duration": 30,
+      "id": "yoizck",
+      "name": "Event!",
+      "participants": [
+        {
+          "availability": {},
+          "id": "f4c65040-d412-44ef-89aa-2e95bb0e6105",
+          "name": "MartinTest"
+        }
+      ],
+      "timezone": "Europe/Bratislava"
+    },
+    "participants": [
+      "f4c65040-d412-44ef-89aa-2e95bb0e6105"
+    ]
   }
 }

@@ -59,7 +59,7 @@ type EventData = {
   disabledSlots?: string[]
 }
 
-type TokenClaims = { uid?: string; uname?: string }
+type TokenClaims = { uid?: string; sub?: string; uname?: string; username?: string; userId?: string; id?: string; name?: string }
 
 function decodeToken(token: string | null): TokenClaims {
   if (!token) return {}
@@ -92,8 +92,20 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   const token = useMemo(() => (typeof window !== "undefined" ? localStorage.getItem("token") : null), [])
   const tokenClaims = useMemo(() => decodeToken(token), [token])
-  const userId = tokenClaims.uid || null
-  const usernameClaim = tokenClaims.uname || null
+
+  // Use multiple fallback claims to align with backend (e.g., sub)
+  const userId =
+      tokenClaims.uid ||
+      tokenClaims.sub ||
+      tokenClaims.userId ||
+      tokenClaims.id ||
+      null
+
+  const usernameClaim =
+      tokenClaims.uname ||
+      tokenClaims.username ||
+      tokenClaims.name ||
+      null
 
   const syncUserState = (data: EventData) => {
     const loggedIn = !!token
@@ -138,6 +150,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   useEffect(() => {
     fetchEventData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   // SSE with Authorization header (no token in URL)

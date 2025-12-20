@@ -491,7 +491,7 @@ export function AvailabilityGrid({
                     }}
                     onTouchMove={handleTouchMove}
                 >
-                    <div className="min-w-max overflow-auto hfull">
+                    <div className="min-w-max overflow-auto h-full">
                         <div className="flex sticky top-0 z-20 bg-background/95 backdrop-blur-md border-b shadow-sm">
                             <div className="w-20 md:w-24 shrink-0 p-2 md:p-3 text-[10px] md:text-xs font-semibold uppercase tracking-wide text-muted-foreground/70 bg-background/95 backdrop-blur-md sticky left-0 z-30 border-r border-border/40 flex items-center">
                                 Time
