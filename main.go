@@ -1,7 +1,9 @@
+// go
 package main
 
 import (
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -64,8 +66,46 @@ func rateLimitMiddleware() gin.HandlerFunc {
 	}
 }
 
-// --- DATA STRUCTURES ---
+// --- SSE HUB ---
+type hub struct {
+	subs map[string]map[chan []byte]struct{}
+	mu   sync.Mutex
+}
 
+func newHub() *hub {
+	return &hub{subs: map[string]map[chan []byte]struct{}{}}
+}
+
+func (h *hub) add(id string) chan []byte {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.subs[id] == nil {
+		h.subs[id] = map[chan []byte]struct{}{}
+	}
+	ch := make(chan []byte, 1)
+	h.subs[id][ch] = struct{}{}
+	return ch
+}
+
+func (h *hub) remove(id string, ch chan []byte) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.subs[id], ch)
+	close(ch)
+}
+
+func (h *hub) broadcast(id string, msg []byte) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for ch := range h.subs[id] {
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+}
+
+// --- DATA STRUCTURES ---
 type User struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
@@ -80,17 +120,19 @@ type Event struct {
 }
 
 // --- STORAGE ---
-
 type DataStore struct {
 	sync.RWMutex
 	Events map[string]Event
 	Users  map[string]User
 }
 
-var store = DataStore{
-	Events: make(map[string]Event),
-	Users:  make(map[string]User),
-}
+var (
+	store = DataStore{
+		Events: make(map[string]Event),
+		Users:  make(map[string]User),
+	}
+	sseHub = newHub()
+)
 
 func saveToDisk(filename string, data interface{}) {
 	file, _ := json.MarshalIndent(data, "", "  ")
@@ -99,16 +141,20 @@ func saveToDisk(filename string, data interface{}) {
 
 func loadFromDisk() {
 	if data, err := ioutil.ReadFile("users.json"); err == nil {
-		json.Unmarshal(data, &store.Users)
+		_ = json.Unmarshal(data, &store.Users)
 	}
 	if data, err := ioutil.ReadFile("events.json"); err == nil {
-		json.Unmarshal(data, &store.Events)
+		_ = json.Unmarshal(data, &store.Events)
 	}
 	log.Printf("Loaded %d events and %d users", len(store.Events), len(store.Users))
 }
 
-// --- MAIN ---
+func mustJSON(v interface{}) []byte {
+	b, _ := json.Marshal(v)
+	return b
+}
 
+// --- MAIN ---
 func main() {
 	loadFromDisk()
 	go cleanupVisitors()
@@ -121,6 +167,25 @@ func main() {
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	r.Use(cors.New(config))
 	r.Use(rateLimitMiddleware())
+
+	// --- SSE subscribe ---
+	r.GET("/events/:id/stream", func(c *gin.Context) {
+		id := c.Param("id")
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+
+		ch := sseHub.add(id)
+		defer sseHub.remove(id, ch)
+
+		c.Stream(func(w io.Writer) bool {
+			if msg, ok := <-ch; ok {
+				c.SSEvent("update", string(msg))
+				return true
+			}
+			return false
+		})
+	})
 
 	// --- AUTH ---
 	r.POST("/register", func(c *gin.Context) {
@@ -195,7 +260,6 @@ func main() {
 			return
 		}
 
-		// Update Username
 		nameChanged := false
 		if input.Username != "" && input.Username != user.Username {
 			for _, u := range store.Users {
@@ -208,7 +272,6 @@ func main() {
 			nameChanged = true
 		}
 
-		// Update Password
 		if input.NewPassword != "" {
 			if input.OldPassword == "" {
 				c.JSON(400, gin.H{"error": "Current password required to set new password"})
@@ -262,7 +325,6 @@ func main() {
 		creatorID := c.GetHeader("Authorization")
 
 		participants := []string{}
-
 		if creatorID != "" {
 			participants = append(participants, creatorID)
 
@@ -281,11 +343,9 @@ func main() {
 				"name":         myUsername,
 				"availability": map[string]bool{},
 			}
-
 			if input["participants"] == nil {
 				input["participants"] = []interface{}{}
 			}
-
 			if list, ok := input["participants"].([]interface{}); ok {
 				input["participants"] = append(list, newParticipant)
 			}
@@ -295,6 +355,8 @@ func main() {
 		store.Events[id] = Event{ID: id, CreatorID: creatorID, Data: input, Participants: participants}
 		store.Unlock()
 		saveToDisk("events.json", store.Events)
+
+		go sseHub.broadcast(id, mustJSON(input))
 		c.JSON(201, input)
 	})
 
@@ -330,7 +392,6 @@ func main() {
 			return
 		}
 		event.Data = input
-
 		if parts, ok := input["participants"].([]interface{}); ok {
 			newParts := []string{}
 			for _, p := range parts {
@@ -342,10 +403,11 @@ func main() {
 			}
 			event.Participants = newParts
 		}
-
 		store.Events[id] = event
 		store.Unlock()
 		saveToDisk("events.json", store.Events)
+
+		go sseHub.broadcast(id, mustJSON(input))
 		c.JSON(200, input)
 	})
 
@@ -365,11 +427,12 @@ func main() {
 		}
 		delete(store.Events, id)
 		saveToDisk("events.json", store.Events)
+
+		go sseHub.broadcast(id, mustJSON(gin.H{"deleted": true}))
 		c.JSON(200, gin.H{"message": "Deleted"})
 	})
 
 	// --- INVITES / JOIN / LEAVE ---
-
 	r.POST("/events/:id/invite", func(c *gin.Context) {
 		id := c.Param("id")
 		creatorID := c.GetHeader("Authorization")
@@ -388,14 +451,12 @@ func main() {
 			c.JSON(404, gin.H{"error": "Not found"})
 			return
 		}
-
 		if event.CreatorID != creatorID {
 			c.JSON(403, gin.H{"error": "Only creator can invite"})
 			return
 		}
 
-		var targetUserID string
-		var targetUsername string
+		var targetUserID, targetUsername string
 		for _, u := range store.Users {
 			if u.Username == input.Username {
 				targetUserID = u.ID
@@ -407,7 +468,6 @@ func main() {
 			c.JSON(404, gin.H{"error": "User not found"})
 			return
 		}
-
 		for _, p := range event.Participants {
 			if p == targetUserID {
 				c.JSON(409, gin.H{"error": "User already in event"})
@@ -416,7 +476,6 @@ func main() {
 		}
 
 		event.Participants = append(event.Participants, targetUserID)
-
 		if parts, ok := event.Data["participants"].([]interface{}); ok {
 			newParticipant := map[string]interface{}{
 				"id":           targetUserID,
@@ -428,6 +487,8 @@ func main() {
 
 		store.Events[id] = event
 		saveToDisk("events.json", store.Events)
+
+		go sseHub.broadcast(id, mustJSON(event.Data))
 		c.JSON(200, gin.H{"message": "Invited"})
 	})
 
@@ -446,7 +507,6 @@ func main() {
 			c.JSON(404, gin.H{"error": "Not found"})
 			return
 		}
-
 		for _, p := range event.Participants {
 			if p == userID {
 				c.JSON(200, gin.H{"message": "Already joined"})
@@ -475,6 +535,8 @@ func main() {
 
 		store.Events[id] = event
 		saveToDisk("events.json", store.Events)
+
+		go sseHub.broadcast(id, mustJSON(event.Data))
 		c.JSON(200, gin.H{"message": "Joined"})
 	})
 
@@ -518,6 +580,8 @@ func main() {
 
 		store.Events[id] = event
 		saveToDisk("events.json", store.Events)
+
+		go sseHub.broadcast(id, mustJSON(event.Data))
 		c.JSON(200, gin.H{"message": "Left event"})
 	})
 
