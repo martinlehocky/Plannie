@@ -115,7 +115,7 @@ const SlotCell = memo(function SlotCell({
     onTouchStart: (e: React.TouchEvent) => void
 }) {
     const intensity = total === 0 ? 0 : availableCount / total
-    const lightness = 86 - intensity * 44 // 86% -> 42%
+    const lightness = 92 - intensity * 25 // 92% -> 67%
     const gradient = shouldUseGradient(intensity, isDisabled, isMyAvailability, scrollMode)
         ? `linear-gradient(145deg,
         hsl(245 92% ${lightness + 2}%),
@@ -123,7 +123,7 @@ const SlotCell = memo(function SlotCell({
         hsl(245 96% ${lightness - 2}%)
       )`
         : undefined
-    const shadowAlpha = 0.06 + intensity * 0.38
+    const shadowAlpha = 0.05 + intensity * 0.15
     const shouldUsePurple = !isDisabled && availableCount > 0 && (scrollMode || !isMyAvailability)
 
     const cell = (
@@ -137,7 +137,7 @@ const SlotCell = memo(function SlotCell({
                 isDisabled
                     ? "bg-muted/50 cursor-not-allowed line-through text-muted-foreground"
                     : isMyAvailability && !scrollMode
-                        ? "bg-gradient-to-br from-primary/90 via-primary/80 to-primary/90 hover:from-primary hover:to-primary/95 text-primary-foreground"
+                        ? "bg-purple-700 text-white shadow-md hover:bg-purple-800 ring-1 ring-inset ring-black/20"
                         : availableCount > 0
                             ? "text-slate-50"
                             : "bg-muted/30 hover:bg-muted/50",
@@ -320,9 +320,14 @@ export function AvailabilityGrid({
         [allParticipants, timezone, disabledSlots]
     )
 
+    const scrollGuard = useCallback(
+        () => scrollMode && !(disableMode && isCreator),
+        [scrollMode, disableMode, isCreator]
+    )
+
     const handleMouseDown = useCallback(
         (e: React.MouseEvent, key: string, currentVal: boolean, isDisabled: boolean) => {
-            if (scrollMode) return
+            if (scrollGuard()) return
             e.preventDefault()
 
             if (disableMode && isCreator) {
@@ -341,7 +346,7 @@ export function AvailabilityGrid({
             setPaintMode(newValue)
             setAvailabilityChecked(key, newValue)
         },
-        [scrollMode, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked]
+        [scrollGuard, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked]
     )
 
     const handleMouseEnter = useCallback(
@@ -352,11 +357,12 @@ export function AvailabilityGrid({
                 }
                 return
             }
-            if (!isPainting || scrollMode || paintMode === null) return
+            if (scrollGuard()) return
+            if (!isPainting || paintMode === null) return
             if (isDisabled) return
             setAvailabilityChecked(key, paintMode)
         },
-        [disableDragActive, disableDragTarget, disableMode, isCreator, isPainting, scrollMode, paintMode, onToggleDisabled, setAvailabilityChecked]
+        [disableDragActive, disableDragTarget, disableMode, isCreator, isPainting, paintMode, onToggleDisabled, scrollGuard, setAvailabilityChecked]
     )
 
     const handleMouseUp = useCallback(() => {
@@ -368,7 +374,7 @@ export function AvailabilityGrid({
 
     const handleTouchStart = useCallback(
         (e: React.TouchEvent, key: string, currentVal: boolean, isDisabled: boolean) => {
-            if (scrollMode) return
+            if (scrollGuard()) return
 
             if (disableMode && isCreator) {
                 const target = !isDisabled
@@ -387,12 +393,12 @@ export function AvailabilityGrid({
             setPaintMode(newValue)
             setAvailabilityChecked(key, newValue)
         },
-        [scrollMode, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked]
+        [scrollGuard, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked]
     )
 
     const handleTouchMove = useCallback(
         (e: React.TouchEvent) => {
-            if (scrollMode) return
+            if (scrollGuard()) return
             const touch = e.touches[0]
             const element = document.elementFromPoint(touch.clientX, touch.clientY)
             const slotKey = element?.getAttribute("data-slot-key")
@@ -411,7 +417,7 @@ export function AvailabilityGrid({
             if (isDisabled) return
             setAvailabilityChecked(slotKey, paintMode)
         },
-        [scrollMode, disableDragActive, disableDragTarget, disableMode, isCreator, onToggleDisabled, isPainting, paintMode, disabledSlots, setAvailabilityChecked]
+        [scrollGuard, disableDragActive, disableDragTarget, disableMode, isCreator, onToggleDisabled, isPainting, paintMode, disabledSlots, setAvailabilityChecked]
     )
 
     const handleTouchEnd = useCallback(() => {
@@ -469,7 +475,7 @@ export function AvailabilityGrid({
                             {resetDisabledLoading ? "Resetting..." : "Reset Disabled"}
                         </Button>
                     )}
-                    {isCreator && (
+                    {isCreator && !scrollMode && (
                         <Button
                             variant={disableMode ? "secondary" : "outline"}
                             size="sm"
@@ -567,18 +573,39 @@ export function AvailabilityGrid({
             </TooltipProvider>
 
             <div className="flex items-center gap-3 md:gap-4 text-[10px] md:text-xs text-muted-foreground bg-muted/30 p-2 md:p-2.5 rounded-xl border border-border/40 mt-3 shrink-0 flex-wrap">
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-background/70 backdrop-blur-sm border border-border/40 shadow-sm">
-                    <div className="w-3 h-3 md:w-4 md:h-4 rounded bg-primary shadow-sm shrink-0" />
-                    <span className="whitespace-nowrap">Your Availability</span>
-                </div>
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-background/70 backdrop-blur-sm border border-border/40 shadow-sm">
-                    <div className="w-3 h-3 md:w-4 md:h-4 rounded bg-gradient-to-br from-purple-200 to-purple-300 dark:from-purple-800 dark:to-purple-700 shadow-sm shrink-0" />
-                    <span className="whitespace-nowrap">Others Available</span>
-                </div>
+                {!scrollMode && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-background/70 backdrop-blur-sm border border-border/40 shadow-sm">
+                        <div className="w-3 h-3 md:w-4 md:h-4 rounded bg-purple-700 shadow-sm shrink-0" />
+                        <span className="whitespace-nowrap">Your Availability</span>
+                    </div>
+                )}
+
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-background/70 backdrop-blur-sm border border-border/40 shadow-sm">
                     <div className="w-3 h-3 md:w-4 md:h-4 rounded bg-muted/60 shrink-0" />
                     <span className="whitespace-nowrap">Unavailable</span>
                 </div>
+
+                {Array.from({ length: allParticipants.length }, (_, i) => i + 1).map((count) => {
+                    const intensity = count / allParticipants.length
+                    const lightness = 92 - intensity * 25
+                    const gradient = `linear-gradient(145deg, hsl(245 92% ${lightness + 2}%), hsl(245 94% ${lightness}%), hsl(245 96% ${lightness - 2}%))`
+
+                    return (
+                        <div
+                            key={count}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-background/70 backdrop-blur-sm border border-border/40 shadow-sm"
+                        >
+                            <div
+                                className="w-3 h-3 md:w-4 md:h-4 rounded shadow-sm shrink-0"
+                                style={{ background: gradient }}
+                            />
+                            <span className="whitespace-nowrap">
+                {count} {count === 1 ? "person" : "people"}
+              </span>
+                        </div>
+                    )
+                })}
+
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-background/70 backdrop-blur-sm border border-border/40 shadow-sm">
                     <div className="w-3 h-3 md:w-4 md:h-4 rounded bg-muted/90 shrink-0" />
                     <span className="whitespace-nowrap">Disabled by host</span>

@@ -19,6 +19,7 @@ import {
   Globe,
   ChevronDown,
   ChevronUp,
+  Pencil,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { format } from "date-fns"
@@ -86,6 +87,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [disableMode, setDisableMode] = useState(false)
   const [resetDisabledLoading, setResetDisabledLoading] = useState(false)
+  const [renameLoading, setRenameLoading] = useState(false)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameValue, setRenameValue] = useState("")
 
   const [userTimezone, setUserTimezone] = useState("")
   const [inviteUsername, setInviteUsername] = useState("")
@@ -93,19 +97,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const token = useMemo(() => (typeof window !== "undefined" ? localStorage.getItem("token") : null), [])
   const tokenClaims = useMemo(() => decodeToken(token), [token])
 
-  // Use multiple fallback claims to align with backend (e.g., sub)
-  const userId =
-      tokenClaims.uid ||
-      tokenClaims.sub ||
-      tokenClaims.userId ||
-      tokenClaims.id ||
-      null
-
-  const usernameClaim =
-      tokenClaims.uname ||
-      tokenClaims.username ||
-      tokenClaims.name ||
-      null
+  const userId = tokenClaims.uid || tokenClaims.sub || tokenClaims.userId || tokenClaims.id || null
+  const usernameClaim = tokenClaims.uname || tokenClaims.username || tokenClaims.name || null
 
   const syncUserState = (data: EventData) => {
     const loggedIn = !!token
@@ -138,6 +131,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         data.disabledSlots = data.disabledSlots || []
         setEventData(data)
         syncUserState(data)
+        setRenameValue(data.name)
       } else {
         setEventData(null)
       }
@@ -153,7 +147,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  // SSE with Authorization header (no token in URL)
   useEffect(() => {
     const tok = typeof window !== "undefined" ? localStorage.getItem("token") : null
     if (!tok) {
@@ -172,6 +165,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         data.disabledSlots = data.disabledSlots || []
         setEventData(data)
         syncUserState(data)
+        setRenameValue((prev) => (prev === "" ? data.name : prev))
       } catch (err) {
         console.error("SSE parse error", err)
       }
@@ -226,6 +220,51 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       }
     } catch (error) {
       toast({ title: "Error", variant: "destructive" })
+    }
+  }
+
+  const handleRename = async () => {
+    if (!isCreator || !eventData || !token) return
+    const trimmed = renameValue.trim()
+    if (!trimmed || trimmed === eventData.name) {
+      setRenameOpen(false)
+      setRenameValue(eventData.name)
+      return
+    }
+    setRenameLoading(true)
+
+    const payload: any = {
+      id: eventData.id,
+      name: trimmed,
+      dateRange: eventData.dateRange,
+      duration: eventData.duration,
+      timezone: eventData.timezone,
+      participants: eventData.participants,
+      disabledSlots: eventData.disabledSlots || [],
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/events/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        const updated = { ...eventData, name: trimmed }
+        setEventData(updated)
+        toast({ title: "Event renamed" })
+        setRenameOpen(false)
+      } else {
+        const d = await res.json().catch(() => ({}))
+        toast({ title: "Error", description: d.error || "Could not rename", variant: "destructive" })
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Could not rename", variant: "destructive" })
+    } finally {
+      setRenameLoading(false)
     }
   }
 
@@ -402,7 +441,47 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b bg-card/50 backdrop-blur-sm shrink-0 gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="min-w-0 flex-1">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{eventData.name}</h1>
+                <div className="flex items-center gap-2 group">
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">{eventData.name}</h1>
+                  {isCreator && (
+                      <AlertDialog open={renameOpen} onOpenChange={setRenameOpen}>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Rename event"
+                              onClick={() => setRenameValue(eventData.name)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="sm:max-w-md">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Rename event</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Update the event title for everyone. This change is instant.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <div className="space-y-3 pt-2">
+                            <Input
+                                autoFocus
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                onKeyDown={(e) => e.key === "Enter" && handleRename()}
+                                placeholder="Event name"
+                            />
+                          </div>
+                          <AlertDialogFooter className="mt-4">
+                            <AlertDialogCancel disabled={renameLoading}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleRename} disabled={renameLoading}>
+                              {renameLoading ? "Saving..." : "Save"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-1.5">
                   <div className="flex items-center gap-1.5">
                     <Calendar className="h-3.5 w-3.5 shrink-0" />
@@ -608,7 +687,7 @@ function SidebarContent({
 
         <Card className="shadow-sm border-border/50">
           <CardHeader className="p-3.5 pb-2">
-            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <CardTitle className="flex itemsCenter gap-2 text-base font-semibold">
               <Trophy className="h-4 w-4 text-yellow-500 shrink-0" /> Best Times
             </CardTitle>
           </CardHeader>
@@ -648,7 +727,7 @@ function SidebarContent({
                       <div className="max-h-48 overflow-y-auto space-y-1.5 border rounded-md p-2 bg-card/40">
                         {allBestTimes.map((time, i) => (
                             <div key={i} className="rounded-sm p-2 bg-muted/40 space-y-1">
-                              <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center justifyBetween gap-2">
                                 <div className="text-[11px] font-semibold truncate">{formatTimeInTz(time.slot)}</div>
                                 <Badge variant="outline" className="text-[10px] h-5 px-1.5">
                                   {time.count}/{eventData.participants.length}
@@ -666,7 +745,7 @@ function SidebarContent({
 
         <Card className="shadow-sm border-border/50">
           <CardHeader className="p-3.5 pb-2">
-            <CardTitle className="flex items-center justify-between text-base font-semibold">
+            <CardTitle className="flex items-center justifyBetween text-base font-semibold">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 shrink-0" /> Participants
               </div>
