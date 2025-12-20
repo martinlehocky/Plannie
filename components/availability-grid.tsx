@@ -1,6 +1,14 @@
 "use client"
 
-import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from "react"
+import React, {
+    useState,
+    useRef,
+    useEffect,
+    useMemo,
+    useCallback,
+    memo,
+    startTransition,
+} from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -107,7 +115,6 @@ const SlotCell = memo(function SlotCell({
     onTouchStart: (e: React.TouchEvent) => void
 }) {
     const intensity = total === 0 ? 0 : availableCount / total
-    // Purple close to #7a70ff (hsl ~ 245,100%,72), wide lightness ramp for visible contrast
     const lightness = 86 - intensity * 44 // 86% -> 42%
     const gradient = shouldUseGradient(intensity, isDisabled, isMyAvailability, scrollMode)
         ? `linear-gradient(145deg,
@@ -153,8 +160,6 @@ const SlotCell = memo(function SlotCell({
                     <span className="text-[10px] font-semibold text-muted-foreground">Disabled</span>
                 </div>
             )}
-
-            {/* Top-right count in a rounded black translucent chip */}
             {availableCount > 0 && !isDisabled && (
                 <div className="absolute top-1 right-1 px-1.5 py-[1px] rounded bg-black/55 text-[9px] font-bold text-white leading-none">
                     +{availableCount}
@@ -234,6 +239,7 @@ export function AvailabilityGrid({
                                      resetDisabledLoading,
                                  }: AvailabilityGridProps) {
     const [availability, setAvailability] = useState<Record<string, boolean>>(currentParticipant.availability || {})
+    const availabilityRef = useRef(availability)
     const [isPainting, setIsPainting] = useState(false)
     const [paintMode, setPaintMode] = useState<boolean | null>(null)
     const [scrollMode, setScrollMode] = useState(false)
@@ -242,8 +248,26 @@ export function AvailabilityGrid({
     const gridRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
-        setAvailability(currentParticipant.availability || {})
+        availabilityRef.current = availability
+    }, [availability])
+
+    useEffect(() => {
+        const next = currentParticipant.availability || {}
+        setAvailability(next)
+        availabilityRef.current = next
     }, [currentParticipant])
+
+    const setAvailabilityChecked = useCallback((key: string, value: boolean) => {
+        if (availabilityRef.current[key] === value) return
+        startTransition(() => {
+            setAvailability((prev) => {
+                if (prev[key] === value) return prev
+                const next = { ...prev, [key]: value }
+                availabilityRef.current = next
+                return next
+            })
+        })
+    }, [])
 
     const expandedDates = useMemo(() => {
         let start = dateRange.from
@@ -255,8 +279,8 @@ export function AvailabilityGrid({
                 if (p.availability[k]) allKeys.add(k)
             })
         })
-        Object.keys(availability).forEach((k) => {
-            if (availability[k]) allKeys.add(k)
+        Object.keys(availabilityRef.current).forEach((k) => {
+            if (availabilityRef.current[k]) allKeys.add(k)
         })
         disabledSlots.forEach((k) => allKeys.add(k))
 
@@ -267,7 +291,7 @@ export function AvailabilityGrid({
         })
 
         return eachDayOfInterval({ start, end })
-    }, [dateRange, allParticipants, availability, disabledSlots, timezone])
+    }, [dateRange, allParticipants, disabledSlots, timezone])
 
     const timeRows = useMemo(() => {
         const rows: { hour: number; minute: number; label: string }[] = []
@@ -287,13 +311,13 @@ export function AvailabilityGrid({
     const getSlotStatus = useCallback(
         (date: Date, hour: number, minute: number) => {
             const key = createUtcKey(date, hour, minute, timezone)
-            const isMyAvailability = availability[key]
+            const isMyAvailability = availabilityRef.current[key]
             const isDisabled = disabledSlots.includes(key)
             const availableCount = isDisabled ? 0 : allParticipants.filter((p) => p.availability[key]).length
             const participants = isDisabled ? [] : allParticipants.filter((p) => p.availability[key]).map((p) => p.name)
             return { key, isMyAvailability, availableCount, total: allParticipants.length, participants, isDisabled }
         },
-        [availability, allParticipants, timezone, disabledSlots]
+        [allParticipants, timezone, disabledSlots]
     )
 
     const handleMouseDown = useCallback(
@@ -312,13 +336,12 @@ export function AvailabilityGrid({
             }
 
             if (isDisabled) return
-
             const newValue = !currentVal
-            setAvailability((prev) => ({ ...prev, [key]: newValue }))
             setIsPainting(true)
             setPaintMode(newValue)
+            setAvailabilityChecked(key, newValue)
         },
-        [scrollMode, disableMode, isCreator, onToggleDisabled]
+        [scrollMode, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked]
     )
 
     const handleMouseEnter = useCallback(
@@ -331,9 +354,9 @@ export function AvailabilityGrid({
             }
             if (!isPainting || scrollMode || paintMode === null) return
             if (isDisabled) return
-            setAvailability((prev) => ({ ...prev, [key]: paintMode }))
+            setAvailabilityChecked(key, paintMode)
         },
-        [disableDragActive, disableDragTarget, disableMode, isCreator, isPainting, scrollMode, paintMode, onToggleDisabled]
+        [disableDragActive, disableDragTarget, disableMode, isCreator, isPainting, scrollMode, paintMode, onToggleDisabled, setAvailabilityChecked]
     )
 
     const handleMouseUp = useCallback(() => {
@@ -360,11 +383,11 @@ export function AvailabilityGrid({
             if (isDisabled) return
 
             const newValue = !currentVal
-            setAvailability((prev) => ({ ...prev, [key]: newValue }))
             setIsPainting(true)
             setPaintMode(newValue)
+            setAvailabilityChecked(key, newValue)
         },
-        [scrollMode, disableMode, isCreator, onToggleDisabled]
+        [scrollMode, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked]
     )
 
     const handleTouchMove = useCallback(
@@ -386,9 +409,9 @@ export function AvailabilityGrid({
 
             if (!isPainting || paintMode === null) return
             if (isDisabled) return
-            setAvailability((prev) => ({ ...prev, [slotKey]: paintMode }))
+            setAvailabilityChecked(slotKey, paintMode)
         },
-        [scrollMode, disableDragActive, disableDragTarget, disableMode, isCreator, onToggleDisabled, isPainting, paintMode, disabledSlots]
+        [scrollMode, disableDragActive, disableDragTarget, disableMode, isCreator, onToggleDisabled, isPainting, paintMode, disabledSlots, setAvailabilityChecked]
     )
 
     const handleTouchEnd = useCallback(() => {
@@ -408,8 +431,9 @@ export function AvailabilityGrid({
     }, [handleMouseUp, handleTouchEnd])
 
     const handleSave = () => {
+        const current = availabilityRef.current
         const cleaned: Record<string, boolean> = {}
-        Object.entries(availability).forEach(([k, v]) => {
+        Object.entries(current).forEach(([k, v]) => {
             if (!disabledSlots.includes(k) && v) cleaned[k] = v
         })
         onSave(cleaned)
@@ -417,6 +441,7 @@ export function AvailabilityGrid({
 
     const handleResetAvailability = () => {
         setAvailability({})
+        availabilityRef.current = {}
         setIsPainting(false)
         setPaintMode(null)
         setDisableDragActive(false)
@@ -455,12 +480,7 @@ export function AvailabilityGrid({
                             {disableMode ? "Exit disable" : "Disable times"}
                         </Button>
                     )}
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleResetAvailability}
-                        className="rounded-full text-xs"
-                    >
+                    <Button variant="outline" size="sm" onClick={handleResetAvailability} className="rounded-full text-xs">
                         Reset
                     </Button>
                     <Button
@@ -514,7 +534,11 @@ export function AvailabilityGrid({
                                 </div>
 
                                 {expandedDates.map((date) => {
-                                    const { key, isMyAvailability, availableCount, total, participants, isDisabled } = getSlotStatus(date, hour, minute)
+                                    const { key, isMyAvailability, availableCount, total, participants, isDisabled } = getSlotStatus(
+                                        date,
+                                        hour,
+                                        minute
+                                    )
 
                                     return (
                                         <SlotCell
@@ -528,7 +552,7 @@ export function AvailabilityGrid({
                                             isDisabled={isDisabled}
                                             disableMode={disableMode}
                                             isCreator={isCreator}
-                                            disableTooltip={disableMode && isCreator}
+                                            disableTooltip={isPainting || (disableMode && isCreator)}
                                             scrollMode={scrollMode}
                                             onMouseDown={(e) => handleMouseDown(e, key, isMyAvailability, isDisabled)}
                                             onMouseEnter={() => handleMouseEnter(key, isDisabled)}
