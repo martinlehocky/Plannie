@@ -81,6 +81,7 @@ type AvailabilityGridProps = {
     onToggleDisableMode: () => void
     onResetDisabled: () => void
     resetDisabledLoading: boolean
+    hideDisabledSlots?: boolean // non-creators hide by default; creators hide only in scroll mode
 }
 
 const SlotCell = memo(function SlotCell({
@@ -115,7 +116,7 @@ const SlotCell = memo(function SlotCell({
     onTouchStart: (e: React.TouchEvent) => void
 }) {
     const intensity = total === 0 ? 0 : availableCount / total
-    const lightness = 92 - intensity * 25 // 92% -> 67%
+    const lightness = 92 - intensity * 25
     const gradient = shouldUseGradient(intensity, isDisabled, isMyAvailability, scrollMode)
         ? `linear-gradient(145deg,
         hsl(245 92% ${lightness + 2}%),
@@ -140,7 +141,7 @@ const SlotCell = memo(function SlotCell({
                         ? "bg-purple-700 text-white shadow-md hover:bg-purple-800 ring-1 ring-inset ring-black/20"
                         : availableCount > 0
                             ? "text-slate-50"
-                            : "bg-muted/30 hover:bg-muted/50",
+                            : "bg-muted",
                 disableMode && isCreator && "ring-1 ring-primary/60"
             )}
             style={
@@ -237,7 +238,10 @@ export function AvailabilityGrid({
                                      onToggleDisableMode,
                                      onResetDisabled,
                                      resetDisabledLoading,
+                                     hideDisabledSlots,
                                  }: AvailabilityGridProps) {
+    const disabledSetFull = useMemo(() => new Set(disabledSlots), [disabledSlots])
+
     const [availability, setAvailability] = useState<Record<string, boolean>>(currentParticipant.availability || {})
     const availabilityRef = useRef(availability)
     const [isPainting, setIsPainting] = useState(false)
@@ -246,6 +250,15 @@ export function AvailabilityGrid({
     const [disableDragActive, setDisableDragActive] = useState(false)
     const [disableDragTarget, setDisableDragTarget] = useState<boolean | null>(null)
     const gridRef = useRef<HTMLDivElement>(null)
+
+    // Hide rules:
+    // - Non-creators: hide disabled slots (default true unless hideDisabledSlots explicitly false).
+    // - Creators: hide disabled slots only when in scroll mode.
+    const hideForNonCreator = hideDisabledSlots ?? true
+    const shouldHideSlot = useCallback(
+        (isDisabled: boolean) => isDisabled && ((!isCreator && hideForNonCreator) || (isCreator && scrollMode)),
+        [hideForNonCreator, isCreator, scrollMode]
+    )
 
     useEffect(() => {
         availabilityRef.current = availability
@@ -312,12 +325,12 @@ export function AvailabilityGrid({
         (date: Date, hour: number, minute: number) => {
             const key = createUtcKey(date, hour, minute, timezone)
             const isMyAvailability = availabilityRef.current[key]
-            const isDisabled = disabledSlots.includes(key)
+            const isDisabled = disabledSetFull.has(key)
             const availableCount = isDisabled ? 0 : allParticipants.filter((p) => p.availability[key]).length
             const participants = isDisabled ? [] : allParticipants.filter((p) => p.availability[key]).map((p) => p.name)
             return { key, isMyAvailability, availableCount, total: allParticipants.length, participants, isDisabled }
         },
-        [allParticipants, timezone, disabledSlots]
+        [allParticipants, timezone, disabledSetFull]
     )
 
     const scrollGuard = useCallback(
@@ -334,7 +347,7 @@ export function AvailabilityGrid({
                 const target = !isDisabled
                 setDisableDragActive(true)
                 setDisableDragTarget(target)
-                if (isDisabled != target) {
+                if (isDisabled !== target) {
                     onToggleDisabled(key)
                 }
                 return
@@ -352,7 +365,7 @@ export function AvailabilityGrid({
     const handleMouseEnter = useCallback(
         (key: string, isDisabled: boolean) => {
             if (disableDragActive && disableDragTarget !== null && disableMode && isCreator) {
-                if (isDisabled != disableDragTarget) {
+                if (isDisabled !== disableDragTarget) {
                     onToggleDisabled(key)
                 }
                 return
@@ -362,7 +375,17 @@ export function AvailabilityGrid({
             if (isDisabled) return
             setAvailabilityChecked(key, paintMode)
         },
-        [disableDragActive, disableDragTarget, disableMode, isCreator, isPainting, paintMode, onToggleDisabled, scrollGuard, setAvailabilityChecked]
+        [
+            disableDragActive,
+            disableDragTarget,
+            disableMode,
+            isCreator,
+            isPainting,
+            paintMode,
+            onToggleDisabled,
+            scrollGuard,
+            setAvailabilityChecked,
+        ]
     )
 
     const handleMouseUp = useCallback(() => {
@@ -380,7 +403,7 @@ export function AvailabilityGrid({
                 const target = !isDisabled
                 setDisableDragActive(true)
                 setDisableDragTarget(target)
-                if (isDisabled != target) {
+                if (isDisabled !== target) {
                     onToggleDisabled(key)
                 }
                 return
@@ -404,10 +427,10 @@ export function AvailabilityGrid({
             const slotKey = element?.getAttribute("data-slot-key")
             if (!slotKey) return
 
-            const isDisabled = disabledSlots.includes(slotKey)
+            const isDisabled = disabledSetFull.has(slotKey)
 
             if (disableDragActive && disableDragTarget !== null && disableMode && isCreator) {
-                if (isDisabled != disableDragTarget) {
+                if (isDisabled !== disableDragTarget) {
                     onToggleDisabled(slotKey)
                 }
                 return
@@ -417,7 +440,18 @@ export function AvailabilityGrid({
             if (isDisabled) return
             setAvailabilityChecked(slotKey, paintMode)
         },
-        [scrollGuard, disableDragActive, disableDragTarget, disableMode, isCreator, onToggleDisabled, isPainting, paintMode, disabledSlots, setAvailabilityChecked]
+        [
+            scrollGuard,
+            disableDragActive,
+            disableDragTarget,
+            disableMode,
+            isCreator,
+            onToggleDisabled,
+            isPainting,
+            paintMode,
+            disabledSetFull,
+            setAvailabilityChecked,
+        ]
     )
 
     const handleTouchEnd = useCallback(() => {
@@ -440,7 +474,7 @@ export function AvailabilityGrid({
         const current = availabilityRef.current
         const cleaned: Record<string, boolean> = {}
         Object.entries(current).forEach(([k, v]) => {
-            if (!disabledSlots.includes(k) && v) cleaned[k] = v
+            if (!disabledSetFull.has(k) && v) cleaned[k] = v
         })
         onSave(cleaned)
     }
@@ -533,41 +567,48 @@ export function AvailabilityGrid({
                             ))}
                         </div>
 
-                        {timeRows.map(({ hour, minute, label }) => (
-                            <div key={`${hour}-${minute}`} className="flex border-b border-border/30 last:border-0">
-                                <div className="w-20 md:w-24 shrink-0 py-3 px-3 text-[10px] md:text-xs font-semibold text-right text-muted-foreground sticky left-0 bg-background/85 backdrop-blur-sm z-10 border-r border-border/40 flex items-center justify-end">
-                                    {label}
+                        {timeRows.map(({ hour, minute, label }) => {
+                            const statuses = expandedDates.map((date) => getSlotStatus(date, hour, minute))
+                            const allHidden = statuses.every((s) => shouldHideSlot(s.isDisabled))
+
+                            // If the whole row is disabled/hidden, collapse the row entirely.
+                            if (allHidden) return null
+
+                            return (
+                                <div key={`${hour}-${minute}`} className="flex border-b border-border/30 last:border-0">
+                                    <div className="w-20 md:w-24 shrink-0 py-3 px-3 text-[10px] md:text-xs font-semibold text-right text-muted-foreground sticky left-0 bg-background/85 backdrop-blur-sm z-10 border-r border-border/40 flex items-center justify-end">
+                                        {label}
+                                    </div>
+
+                                    {statuses.map(({ key, isMyAvailability, availableCount, total, participants, isDisabled }) => {
+                                        if (shouldHideSlot(isDisabled)) {
+                                            // Render spacer to keep columns aligned
+                                            return <div key={key} className="w-32 md:w-40 shrink-0 h-10" aria-hidden />
+                                        }
+
+                                        return (
+                                            <SlotCell
+                                                key={key}
+                                                slotKey={key}
+                                                isMyAvailability={isMyAvailability}
+                                                availableCount={availableCount}
+                                                total={total}
+                                                participants={participants}
+                                                isPainting={isPainting}
+                                                isDisabled={isDisabled}
+                                                disableMode={disableMode}
+                                                isCreator={isCreator}
+                                                disableTooltip={isPainting || (disableMode && isCreator)}
+                                                scrollMode={scrollMode}
+                                                onMouseDown={(e) => handleMouseDown(e, key, isMyAvailability, isDisabled)}
+                                                onMouseEnter={() => handleMouseEnter(key, isDisabled)}
+                                                onTouchStart={(e) => handleTouchStart(e, key, isMyAvailability, isDisabled)}
+                                            />
+                                        )
+                                    })}
                                 </div>
-
-                                {expandedDates.map((date) => {
-                                    const { key, isMyAvailability, availableCount, total, participants, isDisabled } = getSlotStatus(
-                                        date,
-                                        hour,
-                                        minute
-                                    )
-
-                                    return (
-                                        <SlotCell
-                                            key={key}
-                                            slotKey={key}
-                                            isMyAvailability={isMyAvailability}
-                                            availableCount={availableCount}
-                                            total={total}
-                                            participants={participants}
-                                            isPainting={isPainting}
-                                            isDisabled={isDisabled}
-                                            disableMode={disableMode}
-                                            isCreator={isCreator}
-                                            disableTooltip={isPainting || (disableMode && isCreator)}
-                                            scrollMode={scrollMode}
-                                            onMouseDown={(e) => handleMouseDown(e, key, isMyAvailability, isDisabled)}
-                                            onMouseEnter={() => handleMouseEnter(key, isDisabled)}
-                                            onTouchStart={(e) => handleTouchStart(e, key, isMyAvailability, isDisabled)}
-                                        />
-                                    )
-                                })}
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 </div>
             </TooltipProvider>
@@ -595,10 +636,7 @@ export function AvailabilityGrid({
                             key={count}
                             className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-background/70 backdrop-blur-sm border border-border/40 shadow-sm"
                         >
-                            <div
-                                className="w-3 h-3 md:w-4 md:h-4 rounded shadow-sm shrink-0"
-                                style={{ background: gradient }}
-                            />
+                            <div className="w-3 h-3 md:w-4 md:h-4 rounded shadow-sm shrink-0" style={{ background: gradient }} />
                             <span className="whitespace-nowrap">
                 {count} {count === 1 ? "person" : "people"}
               </span>

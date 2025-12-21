@@ -20,6 +20,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { fetchWithAuth, clearTokens } from "@/lib/api"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -52,9 +53,12 @@ export default function Dashboard() {
 
         const fetchEvents = async () => {
             try {
-                const res = await fetch(`${API_BASE}/my-events`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                })
+                const res = await fetchWithAuth(`${API_BASE}/my-events`, { method: "GET" })
+                if (res.status === 401) {
+                    clearTokens()
+                    router.push("/login")
+                    return
+                }
                 if (res.ok) {
                     const data = await res.json()
                     setEvents(Array.isArray(data) ? data : [])
@@ -74,30 +78,25 @@ export default function Dashboard() {
     }, [])
 
     const handleLogout = () => {
-        localStorage.removeItem("token")
-        localStorage.removeItem("username")
+        clearTokens()
         router.push("/login")
     }
 
     const handleDelete = async (e: React.MouseEvent, eventId: string) => {
         e.stopPropagation()
-        const token = localStorage.getItem("token")
-        if (!token) {
-            router.push("/login")
-            return
-        }
         try {
-            const res = await fetch(`${API_BASE}/events/${eventId}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${token}` },
-            })
-
+            const res = await fetchWithAuth(`${API_BASE}/events/${eventId}`, { method: "DELETE" })
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
             if (res.ok) {
-                setEvents(events.filter((ev) => ev.id !== eventId))
+                setEvents((prev) => prev.filter((ev) => ev.id !== eventId))
                 toast({ title: "Event deleted", description: "The event has been permanently removed." })
             } else {
-                const data = await res.json()
-                toast({ title: "Error", description: data.error, variant: "destructive" })
+                const data = await res.json().catch(() => ({}))
+                toast({ title: "Error", description: data.error || "Could not delete event.", variant: "destructive" })
             }
         } catch (error) {
             console.error("Failed to delete", error)
@@ -111,7 +110,6 @@ export default function Dashboard() {
         <div className="min-h-screen bg-background">
             {/* Header */}
             <div className="w-full flex justify-between items-center gap-2 p-4">
-                {/* Back to Home button on the left */}
                 <Button variant="ghost" size="sm" className="gap-2" asChild>
                     <Link href="/">
                         <ArrowLeft className="h-4 w-4" />
@@ -120,7 +118,6 @@ export default function Dashboard() {
                     </Link>
                 </Button>
 
-                {/* Right-side controls */}
                 <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground hidden sm:inline">
             Signed in as <span className="font-semibold text-foreground">{username || "you"}</span>
@@ -166,7 +163,7 @@ export default function Dashboard() {
                             <Card
                                 key={event.id}
                                 className="cursor-pointer hover:border-primary transition-colors"
-                                onClick={() => router.push(`/event/${event.id}`)}
+                                onClick={() => router.push(`/event/${event.id}`)} // singular route
                             >
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                     <CardTitle className="text-xl">{event.name}</CardTitle>

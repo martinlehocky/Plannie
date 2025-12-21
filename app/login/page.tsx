@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast"
 import { zxcvbn, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
 import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en"
+import { setTokens, clearTokens } from "@/lib/api"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -35,7 +36,7 @@ export default function LoginPage() {
     const router = useRouter()
     const { toast } = useToast()
 
-    // Calculate password strength whenever password changes
+    // Password strength meter
     useEffect(() => {
         if (!password) {
             setCrackTime("")
@@ -47,15 +48,31 @@ export default function LoginPage() {
         setCrackTime(result.crackTimesDisplay.offlineSlowHashing1e4PerSecond)
     }, [password])
 
+    // Match backend rules: >=8 chars with a number and a special character
+    const passwordLooksValid = () => {
+        const hasDigit = /[0-9]/.test(password)
+        const hasSpec = /[!@#$%^&*()\-_=+{}[\]:;"'<>,.?/\\|]/.test(password)
+        return password.length >= 8 && hasDigit && hasSpec
+    }
+
     const handleAuth = async () => {
         if (!username || !password) {
             toast({ title: "Missing fields", description: "Username and password are required.", variant: "destructive" })
             return
         }
+        if (isRegister && !passwordLooksValid()) {
+            toast({
+                title: "Password too weak",
+                description: "Use at least 8 characters with a number and a special character.",
+                variant: "destructive",
+            })
+            return
+        }
+
         setLoading(true)
         try {
             if (isRegister) {
-                // 1) Register
+                // Register
                 const resReg = await fetch(`${API_BASE}/register`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -66,37 +83,25 @@ export default function LoginPage() {
                     toast({ title: "Error", description: dataReg.error || "Could not register", variant: "destructive" })
                     return
                 }
-                // 2) Auto login to get JWT
-                const resLogin = await fetch(`${API_BASE}/login`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username, password }),
+            }
+
+            // Login (for both signup flow and direct login)
+            const resLogin = await fetch(`${API_BASE}/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password }),
+            })
+            const dataLogin = await resLogin.json().catch(() => ({}))
+            if (resLogin.ok && dataLogin.token) {
+                setTokens(dataLogin.token, dataLogin.refresh_token || "")
+                localStorage.setItem("username", dataLogin.username || username)
+                toast({
+                    title: isRegister ? "Account created" : "Success",
+                    description: isRegister ? "You are now signed in." : "Welcome back!",
                 })
-                const dataLogin = await resLogin.json().catch(() => ({}))
-                if (!resLogin.ok || !dataLogin.token) {
-                    toast({ title: "Error", description: dataLogin.error || "Login failed after signup", variant: "destructive" })
-                    return
-                }
-                localStorage.setItem("token", dataLogin.token)
-                localStorage.setItem("username", dataLogin.username)
-                toast({ title: "Account created", description: "You are now signed in." })
                 router.push("/dashboard")
             } else {
-                // Login
-                const res = await fetch(`${API_BASE}/login`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username, password }),
-                })
-                const data = await res.json().catch(() => ({}))
-                if (res.ok && data.token) {
-                    localStorage.setItem("token", data.token)
-                    localStorage.setItem("username", data.username)
-                    toast({ title: "Success", description: "Welcome back!" })
-                    router.push("/dashboard")
-                } else {
-                    toast({ title: "Error", description: data.error || "Login failed", variant: "destructive" })
-                }
+                toast({ title: "Error", description: dataLogin.error || "Login failed", variant: "destructive" })
             }
         } catch (e) {
             console.error(e)
@@ -106,7 +111,6 @@ export default function LoginPage() {
         }
     }
 
-    // Get color for progress bar
     const getScoreColor = () => {
         switch (score) {
             case 0:
@@ -139,7 +143,13 @@ export default function LoginPage() {
                     <CardTitle className="text-2xl text-center">{isRegister ? "Create Account" : "Sign In"}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} className="h-11" />
+                    <Input
+                        placeholder="Username"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        className="h-11"
+                        onKeyDown={(e) => e.key === "Enter" && handleAuth()}
+                    />
 
                     <div className="space-y-2">
                         <Input
@@ -151,7 +161,6 @@ export default function LoginPage() {
                             onKeyDown={(e) => e.key === "Enter" && handleAuth()}
                         />
 
-                        {/* STRENGTH BAR - Only visible during registration */}
                         {isRegister && password && (
                             <div className="space-y-1.5 pt-1">
                                 <div className="flex justify-between text-xs font-medium text-muted-foreground">
@@ -159,7 +168,13 @@ export default function LoginPage() {
                                     <span>Crack time: {crackTime}</span>
                                 </div>
                                 <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                                    <div className={`h-full transition-all duration-500 ease-out ${getScoreColor()}`} style={{ width: `${(score + 1) * 20}%` }} />
+                                    <div
+                                        className={`h-full transition-all duration-500 ease-out ${getScoreColor()}`}
+                                        style={{ width: `${(score + 1) * 20}%` }}
+                                    />
+                                </div>
+                                <div className="text-[11px] text-muted-foreground">
+                                    Must be ≥8 chars and include a number and a special character.
                                 </div>
                             </div>
                         )}

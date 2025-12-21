@@ -1,12 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar, Clock, Users, Share2, Sparkles, Zap } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { clearTokens } from "@/lib/api"
 
 export default function LandingPage() {
     const router = useRouter()
@@ -14,18 +15,16 @@ export default function LandingPage() {
     const [username, setUsername] = useState("")
 
     useEffect(() => {
-        const token = localStorage.getItem("token") // JWT
+        const token = localStorage.getItem("token")
         const storedUsername = localStorage.getItem("username") || ""
         setIsLoggedIn(!!token)
         setUsername(storedUsername)
     }, [])
 
     const handleSignOut = () => {
-        localStorage.removeItem("token")
-        localStorage.removeItem("username")
+        clearTokens()
         setIsLoggedIn(false)
         setUsername("")
-        // Stay on landing page
     }
 
     return (
@@ -37,7 +36,7 @@ export default function LandingPage() {
                         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                             <Calendar className="w-5 h-5 text-primary-foreground" />
                         </div>
-                        <span className="font-bold text-xl">Eventie</span>
+                        <span className="font-bold text-xl">Plannie</span>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -117,7 +116,7 @@ export default function LandingPage() {
             <section id="features" className="py-16 px-4">
                 <div className="container mx-auto max-w-6xl">
                     <div className="text-center mb-12">
-                        <h2 className="text-3xl md:text-5xl font-bold mb-4">Why Choose Eventie?</h2>
+                        <h2 className="text-3xl md:text-5xl font-bold mb-4">Why Choose Plannie?</h2>
                         <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
                             Built for teams, clubs, friends, and anyone who needs to coordinate schedules without the hassle.
                         </p>
@@ -266,7 +265,7 @@ export default function LandingPage() {
                         <CardContent className="pt-12 pb-12 space-y-6">
                             <h2 className="text-3xl md:text-5xl font-bold text-balance">Ready to Schedule Your Next Meeting?</h2>
                             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                                Join thousands of teams coordinating schedules with Eventie. No credit card required.
+                                Join thousands of teams coordinating schedules with Plannie. No credit card required.
                             </p>
                             <Link href="/create">
                                 <Button size="lg" className="h-14 px-10 text-lg font-semibold">

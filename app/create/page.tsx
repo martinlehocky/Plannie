@@ -13,6 +13,7 @@ import type { DateRange } from "react-day-picker"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
+import { fetchWithAuth, clearTokens } from "@/lib/api"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -34,21 +35,17 @@ export default function Home() {
   }, [])
 
   const handleLogout = () => {
-    localStorage.removeItem("token")
-    localStorage.removeItem("username")
+    clearTokens()
     setIsLoggedIn(false)
     toast({ title: "Signed Out", description: "See you next time!" })
   }
 
   const handleCreateEvent = async () => {
-    const token = localStorage.getItem("token")
-
-    if (!token) {
+    if (!isLoggedIn) {
       toast({ title: "Sign in required", description: "Please sign in to create an event.", variant: "destructive" })
       router.push("/login")
       return
     }
-
     if (!eventName || !dateRange?.from || !dateRange?.to) return
 
     let finalDuration = Number.parseInt(duration)
@@ -62,7 +59,7 @@ export default function Home() {
 
     setIsSubmitting(true)
 
-    const eventId = Math.random().toString(36).substring(7)
+    const eventId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 10)
 
     const eventData = {
       id: eventId,
@@ -74,29 +71,33 @@ export default function Home() {
       duration: finalDuration,
       timezone,
       participants: [],
+      disabledSlots: [],
     }
 
     try {
-      const response = await fetch(`${API_BASE}/events`, {
+      const response = await fetchWithAuth(`${API_BASE}/events`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify(eventData),
       })
 
       if (!response.ok) {
+        if (response.status === 401) {
+          clearTokens()
+          setIsLoggedIn(false)
+          router.push("/login")
+          return
+        }
         const d = await response.json().catch(() => ({}))
         throw new Error(d.error || "Failed to create event")
       }
 
+      // Navigate to the singular route
       router.push(`/event/${eventId}`)
     } catch (error) {
       console.error("Error creating event:", error)
       toast({
         title: "Error",
-        description: "Could not create event. Ensure backend is running.",
+        description: "Could not create event. Ensure you are signed in and the backend is running.",
         variant: "destructive",
       })
     } finally {
@@ -104,7 +105,13 @@ export default function Home() {
     }
   }
 
-  const isButtonDisabled = isSubmitting || (isLoggedIn && (!eventName || !dateRange?.from || !dateRange?.to))
+  const isButtonDisabled =
+      isSubmitting ||
+      !isLoggedIn ||
+      !eventName ||
+      !dateRange?.from ||
+      !dateRange?.to ||
+      (duration === "custom" && (!customDuration || Number.parseInt(customDuration) <= 0))
 
   return (
       <div className="min-h-screen bg-background flex flex-col md:justify-center relative">

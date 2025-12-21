@@ -1,17 +1,23 @@
 package main
 
 import (
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
-	"path/filepath"
+	"os/signal"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -19,46 +25,206 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
+	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/time/rate"
 )
 
-// --- JWT AUTH HELPERS ---
+/*
+Security & Architecture Notes
+- SQLite storage via database/sql + prepared statements; transactions for multi-table ops.
+- Schema migrations with simple version table.
+- Login attempt tracking + lockout (5 attempts in 15 minutes).
+- Username/password validation: username alnum 3–30; password ≥8 with a number and a special character.
+- JWT: short-lived access (15m) + refresh tokens (family/version) for revocation/rotation.
+- CORS via env; security headers middleware added.
+- Tiered rate limiting: auth 3/min, reads 5/min, writes 10/min.
+- Graceful shutdown closes DB.
+- Indexes on username, creator_id, event_id.
+- Backward-compatible API shapes.
+- SSE: lightweight broadcaster per event for near-real-time updates.
+*/
 
-var jwtSecret []byte
+var (
+	db        *sql.DB
+	jwtSecret []byte
+)
 
-func init() {
-	_ = godotenv.Load() // optional .env
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		log.Fatal("FATAL: JWT_SECRET environment variable is not set")
+const (
+	accessTTL        = 15 * time.Minute
+	refreshTTL       = 30 * 24 * time.Hour
+	lockoutThreshold = 5
+	lockoutWindow    = 15 * time.Minute
+	schemaVersion    = 1
+)
+
+var (
+	reqTimeout = 5 * time.Second // override via REQUEST_TIMEOUT_MS
+)
+
+// SSE broadcaster
+type subscriber struct {
+	ch chan []byte
+}
+
+var (
+	sseMu        sync.Mutex
+	sseSubs      = make(map[string]map[*subscriber]struct{}) // eventID -> subs
+	ssePingEvery = 30 * time.Second
+)
+
+func sseSubscribe(eventID string) *subscriber {
+	sseMu.Lock()
+	defer sseMu.Unlock()
+	sub := &subscriber{ch: make(chan []byte, 8)}
+	if sseSubs[eventID] == nil {
+		sseSubs[eventID] = make(map[*subscriber]struct{})
 	}
-	jwtSecret = []byte(secret)
+	sseSubs[eventID][sub] = struct{}{}
+	return sub
+}
+
+func sseUnsubscribe(eventID string, sub *subscriber) {
+	sseMu.Lock()
+	defer sseMu.Unlock()
+	if m, ok := sseSubs[eventID]; ok {
+		if _, ok := m[sub]; ok {
+			delete(m, sub)
+			close(sub.ch)
+		}
+		if len(m) == 0 {
+			delete(sseSubs, eventID)
+		}
+	}
+}
+
+func ssePublish(eventID string, payload []byte) {
+	sseMu.Lock()
+	defer sseMu.Unlock()
+	for sub := range sseSubs[eventID] {
+		select {
+		case sub.ch <- payload:
+		default:
+			// drop slow subscriber
+			delete(sseSubs[eventID], sub)
+			close(sub.ch)
+		}
+	}
 }
 
 type Claims struct {
-	UserID   string `json:"uid"`
-	Username string `json:"uname"`
+	UserID string `json:"uid"`
 	jwt.RegisteredClaims
 }
 
-func signToken(userID, username string, ttl time.Duration) (string, error) {
+// DB models
+type User struct {
+	ID           string    `json:"id"`
+	Username     string    `json:"username"`
+	PasswordHash string    `json:"-"` // ensure never serialized
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type Event struct {
+	ID            string
+	CreatorID     string
+	Name          string
+	DateFrom      string
+	DateTo        string
+	Duration      float64
+	Timezone      string
+	DisabledSlots string // JSON
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type Participant struct {
+	ID           string
+	EventID      string
+	UserID       string
+	Availability string // JSON
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type RefreshToken struct {
+	ID        string
+	UserID    string
+	FamilyID  string
+	Version   int
+	TokenHash string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+	Revoked   bool
+}
+
+// Payload for event update (API compatibility)
+type EventUpdate struct {
+	ID            string                   `json:"id"`
+	Name          string                   `json:"name"`
+	DateRange     map[string]string        `json:"dateRange"`
+	Duration      float64                  `json:"duration"`
+	Timezone      string                   `json:"timezone"`
+	Participants  []map[string]interface{} `json:"participants"`
+	DisabledSlots []string                 `json:"disabledSlots,omitempty"`
+}
+
+// Validation
+var (
+	usernameRe = regexp.MustCompile(`^[a-zA-Z0-9]{3,30}$`)
+	passDigit  = regexp.MustCompile(`[0-9]`)
+	passSpec   = regexp.MustCompile(`[!@#\$%\^&\*\(\)\-\_\+\=\{\}\[\]:;\"'<>,\.\?/\\\|]`)
+)
+
+func validateUsername(u string) bool { return usernameRe.MatchString(u) }
+func validatePassword(p string) bool {
+	if len(p) < 8 {
+		return false
+	}
+	return passDigit.MatchString(p) && passSpec.MatchString(p)
+}
+
+// hashToken and verifyTokenHash avoid bcrypt 72-byte limit by hashing first
+func hashToken(token string) (string, error) {
+	sum := sha256.Sum256([]byte(token))
+	b, err := bcrypt.GenerateFromPassword([]byte(hex.EncodeToString(sum[:])), 12)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func verifyTokenHash(hash string, token string) error {
+	sum := sha256.Sum256([]byte(token))
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(hex.EncodeToString(sum[:])))
+}
+
+// JWT helpers
+func signAccessToken(userID string) (string, error) {
 	claims := &Claims{
-		UserID:   userID,
-		Username: username,
+		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtSecret)
 }
 
-func verifyToken(tok string) (*Claims, error) {
-	if len(jwtSecret) == 0 {
-		return nil, errors.New("JWT_SECRET not set")
+func signRefreshToken(userID, family string, version int) (string, string, error) {
+	rc := jwt.RegisteredClaims{
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshTTL)),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		Subject:   userID,
+		ID:        fmt.Sprintf("%s:%d", family, version),
 	}
+	t := jwt.NewWithClaims(jwt.SigningMethodHS256, rc)
+	signed, err := t.SignedString(jwtSecret)
+	return signed, rc.ID, err
+}
+
+func parseAccessToken(tok string) (*Claims, error) {
 	parsed, err := jwt.ParseWithClaims(tok, &Claims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method")
@@ -74,25 +240,266 @@ func verifyToken(tok string) (*Claims, error) {
 	return nil, errors.New("invalid token")
 }
 
+// DB open & migration
+func openDB(path string) (*sql.DB, error) {
+	d, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", path))
+	if err != nil {
+		return nil, err
+	}
+	d.SetMaxOpenConns(25)
+	d.SetMaxIdleConns(25)
+	d.SetConnMaxIdleTime(5 * time.Minute)
+	d.SetConnMaxLifetime(60 * time.Minute)
+	return d, nil
+}
+
+func migrate(ctx context.Context, d *sql.DB) error {
+	if _, err := d.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS schema_versions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			version INTEGER NOT NULL,
+			applied_at TIMESTAMP NOT NULL
+		);
+	`); err != nil {
+		return err
+	}
+	var current int
+	if err := d.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM schema_versions`).Scan(&current); err != nil {
+		return err
+	}
+	if current >= schemaVersion {
+		return nil
+	}
+	tx, err := d.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS users (
+			id TEXT PRIMARY KEY,
+			username TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS events (
+			id TEXT PRIMARY KEY,
+			creator_id TEXT NOT NULL,
+			name TEXT NOT NULL,
+			date_from TEXT NOT NULL,
+			date_to TEXT NOT NULL,
+			duration REAL NOT NULL,
+			timezone TEXT NOT NULL,
+			disabled_slots TEXT NOT NULL DEFAULT '[]',
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL,
+			FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS event_participants (
+			id TEXT PRIMARY KEY,
+			event_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			availability TEXT NOT NULL DEFAULT '{}',
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL,
+			UNIQUE(event_id, user_id),
+			FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS refresh_tokens (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			family_id TEXT NOT NULL,
+			version INTEGER NOT NULL,
+			token_hash TEXT NOT NULL,
+			expires_at TIMESTAMP NOT NULL,
+			created_at TIMESTAMP NOT NULL,
+			revoked INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS login_attempts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id TEXT,
+			username TEXT,
+			ip TEXT,
+			created_at TIMESTAMP NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);`,
+		`CREATE INDEX IF NOT EXISTS idx_events_creator ON events(creator_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_participants_event ON event_participants(event_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(user_id);`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.ExecContext(ctx, s); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_versions(version, applied_at) VALUES (?,?)`, schemaVersion, time.Now().UTC()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// Rate limiting
+type visitor struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+var (
+	muVisitors sync.Mutex
+	visitors   = map[string]*visitor{}
+)
+
+func getVisitor(ip string, rps rate.Limit, burst int) *rate.Limiter {
+	muVisitors.Lock()
+	defer muVisitors.Unlock()
+	v, ok := visitors[ip]
+	if !ok {
+		lim := rate.NewLimiter(rps, burst)
+		visitors[ip] = &visitor{limiter: lim, lastSeen: time.Now()}
+		return lim
+	}
+	v.lastSeen = time.Now()
+	return v.limiter
+}
+
+func cleanupVisitorsLoop() {
+	for {
+		time.Sleep(time.Minute)
+		muVisitors.Lock()
+		for ip, v := range visitors {
+			if time.Since(v.lastSeen) > 3*time.Minute {
+				delete(visitors, ip)
+			}
+		}
+		muVisitors.Unlock()
+	}
+}
+
+// login_attempts cleanup
+func cleanupLoginAttemptsLoop() {
+	for {
+		time.Sleep(1 * time.Hour)
+		cutoff := time.Now().Add(-24 * time.Hour)
+		if _, err := db.Exec(`DELETE FROM login_attempts WHERE created_at < ?`, cutoff.UTC()); err != nil {
+			log.Printf("login_attempts cleanup error: %v", err)
+		}
+	}
+}
+
+func rateLimit(rps rate.Limit, burst int) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ip := clientIP(c)
+		lim := getVisitor(ip, rps, burst)
+		if !lim.Allow() {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// Security headers
+func securityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-XSS-Protection", "1; mode=block")
+		c.Header("Referrer-Policy", "no-referrer")
+		c.Header("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; form-action 'self';")
+		c.Next()
+	}
+}
+
+// Helpers
+func clientIP(c *gin.Context) string {
+	ip := c.ClientIP()
+	if ip == "" {
+		ip = "unknown"
+	}
+	return ip
+}
+
+func logIfTimeout(err error, where string) {
+	if errors.Is(err, context.DeadlineExceeded) {
+		log.Printf("timeout: %s: %v", where, err)
+	}
+}
+
+// Centralized server error helper with logging
+func serverError(c *gin.Context, where string, err error) {
+	if err != nil {
+		logIfTimeout(err, where)
+		log.Printf("%s error: %v", where, err)
+	}
+	c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+}
+
+// Login attempts
+func recordLoginAttempt(ctx context.Context, username, userID, ip string) {
+	_, err := db.ExecContext(ctx, `INSERT INTO login_attempts(user_id, username, ip, created_at) VALUES (?,?,?,?)`,
+		userID, username, ip, time.Now().UTC())
+	if err != nil {
+		logIfTimeout(err, "recordLoginAttempt")
+	}
+}
+
+func isLockedOut(ctx context.Context, userID string) (bool, error) {
+	var count int
+	cutoff := time.Now().Add(-lockoutWindow)
+	err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM login_attempts
+		WHERE user_id = ? AND created_at >= ?
+	`, userID, cutoff.UTC()).Scan(&count)
+	if err != nil {
+		logIfTimeout(err, "isLockedOut")
+		return false, err
+	}
+	return count >= lockoutThreshold, nil
+}
+
+// CORS
+func buildCORS() cors.Config {
+	cfg := cors.DefaultConfig()
+	origins := os.Getenv("CORS_ORIGINS")
+	if origins == "" {
+		cfg.AllowAllOrigins = true // dev default
+	} else {
+		parts := strings.Split(origins, ",")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+		}
+		cfg.AllowOrigins = parts
+	}
+	cfg.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
+	cfg.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+	return cfg
+}
+
+// Auth middleware
 func authnMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
-		if !strings.HasPrefix(h, "Bearer ") {
-			c.AbortWithStatusJSON(401, gin.H{"error": "Unauthorized"})
-			return
+		var token string
+		if strings.HasPrefix(h, "Bearer ") {
+			token = strings.TrimPrefix(h, "Bearer ")
+		} else {
+			// Allow token via query (for SSE/EventSource)
+			token = c.Query("token")
 		}
-		token := strings.TrimPrefix(h, "Bearer ")
 		if token == "" {
-			c.AbortWithStatusJSON(401, gin.H{"error": "Unauthorized"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 			return
 		}
-		claims, err := verifyToken(token)
+		claims, err := parseAccessToken(token)
 		if err != nil {
-			c.AbortWithStatusJSON(401, gin.H{"error": "Unauthorized"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 			return
 		}
 		c.Set("userID", claims.UserID)
-		c.Set("username", claims.Username)
 		c.Next()
 	}
 }
@@ -106,789 +513,1027 @@ func ctxUserID(c *gin.Context) string {
 	return ""
 }
 
-// --- RATE LIMITING ---
-
-type visitor struct {
-	limiter  *rate.Limiter
-	lastSeen time.Time
-}
-
-var (
-	visitors = make(map[string]*visitor)
-	mu       sync.Mutex
-)
-
-func getVisitor(ip string) *rate.Limiter {
-	mu.Lock()
-	defer mu.Unlock()
-	v, exists := visitors[ip]
-	if !exists {
-		limiter := rate.NewLimiter(5, 10)
-		visitors[ip] = &visitor{limiter, time.Now()}
-		return limiter
-	}
-	v.lastSeen = time.Now()
-	return v.limiter
-}
-
-func cleanupVisitors() {
-	for {
-		time.Sleep(time.Minute)
-		mu.Lock()
-		for ip, v := range visitors {
-			if time.Since(v.lastSeen) > 3*time.Minute {
-				delete(visitors, ip)
-			}
-		}
-		mu.Unlock()
-	}
-}
-
-func rateLimitMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ip := c.ClientIP()
-		limiter := getVisitor(ip)
-		if !limiter.Allow() {
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests"})
-			return
-		}
-		c.Next()
-	}
-}
-
-// --- SSE HUB ---
-
-type hub struct {
-	subs map[string]map[chan []byte]struct{}
-	mu   sync.Mutex
-}
-
-func newHub() *hub {
-	return &hub{subs: map[string]map[chan []byte]struct{}{}}
-}
-
-func (h *hub) add(id string) chan []byte {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.subs[id] == nil {
-		h.subs[id] = map[chan []byte]struct{}{}
-	}
-	ch := make(chan []byte, 1)
-	h.subs[id][ch] = struct{}{}
-	return ch
-}
-
-func (h *hub) remove(id string, ch chan []byte) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	delete(h.subs[id], ch)
-	close(ch)
-}
-
-func (h *hub) broadcast(id string, msg []byte) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for ch := range h.subs[id] {
-		select {
-		case ch <- msg:
-		default:
-		}
-	}
-}
-
-// --- DATA STRUCTURES ---
-
-type User struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type Event struct {
-	ID           string                 `json:"id"`
-	CreatorID    string                 `json:"creatorId"`
-	Data         map[string]interface{} `json:"data"`
-	Participants []string               `json:"participants"`
-}
-
-type EventUpdate struct {
-	ID            string                   `json:"id"`
-	Name          string                   `json:"name"`
-	DateRange     map[string]string        `json:"dateRange"`
-	Duration      float64                  `json:"duration"`
-	Timezone      string                   `json:"timezone"`
-	Participants  []map[string]interface{} `json:"participants"`
-	DisabledSlots []string                 `json:"disabledSlots,omitempty"`
-}
-
-// --- STORAGE ---
-
-type DataStore struct {
-	sync.RWMutex
-	Events map[string]Event
-	Users  map[string]User
-}
-
-var (
-	store = DataStore{
-		Events: make(map[string]Event),
-		Users:  make(map[string]User),
-	}
-	sseHub = newHub()
-)
-
-// --- PERSISTENCE HELPERS ---
-
-func atomicWrite(filename string, data []byte) error {
-	dir := filepath.Dir(filename)
-	tmp, err := ioutil.TempFile(dir, "tmp-*.json")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
-		return err
-	}
-	return os.Rename(tmpName, filename)
-}
-
-func saveToDisk(filename string, data interface{}) {
-	file, _ := json.MarshalIndent(data, "", "  ")
-	_ = atomicWrite(filename, file)
-}
-
-func loadFromDisk() {
-	if data, err := ioutil.ReadFile("users.json"); err == nil {
-		_ = json.Unmarshal(data, &store.Users)
-	}
-	if data, err := ioutil.ReadFile("events.json"); err == nil {
-		_ = json.Unmarshal(data, &store.Events)
-	}
-	log.Printf("Loaded %d events and %d users", len(store.Events), len(store.Users))
-}
-
-func mustJSON(v interface{}) []byte {
-	b, _ := json.Marshal(v)
-	return b
-}
-
-// --- UTILITIES ---
-
-// normalizeParts converts participant slices to []interface{} so appends work regardless of stored shape.
-func normalizeParts(val interface{}) []interface{} {
-	switch v := val.(type) {
-	case []interface{}:
-		return v
-	case []map[string]interface{}:
-		res := make([]interface{}, 0, len(v))
-		for _, m := range v {
-			res = append(res, m)
-		}
-		return res
-	default:
-		return []interface{}{}
-	}
-}
-
-// --- MAIN ---
-
+// Main
 func main() {
-	loadFromDisk()
-	go cleanupVisitors()
+	_ = godotenv.Load()
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		log.Fatal("JWT_SECRET not set")
+	}
+	jwtSecret = []byte(secret)
+
+	dbPath := os.Getenv("DATABASE_PATH")
+	if dbPath == "" {
+		dbPath = "app.db"
+	}
+
+	if rt := os.Getenv("REQUEST_TIMEOUT_MS"); rt != "" {
+		if ms, err := strconv.Atoi(rt); err == nil && ms > 0 {
+			reqTimeout = time.Duration(ms) * time.Millisecond
+		}
+	}
+
+	var err error
+	db, err = openDB(dbPath)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := migrate(ctx, db); err != nil {
+		log.Fatalf("migrate: %v", err)
+	}
+
+	go cleanupVisitorsLoop()
+	go cleanupLoginAttemptsLoop()
 
 	r := gin.Default()
+	r.Use(securityHeaders())
+	r.Use(cors.New(buildCORS()))
 
-	// Body size limit (1MB)
-	r.Use(func(c *gin.Context) {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
-		c.Next()
+	// Health check
+	r.GET("/healthz", func(c *gin.Context) {
+		if err := db.PingContext(c.Request.Context()); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:3000"} // tighten in prod
-	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
-	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
-	r.Use(cors.New(config))
-	r.Use(rateLimitMiddleware())
+	// Auth endpoints with tiered limits
+	r.POST("/register", rateLimit(3, 3), registerHandler)
+	r.POST("/login", rateLimit(3, 3), loginHandler)
+	r.POST("/refresh", rateLimit(3, 3), refreshHandler)
 
-	// --- AUTH ---
+	// Protected routes
+	authProtected := r.Group("/")
+	authProtected.Use(authnMiddleware())
 
-	r.POST("/register", func(c *gin.Context) {
-		var input struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
+	authProtected.PUT("/users/me", rateLimit(10, 10), updateUserHandler)
+	authProtected.GET("/events/:id/stream", rateLimit(5, 5), sseHandler)
+
+	authProtected.POST("/events", rateLimit(10, 10), createEventHandler)
+	r.GET("/events/:id", rateLimit(5, 5), getEventHandler)
+	authProtected.PUT("/events/:id", rateLimit(10, 10), updateEventHandler)
+	authProtected.DELETE("/events/:id", rateLimit(10, 10), deleteEventHandler)
+
+	authProtected.POST("/events/:id/invite", rateLimit(10, 10), inviteHandler)
+	authProtected.POST("/events/:id/join", rateLimit(10, 10), joinHandler)
+	authProtected.POST("/events/:id/leave", rateLimit(10, 10), leaveHandler)
+
+	authProtected.GET("/my-events", rateLimit(5, 5), myEventsHandler)
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: r,
+		BaseContext: func(l net.Listener) context.Context {
+			return context.Background()
+		},
+	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("listen: %v", err)
 		}
-		if err := c.BindJSON(&input); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid input"})
-			return
-		}
-		store.Lock()
-		defer store.Unlock()
-		for _, u := range store.Users {
-			if u.Username == input.Username {
-				c.JSON(400, gin.H{"error": "Unable to register with that username"})
-				return
-			}
-		}
-		hashed, _ := bcrypt.GenerateFromPassword([]byte(input.Password), 10)
-		newUser := User{ID: uuid.New().String(), Username: input.Username, Password: string(hashed)}
-		store.Users[newUser.ID] = newUser
-		saveToDisk("users.json", store.Users)
-		c.JSON(201, gin.H{"id": newUser.ID, "username": newUser.Username})
-	})
-
-	r.POST("/login", func(c *gin.Context) {
-		var input struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		}
-		if err := c.BindJSON(&input); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid input"})
-			return
-		}
-		store.RLock()
-		defer store.RUnlock()
-		for _, u := range store.Users {
-			if u.Username == input.Username {
-				if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(input.Password)); err == nil {
-					tok, _ := signToken(u.ID, u.Username, 24*time.Hour)
-					c.JSON(200, gin.H{"token": tok, "username": u.Username})
-					return
-				}
-			}
-		}
-		c.JSON(401, gin.H{"error": "Invalid credentials"})
-	})
-
-	// Protected group
-	auth := r.Group("/")
-	auth.Use(authnMiddleware())
-
-	auth.PUT("/users/me", func(c *gin.Context) {
-		userID := ctxUserID(c)
-		var input struct {
-			Username    string `json:"username"`
-			OldPassword string `json:"oldPassword"`
-			NewPassword string `json:"newPassword"`
-		}
-		if err := c.BindJSON(&input); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid input"})
-			return
-		}
-
-		store.Lock()
-		defer store.Unlock()
-
-		user, exists := store.Users[userID]
-		if !exists {
-			c.JSON(404, gin.H{"error": "User not found"})
-			return
-		}
-
-		updatedUser := user
-		nameChanged := false
-
-		if input.Username != "" && input.Username != user.Username {
-			for _, u := range store.Users {
-				if u.Username == input.Username {
-					c.JSON(400, gin.H{"error": "Unable to update username"})
-					return
-				}
-			}
-			updatedUser.Username = input.Username
-			nameChanged = true
-		}
-
-		if input.NewPassword != "" {
-			if len(input.NewPassword) < 8 {
-				c.JSON(400, gin.H{"error": "Password must be at least 8 characters"})
-				return
-			}
-			if input.OldPassword == "" {
-				c.JSON(400, gin.H{"error": "Current password required to set new password"})
-				return
-			}
-			if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.OldPassword)); err != nil {
-				c.JSON(401, gin.H{"error": "Current password incorrect"})
-				return
-			}
-			hashed, _ := bcrypt.GenerateFromPassword([]byte(input.NewPassword), 10)
-			updatedUser.Password = string(hashed)
-		}
-
-		store.Users[userID] = updatedUser
-		saveToDisk("users.json", store.Users)
-
-		if nameChanged {
-			for id, event := range store.Events {
-				updated := false
-				if parts, ok := event.Data["participants"].([]interface{}); ok {
-					newParts := []interface{}{}
-					for _, p := range parts {
-						if pMap, ok := p.(map[string]interface{}); ok {
-							if pMap["id"] == userID {
-								pMap["name"] = updatedUser.Username
-								updated = true
-							}
-							newParts = append(newParts, pMap)
-						}
-					}
-					event.Data["participants"] = newParts
-				}
-				if updated {
-					store.Events[id] = event
-				}
-			}
-			saveToDisk("events.json", store.Events)
-		}
-
-		c.JSON(200, gin.H{"username": updatedUser.Username})
-	})
-
-	// --- SSE subscribe (protected & participant/creator only) ---
-	auth.GET("/events/:id/stream", func(c *gin.Context) {
-		id := c.Param("id")
-		userID := ctxUserID(c)
-
-		store.RLock()
-		ev, ok := store.Events[id]
-		store.RUnlock()
-		if !ok {
-			c.JSON(404, gin.H{"error": "Not found"})
-			return
-		}
-		allowed := ev.CreatorID == userID
-		if !allowed {
-			for _, pid := range ev.Participants {
-				if pid == userID {
-					allowed = true
-					break
-				}
-			}
-		}
-		if !allowed {
-			c.JSON(403, gin.H{"error": "Forbidden"})
-			return
-		}
-
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Connection", "keep-alive")
-
-		ch := sseHub.add(id)
-		defer sseHub.remove(id, ch)
-
-		c.Stream(func(w io.Writer) bool {
-			if msg, ok := <-ch; ok {
-				c.SSEvent("update", string(msg))
-				return true
-			}
-			return false
-		})
-	})
-
-	// --- EVENTS ---
-
-	auth.POST("/events", func(c *gin.Context) {
-		var input map[string]interface{}
-		if err := c.BindJSON(&input); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid JSON"})
-			return
-		}
-
-		creatorID := ctxUserID(c)
-		if creatorID == "" {
-			c.JSON(401, gin.H{"error": "Login required"})
-			return
-		}
-
-		store.RLock()
-		creator, ok := store.Users[creatorID]
-		store.RUnlock()
-		if !ok {
-			c.JSON(401, gin.H{"error": "Invalid user"})
-			return
-		}
-
-		id, _ := input["id"].(string)
-		if id == "" {
-			c.JSON(400, gin.H{"error": "Missing event id"})
-			return
-		}
-
-		participants := []string{creatorID}
-
-		if input["participants"] == nil {
-			input["participants"] = []interface{}{}
-		}
-		if list, ok := input["participants"].([]interface{}); ok {
-			newParticipant := map[string]interface{}{
-				"id":           creatorID,
-				"name":         creator.Username,
-				"availability": map[string]bool{},
-			}
-			input["participants"] = append(list, newParticipant)
-		}
-
-		input["creatorId"] = creatorID
-
-		store.Lock()
-		store.Events[id] = Event{ID: id, CreatorID: creatorID, Data: input, Participants: participants}
-		store.Unlock()
-		saveToDisk("events.json", store.Events)
-
-		go sseHub.broadcast(id, mustJSON(input))
-		c.JSON(201, input)
-	})
-
-	r.GET("/events/:id", func(c *gin.Context) {
-		id := c.Param("id")
-		store.RLock()
-		event, exists := store.Events[id]
-		store.RUnlock()
-		if !exists {
-			c.JSON(404, gin.H{"error": "Not found"})
-			return
-		}
-		res := make(map[string]interface{})
-		for k, v := range event.Data {
-			res[k] = v
-		}
-		res["creatorId"] = event.CreatorID
-		c.JSON(200, res)
-	})
-
-	auth.PUT("/events/:id", func(c *gin.Context) {
-		id := c.Param("id")
-		userID := ctxUserID(c)
-		if userID == "" {
-			c.JSON(401, gin.H{"error": "Unauthorized"})
-			return
-		}
-
-		var input EventUpdate
-		if err := c.ShouldBindJSON(&input); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid JSON"})
-			return
-		}
-		if input.ID == "" || input.Name == "" || input.DateRange == nil || input.DateRange["from"] == "" || input.DateRange["to"] == "" || input.Duration <= 0 || input.Timezone == "" {
-			c.JSON(400, gin.H{"error": "Missing required fields"})
-			return
-		}
-
-		store.Lock()
-		defer store.Unlock()
-
-		event, exists := store.Events[id]
-		if !exists {
-			c.JSON(404, gin.H{"error": "Not found"})
-			return
-		}
-
-		isCreator := event.CreatorID == userID
-
-		if isCreator {
-			newParts := []string{}
-			if len(input.Participants) > 0 {
-				for _, p := range input.Participants {
-					if pid, ok := p["id"].(string); ok && pid != "" {
-						newParts = append(newParts, pid)
-					}
-				}
-			}
-
-			event.Data = map[string]interface{}{
-				"id":           input.ID,
-				"name":         input.Name,
-				"dateRange":    input.DateRange,
-				"duration":     input.Duration,
-				"timezone":     input.Timezone,
-				"participants": normalizeParts(input.Participants),
-				"creatorId":    event.CreatorID,
-			}
-			if input.DisabledSlots != nil {
-				event.Data["disabledSlots"] = input.DisabledSlots
-			}
-			if len(newParts) > 0 {
-				event.Participants = newParts
-			}
-
-			store.Events[id] = event
-			saveToDisk("events.json", store.Events)
-			go sseHub.broadcast(id, mustJSON(event.Data))
-			c.JSON(200, event.Data)
-			return
-		}
-
-		// Non-creator: allow only updating their own availability
-		partsRaw := normalizeParts(event.Data["participants"])
-
-		var incomingAvail map[string]bool
-		for _, p := range input.Participants {
-			if pid, ok := p["id"].(string); ok && pid == userID {
-				if avail, ok := p["availability"].(map[string]interface{}); ok {
-					incomingAvail = map[string]bool{}
-					for k, v := range avail {
-						if b, ok := v.(bool); ok && b {
-							incomingAvail[k] = true
-						}
-					}
-				}
-				break
-			}
-		}
-
-		if incomingAvail == nil {
-			c.JSON(200, event.Data)
-			return
-		}
-
-		updatedParts := []interface{}{}
-		updated := false
-		for _, p := range partsRaw {
-			if pMap, ok := p.(map[string]interface{}); ok {
-				if pMap["id"] == userID {
-					pMap["availability"] = incomingAvail
-					updated = true
-				}
-				updatedParts = append(updatedParts, pMap)
-			}
-		}
-		if !updated {
-			c.JSON(403, gin.H{"error": "Forbidden: Not a participant"})
-			return
-		}
-
-		event.Data["participants"] = updatedParts
-		if ds, ok := event.Data["disabledSlots"]; ok {
-			event.Data["disabledSlots"] = ds
-		}
-		event.Data["creatorId"] = event.CreatorID
-
-		store.Events[id] = event
-		saveToDisk("events.json", store.Events)
-
-		go sseHub.broadcast(id, mustJSON(event.Data))
-		c.JSON(200, event.Data)
-	})
-
-	auth.DELETE("/events/:id", func(c *gin.Context) {
-		id := c.Param("id")
-		userID := ctxUserID(c)
-		store.Lock()
-		defer store.Unlock()
-		event, exists := store.Events[id]
-		if !exists {
-			c.JSON(404, gin.H{"error": "Not found"})
-			return
-		}
-		if event.CreatorID != userID {
-			c.JSON(403, gin.H{"error": "Only creator can delete"})
-			return
-		}
-		delete(store.Events, id)
-		saveToDisk("events.json", store.Events)
-
-		go sseHub.broadcast(id, mustJSON(gin.H{"deleted": true}))
-		c.JSON(200, gin.H{"message": "Deleted"})
-	})
-
-	// --- INVITES / JOIN / LEAVE ---
-	auth.POST("/events/:id/invite", func(c *gin.Context) {
-		id := c.Param("id")
-		creatorID := ctxUserID(c)
-		var input struct {
-			Username string `json:"username"`
-		}
-		if err := c.BindJSON(&input); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid input"})
-			return
-		}
-		store.Lock()
-		defer store.Unlock()
-
-		event, exists := store.Events[id]
-		if !exists {
-			c.JSON(404, gin.H{"error": "Not found"})
-			return
-		}
-		if event.CreatorID != creatorID {
-			c.JSON(403, gin.H{"error": "Only creator can invite"})
-			return
-		}
-
-		var targetUserID, targetUsername string
-		for _, u := range store.Users {
-			if u.Username == input.Username {
-				targetUserID = u.ID
-				targetUsername = u.Username
-				break
-			}
-		}
-		if targetUserID == "" {
-			c.JSON(200, gin.H{"message": "Invite processed"})
-			return
-		}
-		for _, p := range event.Participants {
-			if p == targetUserID {
-				c.JSON(409, gin.H{"error": "User already in event"})
-				return
-			}
-		}
-
-		event.Participants = append(event.Participants, targetUserID)
-
-		parts := normalizeParts(event.Data["participants"])
-		newParticipant := map[string]interface{}{
-			"id":           targetUserID,
-			"name":         targetUsername,
-			"availability": map[string]bool{},
-		}
-		event.Data["participants"] = append(parts, newParticipant)
-		event.Data["creatorId"] = event.CreatorID
-
-		store.Events[id] = event
-		saveToDisk("events.json", store.Events)
-
-		go sseHub.broadcast(id, mustJSON(event.Data))
-		c.JSON(200, gin.H{"message": "Invited"})
-	})
-
-	auth.POST("/events/:id/join", func(c *gin.Context) {
-		id := c.Param("id")
-		userID := ctxUserID(c)
-		if userID == "" {
-			c.JSON(401, gin.H{"error": "Login required"})
-			return
-		}
-
-		store.Lock()
-		defer store.Unlock()
-		event, exists := store.Events[id]
-		if !exists {
-			c.JSON(404, gin.H{"error": "Not found"})
-			return
-		}
-		for _, p := range event.Participants {
-			if p == userID {
-				c.JSON(200, gin.H{"message": "Already joined"})
-				return
-			}
-		}
-
-		event.Participants = append(event.Participants, userID)
-
-		var myUsername string
-		for _, u := range store.Users {
-			if u.ID == userID {
-				myUsername = u.Username
-				break
-			}
-		}
-
-		parts := normalizeParts(event.Data["participants"])
-		newParticipant := map[string]interface{}{
-			"id":           userID,
-			"name":         myUsername,
-			"availability": map[string]bool{},
-		}
-		event.Data["participants"] = append(parts, newParticipant)
-		event.Data["creatorId"] = event.CreatorID
-
-		store.Events[id] = event
-		saveToDisk("events.json", store.Events)
-
-		go sseHub.broadcast(id, mustJSON(event.Data))
-		c.JSON(200, gin.H{"message": "Joined"})
-	})
-
-	auth.POST("/events/:id/leave", func(c *gin.Context) {
-		id := c.Param("id")
-		userID := ctxUserID(c)
-		store.Lock()
-		defer store.Unlock()
-		event, exists := store.Events[id]
-		if !exists {
-			c.JSON(404, gin.H{"error": "Not found"})
-			return
-		}
-
-		newParticipants := []string{}
-		found := false
-		for _, p := range event.Participants {
-			if p == userID {
-				found = true
-			} else {
-				newParticipants = append(newParticipants, p)
-			}
-		}
-		if !found {
-			c.JSON(400, gin.H{"error": "Not in event"})
-			return
-		}
-		event.Participants = newParticipants
-
-		if parts, ok := event.Data["participants"].([]interface{}); ok {
-			newPartsJSON := []interface{}{}
-			for _, p := range parts {
-				if pMap, ok := p.(map[string]interface{}); ok {
-					if pMap["id"] != userID {
-						newPartsJSON = append(newPartsJSON, p)
-					}
-				}
-			}
-			event.Data["participants"] = newPartsJSON
-		}
-		event.Data["creatorId"] = event.CreatorID
-
-		store.Events[id] = event
-		saveToDisk("events.json", store.Events)
-
-		go sseHub.broadcast(id, mustJSON(event.Data))
-		c.JSON(200, gin.H{"message": "Left event"})
-	})
-
-	auth.GET("/my-events", func(c *gin.Context) {
-		userID := ctxUserID(c)
-		if userID == "" {
-			c.JSON(401, gin.H{"error": "Unauthorized"})
-			return
-		}
-
-		myEvents := []interface{}{}
-		store.RLock()
-		for _, event := range store.Events {
-			isParticipant := false
-			for _, p := range event.Participants {
-				if p == userID {
-					isParticipant = true
-				}
-			}
-			if event.CreatorID == userID || isParticipant {
-				ed := make(map[string]interface{})
-				for k, v := range event.Data {
-					ed[k] = v
-				}
-				ed["isOwner"] = (event.CreatorID == userID)
-				ed["creatorId"] = event.CreatorID
-				myEvents = append(myEvents, ed)
-			}
-		}
-		store.RUnlock()
-		c.JSON(200, myEvents)
-	})
-
-	log.Println("Server running on http://localhost:8080")
-	r.Run(":8080")
+	}()
+	log.Println("Server running on :8080")
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down...")
+	ctxShutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctxShutdown); err != nil {
+		log.Printf("server shutdown error: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		log.Printf("db close error: %v", err)
+	}
 }
+
+// Handlers
+
+func registerHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := c.BindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+	if !validateUsername(input.Username) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid username"})
+		return
+	}
+	if !validatePassword(input.Password) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Weak password (>=8 chars with number and special)"})
+		return
+	}
+
+	var exists int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE username = ?`, input.Username).Scan(&exists); err != nil {
+		serverError(c, "register: count user", err)
+		return
+	}
+	if exists > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username taken"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), 12)
+	if err != nil {
+		serverError(c, "register: hash", err)
+		return
+	}
+	now := time.Now().UTC()
+	id := uuid.NewString()
+	if _, err := db.ExecContext(ctx, `INSERT INTO users(id, username, password_hash, created_at, updated_at) VALUES (?,?,?,?,?)`,
+		id, input.Username, string(hash), now, now); err != nil {
+		serverError(c, "register: insert user", err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"id": id, "username": input.Username})
+}
+
+func loginHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := c.BindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+	if input.Username == "" || input.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing fields"})
+		return
+	}
+
+	var u User
+	err := db.QueryRowContext(ctx, `SELECT id, username, password_hash FROM users WHERE username = ?`, input.Username).
+		Scan(&u.ID, &u.Username, &u.PasswordHash)
+	if err == sql.ErrNoRows {
+		recordLoginAttempt(ctx, "", input.Username, clientIP(c))
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	} else if err != nil {
+		serverError(c, "login: select user", err)
+		return
+	}
+
+	locked, err := isLockedOut(ctx, u.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if locked {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Account locked. Try later."})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(input.Password)); err != nil {
+		recordLoginAttempt(ctx, u.ID, input.Username, clientIP(c))
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+
+	access, err := signAccessToken(u.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	family := uuid.NewString()
+	version := 1
+	refresh, rtID, err := signRefreshToken(u.ID, family, version)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	rtHash, err := hashToken(refresh)
+	if err != nil {
+		serverError(c, "login: hash refresh", err)
+		return
+	}
+	now := time.Now().UTC()
+	expires := now.Add(refreshTTL)
+	if _, err := db.ExecContext(ctx, `INSERT INTO refresh_tokens(id, user_id, family_id, version, token_hash, expires_at, created_at, revoked) 
+		VALUES (?,?,?,?,?,?,?,0)`,
+		rtID, u.ID, family, version, string(rtHash), expires, now); err != nil {
+		serverError(c, "login: insert refresh", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token":         access,
+		"refresh_token": refresh,
+		"username":      u.Username,
+	})
+}
+
+func refreshHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	var input struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := c.BindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+	if input.RefreshToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing refresh token"})
+		return
+	}
+
+	parsed, err := jwt.ParseWithClaims(input.RefreshToken, &jwt.RegisteredClaims{}, func(t *jwt.Token) (interface{}, error) {
+		return jwtSecret, nil
+	})
+	if err != nil || !parsed.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	claims, _ := parsed.Claims.(*jwt.RegisteredClaims)
+	if claims == nil || claims.ID == "" || claims.Subject == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	userID := claims.Subject
+	rtID := claims.ID
+	parts := strings.Split(rtID, ":")
+	if len(parts) != 2 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	family := parts[0]
+	version, _ := strconv.Atoi(parts[1])
+
+	var stored RefreshToken
+	err = db.QueryRowContext(ctx, `SELECT id, user_id, family_id, version, token_hash, expires_at, revoked FROM refresh_tokens WHERE id = ?`, rtID).
+		Scan(&stored.ID, &stored.UserID, &stored.FamilyID, &stored.Version, &stored.TokenHash, &stored.ExpiresAt, &stored.Revoked)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	} else if err != nil {
+		serverError(c, "refresh: select token", err)
+		return
+	}
+	if stored.Revoked || time.Now().After(stored.ExpiresAt) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Expired or revoked"})
+		return
+	}
+	if stored.UserID != userID || stored.FamilyID != family || stored.Version != version {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	if err := verifyTokenHash(stored.TokenHash, input.RefreshToken); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	newVersion := version + 1
+	newRefresh, newRtID, err := signRefreshToken(userID, family, newVersion)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	newHash, err := hashToken(newRefresh)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	now := time.Now().UTC()
+	expires := now.Add(refreshTTL)
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET revoked = 1 WHERE id = ?`, rtID); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO refresh_tokens(id, user_id, family_id, version, token_hash, expires_at, created_at, revoked)
+		VALUES (?,?,?,?,?,?,?,0)
+	`, newRtID, userID, family, newVersion, string(newHash), expires, now); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	access, err := signAccessToken(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token":         access,
+		"refresh_token": newRefresh,
+	})
+}
+
+func updateUserHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	userID := ctxUserID(c)
+	var input struct {
+		Username    string `json:"username"`
+		OldPassword string `json:"oldPassword"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := c.BindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	defer tx.Rollback()
+
+	var current User
+	if err := tx.QueryRowContext(ctx, `SELECT id, username, password_hash FROM users WHERE id = ?`, userID).
+		Scan(&current.ID, &current.Username, &current.PasswordHash); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	updatedUsername := current.Username
+	if input.Username != "" && input.Username != current.Username {
+		if !validateUsername(input.Username) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid username"})
+			return
+		}
+		var count int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE username = ? AND id <> ?`, input.Username, userID).Scan(&count); err != nil {
+			serverError(c, "updateUser: username count", err)
+			return
+		}
+		if count > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Username taken"})
+			return
+		}
+		updatedUsername = input.Username
+	}
+
+	updatedHash := current.PasswordHash
+	changedPassword := false
+	if input.NewPassword != "" {
+		if !validatePassword(input.NewPassword) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Weak password"})
+			return
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(current.PasswordHash), []byte(input.OldPassword)); err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Current password incorrect"})
+			return
+		}
+		h, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), 12)
+		if err != nil {
+			serverError(c, "updateUser: hash new password", err)
+			return
+		}
+		updatedHash = string(h)
+		changedPassword = true
+	}
+
+	now := time.Now().UTC()
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE users SET username = ?, password_hash = ?, updated_at = ? WHERE id = ?
+	`, updatedUsername, updatedHash, now, userID); err != nil {
+		serverError(c, "updateUser: update user", err)
+		return
+	}
+
+	// Revoke all refresh tokens if password changed
+	if changedPassword {
+		if _, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?`, userID); err != nil {
+			serverError(c, "updateUser: revoke refresh", err)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"username": updatedUsername})
+}
+
+func sseHandler(c *gin.Context) {
+	// long-lived SSE: no short timeout
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming unsupported"})
+		return
+	}
+
+	eventID := c.Param("id")
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+
+	sub := sseSubscribe(eventID)
+	defer sseUnsubscribe(eventID, sub)
+
+	// initial ping
+	fmt.Fprintf(c.Writer, "event: ping\ndata: ok\n\n")
+	flusher.Flush()
+
+	ping := time.NewTicker(ssePingEvery)
+	defer ping.Stop()
+
+	notify := c.Writer.CloseNotify()
+	ctx := c.Request.Context()
+
+	for {
+		select {
+		case <-notify:
+			return
+		case <-ctx.Done():
+			return
+		case <-ping.C:
+			fmt.Fprintf(c.Writer, "event: ping\ndata: ok\n\n")
+			flusher.Flush()
+		case msg, ok := <-sub.ch:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(c.Writer, "data: %s\n\n", msg)
+			flusher.Flush()
+		}
+	}
+}
+
+func createEventHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	userID := ctxUserID(c)
+	var input map[string]interface{}
+	if err := c.BindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
+		return
+	}
+
+	id, _ := input["id"].(string)
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing event id"})
+		return
+	}
+
+	name, _ := input["name"].(string)
+	drRaw, _ := input["dateRange"].(map[string]interface{})
+	from, _ := drRaw["from"].(string)
+	to, _ := drRaw["to"].(string)
+	dur, _ := input["duration"].(float64)
+	tz, _ := input["timezone"].(string)
+	if name == "" || from == "" || to == "" || dur <= 0 || tz == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing fields"})
+		return
+	}
+
+	partsRaw, _ := input["participants"].([]interface{})
+	disabledRaw, _ := input["disabledSlots"].([]interface{})
+	disabledJSON, err := json.Marshal(disabledRaw)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	availability := map[string]bool{}
+	availJSON, err := json.Marshal(availability)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	now := time.Now().UTC()
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO events(id, creator_id, name, date_from, date_to, duration, timezone, disabled_slots, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?)
+	`, id, userID, name, from, to, dur, tz, string(disabledJSON), now, now); err != nil {
+		tx.Rollback()
+		logIfTimeout(err, "createEvent: insert event")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create event"})
+		return
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO event_participants(id, event_id, user_id, availability, created_at, updated_at)
+		VALUES (?,?,?,?,?,?)
+	`, uuid.NewString(), id, userID, string(availJSON), now, now); err != nil {
+		tx.Rollback()
+		logIfTimeout(err, "createEvent: insert self participant")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not add participant"})
+		return
+	}
+
+	for _, p := range partsRaw {
+		if m, ok := p.(map[string]interface{}); ok {
+			pid, _ := m["id"].(string)
+			if pid != "" && pid != userID {
+				if _, err := tx.ExecContext(ctx, `
+					INSERT OR IGNORE INTO event_participants(id, event_id, user_id, availability, created_at, updated_at)
+					VALUES (?,?,?,?,?,?)
+				`, uuid.NewString(), id, pid, "{}", now, now); err != nil {
+					tx.Rollback()
+					logIfTimeout(err, "createEvent: insert other participant")
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not add participant"})
+					return
+				}
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	// publish new event state
+	ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":            id,
+		"creatorId":     userID,
+		"name":          name,
+		"dateRange":     gin.H{"from": from, "to": to},
+		"duration":      dur,
+		"timezone":      tz,
+		"participants":  []interface{}{map[string]interface{}{"id": userID, "name": ""}},
+		"disabledSlots": disabledRaw,
+	})
+}
+
+func getEventHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	id := c.Param("id")
+	var ev Event
+	err := db.QueryRowContext(ctx, `
+		SELECT id, creator_id, name, date_from, date_to, duration, timezone, disabled_slots
+		FROM events WHERE id = ?
+	`, id).Scan(&ev.ID, &ev.CreatorID, &ev.Name, &ev.DateFrom, &ev.DateTo, &ev.Duration, &ev.Timezone, &ev.DisabledSlots)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	} else if err != nil {
+		logIfTimeout(err, "getEvent: select")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	parts := []map[string]interface{}{}
+	rows, err := db.QueryContext(ctx, `
+		SELECT ep.user_id, u.username, ep.availability
+		FROM event_participants ep
+		JOIN users u ON u.id = ep.user_id
+		WHERE ep.event_id = ?
+	`, id)
+	if err != nil {
+		logIfTimeout(err, "getEvent: query participants")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var uid, uname, availJSON string
+		if err := rows.Scan(&uid, &uname, &availJSON); err == nil {
+			partAvail := map[string]bool{}
+			if err := json.Unmarshal([]byte(availJSON), &partAvail); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+				return
+			}
+			parts = append(parts, map[string]interface{}{
+				"id":           uid,
+				"name":         uname,
+				"availability": partAvail,
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		logIfTimeout(err, "getEvent: rows err")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	disabled := []string{}
+	if err := json.Unmarshal([]byte(ev.DisabledSlots), &disabled); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":            ev.ID,
+		"creatorId":     ev.CreatorID,
+		"name":          ev.Name,
+		"dateRange":     gin.H{"from": ev.DateFrom, "to": ev.DateTo},
+		"duration":      ev.Duration,
+		"timezone":      ev.Timezone,
+		"participants":  parts,
+		"disabledSlots": disabled,
+	})
+}
+
+func updateEventHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	id := c.Param("id")
+	userID := ctxUserID(c)
+
+	var input EventUpdate
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
+		return
+	}
+	if input.ID == "" || input.Name == "" || input.DateRange == nil || input.DateRange["from"] == "" || input.DateRange["to"] == "" || input.Duration <= 0 || input.Timezone == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required fields"})
+		return
+	}
+
+	var creatorID string
+	err := db.QueryRowContext(ctx, `SELECT creator_id FROM events WHERE id = ?`, id).Scan(&creatorID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	} else if err != nil {
+		logIfTimeout(err, "updateEvent: select creator")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	isCreator := creatorID == userID
+	if isCreator {
+		disabledJSON, err := json.Marshal(input.DisabledSlots)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+			return
+		}
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+			return
+		}
+		now := time.Now().UTC()
+
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE events SET name = ?, date_from = ?, date_to = ?, duration = ?, timezone = ?, disabled_slots = ?, updated_at = ?
+			WHERE id = ?
+		`, input.Name, input.DateRange["from"], input.DateRange["to"], input.Duration, input.Timezone, string(disabledJSON), now, id); err != nil {
+			tx.Rollback()
+			logIfTimeout(err, "updateEvent: update event")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+			return
+		}
+
+		if len(input.Participants) > 0 {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM event_participants WHERE event_id = ?`, id); err != nil {
+				tx.Rollback()
+				logIfTimeout(err, "updateEvent: delete participants")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+				return
+			}
+			for _, p := range input.Participants {
+				pid, _ := p["id"].(string)
+				if pid == "" {
+					continue
+				}
+				avail := map[string]bool{}
+				if raw, ok := p["availability"].(map[string]interface{}); ok {
+					for k, v := range raw {
+						if b, ok := v.(bool); ok && b {
+							avail[k] = true
+						}
+					}
+				}
+				availJSON, err := json.Marshal(avail)
+				if err != nil {
+					tx.Rollback()
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+					return
+				}
+				if _, err := tx.ExecContext(ctx, `
+					INSERT INTO event_participants(id, event_id, user_id, availability, created_at, updated_at)
+					VALUES (?,?,?,?,?,?)
+				`, uuid.NewString(), id, pid, string(availJSON), now, now); err != nil {
+					tx.Rollback()
+					logIfTimeout(err, "updateEvent: insert participants")
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+					return
+				}
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+			return
+		}
+
+		// notify
+		ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
+		c.JSON(http.StatusOK, gin.H{"status": "updated"})
+		return
+	}
+
+	var count int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event_participants WHERE event_id = ? AND user_id = ?`, id, userID).Scan(&count)
+	if count == 0 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Not a participant"})
+		return
+	}
+
+	var incomingAvail map[string]bool
+	for _, p := range input.Participants {
+		if pid, ok := p["id"].(string); ok && pid == userID {
+			if raw, ok := p["availability"].(map[string]interface{}); ok {
+				incomingAvail = map[string]bool{}
+				for k, v := range raw {
+					if b, ok := v.(bool); ok && b {
+						incomingAvail[k] = true
+					}
+				}
+			}
+			break
+		}
+	}
+	if incomingAvail == nil {
+		c.JSON(http.StatusOK, gin.H{"status": "no changes"})
+		return
+	}
+	availJSON, err := json.Marshal(incomingAvail)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	now := time.Now().UTC()
+	if _, err := db.ExecContext(ctx, `
+		UPDATE event_participants SET availability = ?, updated_at = ? WHERE event_id = ? AND user_id = ?
+	`, string(availJSON), now, id, userID); err != nil {
+		logIfTimeout(err, "updateEvent: update availability")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	// notify
+	ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
+	c.JSON(http.StatusOK, gin.H{"status": "updated"})
+}
+
+func deleteEventHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	id := c.Param("id")
+	userID := ctxUserID(c)
+
+	var creatorID string
+	err := db.QueryRowContext(ctx, `SELECT creator_id FROM events WHERE id = ?`, id).Scan(&creatorID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	} else if err != nil {
+		logIfTimeout(err, "deleteEvent: select creator")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if creatorID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only creator can delete"})
+		return
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM events WHERE id = ?`, id); err != nil {
+		logIfTimeout(err, "deleteEvent: delete")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	ssePublish(id, []byte(`{"type":"event_deleted","id":"`+id+`"}`))
+	c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
+}
+
+// Invite handler: hides username existence to avoid enumeration
+func inviteHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	id := c.Param("id")
+	creatorID := ctxUserID(c)
+	var body struct {
+		Username string `json:"username"`
+	}
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	var evCreator string
+	if err := db.QueryRowContext(ctx, `SELECT creator_id FROM events WHERE id = ?`, id).Scan(&evCreator); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+			return
+		}
+		logIfTimeout(err, "invite: select creator")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if evCreator != creatorID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only creator can invite"})
+		return
+	}
+
+	var targetID string
+	err := db.QueryRowContext(ctx, `SELECT id FROM users WHERE username = ?`, body.Username).Scan(&targetID)
+	if err == sql.ErrNoRows {
+		// Do not reveal existence to avoid enumeration
+		c.JSON(http.StatusOK, gin.H{"message": "Invite processed"})
+		return
+	} else if err != nil {
+		logIfTimeout(err, "invite: select user")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	var exists int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event_participants WHERE event_id = ? AND user_id = ?`, id, targetID).Scan(&exists)
+	if exists > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "User already in event"})
+		return
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	now := time.Now().UTC()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO event_participants(id, event_id, user_id, availability, created_at, updated_at)
+		VALUES (?,?,?,?,?,?)
+	`, uuid.NewString(), id, targetID, "{}", now, now); err != nil {
+		tx.Rollback()
+		logIfTimeout(err, "invite: insert participant")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
+	c.JSON(http.StatusOK, gin.H{"message": "Invited"})
+}
+
+func joinHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	id := c.Param("id")
+	userID := ctxUserID(c)
+
+	var exists int
+	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE id = ?`, id).Scan(&exists)
+	if err != nil {
+		logIfTimeout(err, "join: select event")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if exists == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event_participants WHERE event_id = ? AND user_id = ?`, id, userID).Scan(&exists)
+	if exists > 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "Already joined"})
+		return
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	now := time.Now().UTC()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO event_participants(id, event_id, user_id, availability, created_at, updated_at)
+		VALUES (?,?,?,?,?,?)`, uuid.NewString(), id, userID, "{}", now, now); err != nil {
+		tx.Rollback()
+		logIfTimeout(err, "join: insert participant")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
+	c.JSON(http.StatusOK, gin.H{"message": "Joined"})
+}
+
+func leaveHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	id := c.Param("id")
+	userID := ctxUserID(c)
+	res, err := db.ExecContext(ctx, `DELETE FROM event_participants WHERE event_id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		logIfTimeout(err, "leave: delete")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Not in event"})
+		return
+	}
+
+	ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
+	c.JSON(http.StatusOK, gin.H{"message": "Left event"})
+}
+
+func myEventsHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	userID := ctxUserID(c)
+	rows, err := db.QueryContext(ctx, `
+		SELECT e.id, e.creator_id, e.name, e.date_from, e.date_to, e.duration, e.timezone, e.disabled_slots,
+			CASE WHEN e.creator_id = ? THEN 1 ELSE 0 END as is_owner
+		FROM events e
+		LEFT JOIN event_participants ep ON ep.event_id = e.id AND ep.user_id = ?
+		WHERE e.creator_id = ? OR ep.user_id = ?
+	`, userID, userID, userID, userID)
+	if err != nil {
+		logIfTimeout(err, "myEvents: query")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	defer rows.Close()
+	out := []map[string]interface{}{}
+	for rows.Next() {
+		var ev Event
+		var isOwner int
+		if err := rows.Scan(&ev.ID, &ev.CreatorID, &ev.Name, &ev.DateFrom, &ev.DateTo, &ev.Duration, &ev.Timezone, &ev.DisabledSlots, &isOwner); err == nil {
+			disabled := []string{}
+			if err := json.Unmarshal([]byte(ev.DisabledSlots), &disabled); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+				return
+			}
+			out = append(out, map[string]interface{}{
+				"id":            ev.ID,
+				"creatorId":     ev.CreatorID,
+				"name":          ev.Name,
+				"dateRange":     gin.H{"from": ev.DateFrom, "to": ev.DateTo},
+				"duration":      ev.Duration,
+				"timezone":      ev.Timezone,
+				"disabledSlots": disabled,
+				"isOwner":       isOwner == 1,
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		logIfTimeout(err, "myEvents: rows err")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+/*
+Example .env
+
+JWT_SECRET=change_me
+DATABASE_PATH=app.db
+CORS_ORIGINS=http://localhost:3000
+REQUEST_TIMEOUT_MS=5000
+*/

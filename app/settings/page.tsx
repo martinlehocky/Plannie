@@ -9,14 +9,14 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { ArrowLeft, Save, ShieldCheck, Globe } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-// ZXCVBN Imports
 import { zxcvbn, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
 import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en"
+import { fetchWithAuth, clearTokens } from "@/lib/api"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
+// zxcvbn init
 const options = {
     translations: zxcvbnEnPackage.translations,
     graphs: zxcvbnCommonPackage.adjacencyGraphs,
@@ -26,6 +26,14 @@ const options = {
     },
 }
 zxcvbnOptions.setOptions(options)
+
+const usernameRe = /^[a-zA-Z0-9]{3,30}$/
+const passwordValid = (p: string) => {
+    if (p.length === 0) return true // allow empty when not changing
+    const hasDigit = /[0-9]/.test(p)
+    const hasSpec = /[!@#$%^&*()\-\_\+=\{\}\[\]:;"'<>,\.?\/\\|]/.test(p)
+    return p.length >= 8 && hasDigit && hasSpec
+}
 
 export default function SettingsPage() {
     const router = useRouter()
@@ -41,7 +49,6 @@ export default function SettingsPage() {
     const [crackTime, setCrackTime] = useState("")
     const [passwordsMatch, setPasswordsMatch] = useState(true)
 
-    // Load initial data & enforce auth
     useEffect(() => {
         const token = localStorage.getItem("token")
         if (!token) {
@@ -88,32 +95,40 @@ export default function SettingsPage() {
     const handleSave = async () => {
         const token = localStorage.getItem("token")
         if (!token) {
+            clearTokens()
             router.replace("/login")
+            return
+        }
+
+        // Local validation
+        if (!usernameRe.test(username)) {
+            toast({ title: "Invalid username", description: "Use 3-30 alphanumeric characters.", variant: "destructive" })
+            return
+        }
+        if (newPassword && !passwordValid(newPassword)) {
+            toast({
+                title: "Weak password",
+                description: "At least 8 chars with a number and a special character.",
+                variant: "destructive",
+            })
+            return
+        }
+        if (newPassword && !passwordsMatch) {
+            toast({ title: "Error", description: "New passwords do not match.", variant: "destructive" })
+            return
+        }
+        if (newPassword && !oldPassword) {
+            toast({ title: "Error", description: "Please enter your current password.", variant: "destructive" })
             return
         }
 
         // Save timezone locally
         localStorage.setItem("preferredTimezone", preferredTimezone)
 
-        if (newPassword) {
-            if (!passwordsMatch) {
-                toast({ title: "Error", description: "New passwords do not match.", variant: "destructive" })
-                return
-            }
-            if (!oldPassword) {
-                toast({ title: "Error", description: "Please enter your current password.", variant: "destructive" })
-                return
-            }
-        }
-
         setLoading(true)
         try {
-            const res = await fetch(`${API_BASE}/users/me`, {
+            const res = await fetchWithAuth(`${API_BASE}/users/me`, {
                 method: "PUT",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
                 body: JSON.stringify({
                     username,
                     oldPassword: oldPassword || undefined,
@@ -122,6 +137,11 @@ export default function SettingsPage() {
             })
 
             const data = await res.json().catch(() => ({}))
+            if (res.status === 401) {
+                clearTokens()
+                router.replace("/login")
+                return
+            }
             if (res.ok) {
                 if (data.username) {
                     localStorage.setItem("username", data.username)
@@ -162,6 +182,7 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                             <Label htmlFor="username">Username</Label>
                             <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} />
+                            <p className="text-[11px] text-muted-foreground">3–30 chars, letters and numbers only.</p>
                         </div>
 
                         <div className="space-y-2">
@@ -207,6 +228,7 @@ export default function SettingsPage() {
                                 type="password"
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
+                                placeholder="Leave blank to keep current password"
                             />
 
                             {newPassword && (
@@ -219,6 +241,9 @@ export default function SettingsPage() {
                                     </div>
                                     <p className="text-xs text-muted-foreground text-right">
                                         Crack time: <span className="font-medium">{crackTime}</span>
+                                    </p>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Must be ≥8 chars and include a number and a special character.
                                     </p>
                                 </div>
                             )}

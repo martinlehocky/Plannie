@@ -1,7 +1,6 @@
 "use client"
 
 import { use, useEffect, useMemo, useState } from "react"
-import { EventSourcePolyfill } from "event-source-polyfill"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -20,6 +19,8 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { format } from "date-fns"
@@ -37,6 +38,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { fetchWithAuth, clearTokens } from "@/lib/api"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -49,10 +51,7 @@ type Participant = {
 type EventData = {
   id: string
   name: string
-  dateRange: {
-    from: string
-    to: string
-  }
+  dateRange: { from: string; to: string }
   duration: number
   timezone: string
   participants: Participant[]
@@ -90,13 +89,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [renameLoading, setRenameLoading] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState("")
-
   const [userTimezone, setUserTimezone] = useState("")
   const [inviteUsername, setInviteUsername] = useState("")
+  const [sseConnected, setSseConnected] = useState(false)
+
+  const [draftDirty, setDraftDirty] = useState(false)
 
   const token = useMemo(() => (typeof window !== "undefined" ? localStorage.getItem("token") : null), [])
   const tokenClaims = useMemo(() => decodeToken(token), [token])
-
   const userId = tokenClaims.uid || tokenClaims.sub || tokenClaims.userId || tokenClaims.id || null
   const usernameClaim = tokenClaims.uname || tokenClaims.username || tokenClaims.name || null
 
@@ -108,19 +108,20 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const existing = data.participants.find((p) => p.id === userId)
     if (existing) {
       setIsParticipant(true)
-      setCurrentParticipant(existing)
+      if (!draftDirty) setCurrentParticipant(existing)
     } else {
       setIsParticipant(false)
-      if (loggedIn && userId) {
+      if (loggedIn && userId && !draftDirty) {
         const name = localStorage.getItem("username") || usernameClaim || "You"
         setCurrentParticipant({ id: userId, name, availability: {} })
-      } else {
+      } else if (!loggedIn) {
         setCurrentParticipant(null)
       }
     }
   }
 
   const fetchEventData = async () => {
+    if (draftDirty) return
     const savedTz = localStorage.getItem("preferredTimezone")
     setUserTimezone(savedTz || Intl.DateTimeFormat().resolvedOptions().timeZone)
 
@@ -144,45 +145,32 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   useEffect(() => {
     fetchEventData()
+    const timer = setInterval(fetchEventData, sseConnected ? 60000 : 15000)
+    return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, sseConnected, draftDirty])
 
   useEffect(() => {
-    const tok = typeof window !== "undefined" ? localStorage.getItem("token") : null
-    if (!tok) {
-      router.replace("/login")
-      return
+    if (!token) return
+    const url = `${API_BASE}/events/${id}/stream?token=${encodeURIComponent(token)}`
+    const src = new EventSource(url)
+    src.onopen = () => setSseConnected(true)
+    src.onerror = () => {
+      setSseConnected(false)
+      src.close()
     }
-
-    const es = new EventSourcePolyfill(`${API_BASE}/events/${id}/stream`, {
-      headers: { Authorization: `Bearer ${tok}` },
-      withCredentials: false,
-    })
-
-    es.addEventListener("update", (e: MessageEvent) => {
-      try {
-        const data: EventData = JSON.parse(e.data)
-        data.disabledSlots = data.disabledSlots || []
-        setEventData(data)
-        syncUserState(data)
-        setRenameValue((prev) => (prev === "" ? data.name : prev))
-      } catch (err) {
-        console.error("SSE parse error", err)
-      }
-    })
-    es.onerror = () => {
-      es.close()
+    src.onmessage = () => {
+      if (!draftDirty) fetchEventData()
     }
-    return () => es.close()
+    return () => {
+      setSseConnected(false)
+      src.close()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, router])
+  }, [id, token, draftDirty])
 
   const handleSaveAvailability = async (availability: Record<string, boolean>) => {
     if (!eventData || !currentParticipant) return
-    if (!token) {
-      router.push("/login")
-      return
-    }
 
     const disabled = eventData.disabledSlots || []
     const cleaned: Record<string, boolean> = {}
@@ -202,29 +190,35 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
 
     try {
-      const res = await fetch(`${API_BASE}/events/${id}`, {
+      const res = await fetchWithAuth(`${API_BASE}/events/${id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify(payload),
       })
+      const d = await res.json().catch(() => ({}))
       if (res.ok) {
-        setEventData({ ...eventData, participants: updatedParticipants })
-        setCurrentParticipant(updatedParticipant)
+        setDraftDirty(false)
+        await fetchEventData()
         toast({ title: "Availability Saved", description: "Updated successfully." })
       } else {
-        const d = await res.json().catch(() => ({}))
+        if (res.status === 401) {
+          clearTokens()
+          router.push("/login")
+          return
+        }
         toast({ title: "Error", description: d.error || "Could not save", variant: "destructive" })
       }
     } catch (error) {
-      toast({ title: "Error", variant: "destructive" })
+      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
     }
   }
 
+  const handleCancelDraft = () => {
+    setDraftDirty(false)
+    fetchEventData()
+  }
+
   const handleRename = async () => {
-    if (!isCreator || !eventData || !token) return
+    if (!isCreator || !eventData) return
     const trimmed = renameValue.trim()
     if (!trimmed || trimmed === eventData.name) {
       setRenameOpen(false)
@@ -244,24 +238,20 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
 
     try {
-      const res = await fetch(`${API_BASE}/events/${id}`, {
+      const res = await fetchWithAuth(`${API_BASE}/events/${id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify(payload),
       })
+      const d = await res.json().catch(() => ({}))
       if (res.ok) {
-        const updated = { ...eventData, name: trimmed }
-        setEventData(updated)
+        setEventData({ ...eventData, name: trimmed })
         toast({ title: "Event renamed" })
         setRenameOpen(false)
       } else {
-        const d = await res.json().catch(() => ({}))
+        if (res.status === 401) clearTokens()
         toast({ title: "Error", description: d.error || "Could not rename", variant: "destructive" })
       }
-    } catch (error) {
+    } catch {
       toast({ title: "Error", description: "Could not rename", variant: "destructive" })
     } finally {
       setRenameLoading(false)
@@ -269,113 +259,120 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const handleToggleDisabled = async (slotKey: string) => {
-    if (!eventData || !isCreator || !token) return
+    if (!eventData || !isCreator) return
     const current = new Set(eventData.disabledSlots || [])
     if (current.has(slotKey)) current.delete(slotKey)
     else current.add(slotKey)
     const disabledSlots = Array.from(current)
-
     const updatedEvent: EventData = { ...eventData, disabledSlots }
 
     try {
-      const res = await fetch(`${API_BASE}/events/${id}`, {
+      const res = await fetchWithAuth(`${API_BASE}/events/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(updatedEvent),
       })
+      const d = await res.json().catch(() => ({}))
       if (res.ok) {
         setEventData(updatedEvent)
         toast({ title: current.has(slotKey) ? "Slot disabled" : "Slot enabled" })
       } else {
-        const d = await res.json()
-        toast({ title: "Error", description: d.error, variant: "destructive" })
+        if (res.status === 401) clearTokens()
+        toast({ title: "Error", description: d.error || "Error updating", variant: "destructive" })
       }
-    } catch (error) {
-      toast({ title: "Error", variant: "destructive" })
+    } catch {
+      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
     }
   }
 
   const handleResetDisabled = async () => {
-    if (!eventData || !isCreator || !token) return
+    if (!eventData || !isCreator) return
     setResetDisabledLoading(true)
     const updatedEvent: EventData = { ...eventData, disabledSlots: [] }
 
     try {
-      const res = await fetch(`${API_BASE}/events/${id}`, {
+      const res = await fetchWithAuth(`${API_BASE}/events/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(updatedEvent),
       })
+      const d = await res.json().catch(() => ({}))
       if (res.ok) {
         setEventData(updatedEvent)
         toast({ title: "Disabled times reset" })
       } else {
-        const d = await res.json()
-        toast({ title: "Error", description: d.error, variant: "destructive" })
+        if (res.status === 401) clearTokens()
+        toast({ title: "Error", description: d.error || "Error updating", variant: "destructive" })
       }
-    } catch (error) {
-      toast({ title: "Error", variant: "destructive" })
+    } catch {
+      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
     } finally {
       setResetDisabledLoading(false)
     }
   }
 
   const handleJoin = async () => {
-    if (!token) {
-      router.push("/login")
-      return
-    }
-    const res = await fetch(`${API_BASE}/events/${id}/join`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (res.ok) {
-      toast({ title: "Joined!", description: "You can now mark your availability." })
-      await fetchEventData()
-    } else {
-      const d = await res.json()
-      toast({ title: "Error", description: d.error, variant: "destructive" })
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/events/${id}/join`, { method: "POST" })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) {
+        toast({ title: "Joined!", description: "You can now mark your availability." })
+        await fetchEventData()
+      } else {
+        if (res.status === 401) clearTokens()
+        toast({ title: "Error", description: d.error || "Join failed", variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
     }
   }
 
   const handleLeave = async () => {
-    if (!token) {
-      router.push("/login")
-      return
-    }
-    const res = await fetch(`${API_BASE}/events/${id}/leave`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (res.ok) {
-      router.push("/dashboard")
-      toast({ title: "Left Event" })
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/events/${id}/leave`, { method: "POST" })
+      if (res.ok) {
+        router.push("/dashboard")
+        toast({ title: "Left Event" })
+      } else if (res.status === 401) {
+        clearTokens()
+        router.push("/login")
+      }
+    } catch {
+      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
     }
   }
 
   const handleDelete = async () => {
-    if (!token) return
-    const res = await fetch(`${API_BASE}/events/${id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (res.ok) {
-      router.push("/dashboard")
-      toast({ title: "Event Deleted" })
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/events/${id}`, { method: "DELETE" })
+      if (res.ok) {
+        router.push("/dashboard")
+        toast({ title: "Event Deleted" })
+      } else if (res.status === 401) {
+        clearTokens()
+        router.push("/login")
+      }
+    } catch {
+      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
     }
   }
 
   const handleInvite = async () => {
-    if (!inviteUsername || !token) return
-    const res = await fetch(`${API_BASE}/events/${id}/invite`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ username: inviteUsername }),
-    })
-    if (res.ok) {
-      toast({ title: "Invited!" })
-      setInviteUsername("")
-      fetchEventData()
+    if (!inviteUsername) return
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/events/${id}/invite`, {
+        method: "POST",
+        body: JSON.stringify({ username: inviteUsername }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) {
+        toast({ title: "Invited!" })
+        setInviteUsername("")
+        fetchEventData()
+      } else {
+        if (res.status === 401) clearTokens()
+        toast({ title: "Error", description: d.error || "Invite failed", variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
     }
   }
 
@@ -432,6 +429,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>
   if (!eventData) return <div className="flex items-center justify-center min-h-screen">Event not found</div>
 
+  // Pass the full disabled list always; let the grid hide them for non-creators.
+  const disabledSlotsForGrid = eventData.disabledSlots || []
+
   const bestTimes = getBestTimes(3)
   const allBestTimes = getBestTimes()
 
@@ -443,6 +443,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 group">
                   <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">{eventData.name}</h1>
+                  {draftDirty && (
+                      <Badge variant="secondary" className="flex items-center gap-1 text-[11px]">
+                        <AlertTriangle className="h-3 w-3" />
+                        Unsaved changes
+                      </Badge>
+                  )}
                   {isCreator && (
                       <AlertDialog open={renameOpen} onOpenChange={setRenameOpen}>
                         <AlertDialogTrigger asChild>
@@ -459,9 +465,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         <AlertDialogContent className="sm:max-w-md">
                           <AlertDialogHeader>
                             <AlertDialogTitle>Rename event</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Update the event title for everyone. This change is instant.
-                            </AlertDialogDescription>
+                            <AlertDialogDescription>Update the event title for everyone. This change is instant.</AlertDialogDescription>
                           </AlertDialogHeader>
                           <div className="space-y-3 pt-2">
                             <Input
@@ -499,6 +503,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
             <div className="flex items-center gap-2 flex-wrap">
               <ThemeToggle />
+              {draftDirty && (
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" className="h-9 text-xs" onClick={handleCancelDraft}>
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Revert unsaved
+                    </Button>
+                  </div>
+              )}
               <Button
                   size="sm"
                   variant="outline"
@@ -595,7 +607,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               </div>
 
               <Card className="overflow-hidden flex flex-col shadow-sm min-h-[400px] lg:min-h-0 border-border/50">
-                <CardContent className="p-4 flex-1 overflow-auto min-h-0">
+                <CardContent
+                    className="p-4 flex-1 overflow-auto min-h-0"
+                    onPointerDown={() => {
+                      if (isLoggedIn) setDraftDirty(true)
+                    }}
+                >
                   {isLoggedIn && currentParticipant ? (
                       <AvailabilityGrid
                           dateRange={{
@@ -607,16 +624,17 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                           allParticipants={eventData.participants}
                           onSave={handleSaveAvailability}
                           timezone={userTimezone}
-                          disabledSlots={eventData.disabledSlots || []}
+                          disabledSlots={disabledSlotsForGrid}
                           isCreator={isCreator}
                           disableMode={disableMode}
                           onToggleDisabled={handleToggleDisabled}
                           onToggleDisableMode={() => setDisableMode((v) => !v)}
                           onResetDisabled={handleResetDisabled}
                           resetDisabledLoading={resetDisabledLoading}
+                          hideDisabledSlots={!isCreator}
                       />
                   ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                      <div className="flex flex-col items-center justify-center h-full textcenter p-6">
                         <LogIn className="h-12 w-12 text-muted-foreground mb-4" />
                         <h3 className="text-lg font-semibold">Please Sign In</h3>
                         <p className="text-sm text-muted-foreground mt-2 mb-4">You must be logged in to participate.</p>
@@ -687,7 +705,7 @@ function SidebarContent({
 
         <Card className="shadow-sm border-border/50">
           <CardHeader className="p-3.5 pb-2">
-            <CardTitle className="flex itemsCenter gap-2 text-base font-semibold">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold">
               <Trophy className="h-4 w-4 text-yellow-500 shrink-0" /> Best Times
             </CardTitle>
           </CardHeader>
@@ -698,7 +716,7 @@ function SidebarContent({
                         key={i}
                         className="rounded-lg border bg-card p-2.5 space-y-1.5 shadow-sm hover:shadow transition-shadow"
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify_between gap-2">
                         <div className="text-xs font-semibold text-success truncate">{formatTimeInTz(time.slot)}</div>
                         <Badge variant="secondary" className="shrink-0 text-[10px] h-5 px-2 font-semibold">
                           {time.count}/{eventData.participants.length}
@@ -727,7 +745,7 @@ function SidebarContent({
                       <div className="max-h-48 overflow-y-auto space-y-1.5 border rounded-md p-2 bg-card/40">
                         {allBestTimes.map((time, i) => (
                             <div key={i} className="rounded-sm p-2 bg-muted/40 space-y-1">
-                              <div className="flex items-center justifyBetween gap-2">
+                              <div className="flex items-center justify-between gap-2">
                                 <div className="text-[11px] font-semibold truncate">{formatTimeInTz(time.slot)}</div>
                                 <Badge variant="outline" className="text-[10px] h-5 px-1.5">
                                   {time.count}/{eventData.participants.length}
@@ -745,7 +763,7 @@ function SidebarContent({
 
         <Card className="shadow-sm border-border/50">
           <CardHeader className="p-3.5 pb-2">
-            <CardTitle className="flex items-center justifyBetween text-base font-semibold">
+            <CardTitle className="flex items-center justify-between text-base font-semibold">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 shrink-0" /> Participants
               </div>
@@ -762,11 +780,14 @@ function SidebarContent({
                       <AvatarFallback className="text-[10px] font-semibold">{p.name[0].toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <span className="text-xs font-medium truncate">{p.name}</span>
+                    {p.id === eventData.creatorId && (
+                        <Badge variant="secondary" className="text-[10px] h-5 px-2">Host</Badge>
+                    )}
                   </div>
               ))}
             </div>
             {!isLoggedIn && (
-                <Button className="w-full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
+                <Button className="w_full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
                   <LogIn className="h-3 w-3 mr-1.5" />
                   Sign In
                 </Button>
