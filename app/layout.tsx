@@ -9,7 +9,7 @@ const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "When2Meet Reimagined - Find the Perfect Time",
+  title: "Plannie - Find the Perfect Time",
   description: "Modern group scheduling made simple",
   generator: "v0.app",
   icons: {

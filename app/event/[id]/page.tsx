@@ -21,6 +21,7 @@ import {
   Pencil,
   RefreshCw,
   AlertTriangle,
+  X,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { format } from "date-fns"
@@ -381,6 +382,38 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     toast({ title: "Link Copied!" })
   }
 
+  const handleRemoveParticipant = async (participantId: string) => {
+    if (!eventData || !isCreator) return
+    if (participantId === eventData.creatorId) return
+    const updatedParticipants = eventData.participants.filter((p) => p.id !== participantId)
+    const updatedEvent: EventData = {
+      ...eventData,
+      participants: updatedParticipants,
+      disabledSlots: eventData.disabledSlots || [],
+    }
+
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/events/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(updatedEvent),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setEventData(updatedEvent)
+        if (currentParticipant && currentParticipant.id === participantId) {
+          setCurrentParticipant(null)
+          setIsParticipant(false)
+        }
+        toast({ title: "Removed participant" })
+      } else {
+        if (res.status === 401) clearTokens()
+        toast({ title: "Error", description: d.error || "Could not remove participant", variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
+    }
+  }
+
   const getBestTimes = (limit?: number) => {
     if (!eventData) return []
     const allSlots: Record<string, string[]> = {}
@@ -429,9 +462,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>
   if (!eventData) return <div className="flex items-center justify-center min-h-screen">Event not found</div>
 
-  // Pass the full disabled list always; let the grid hide them for non-creators.
   const disabledSlotsForGrid = eventData.disabledSlots || []
-
   const bestTimes = getBestTimes(3)
   const allBestTimes = getBestTimes()
 
@@ -582,6 +613,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         setInviteUsername={setInviteUsername}
                         handleInvite={handleInvite}
                         handleJoin={handleJoin}
+                        handleRemoveParticipant={handleRemoveParticipant}
                         router={router}
                     />
                   </CollapsibleContent>
@@ -601,6 +633,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       setInviteUsername={setInviteUsername}
                       handleInvite={handleInvite}
                       handleJoin={handleJoin}
+                      handleRemoveParticipant={handleRemoveParticipant}
                       router={router}
                   />
                 </div>
@@ -665,6 +698,7 @@ function SidebarContent({
                           setInviteUsername,
                           handleInvite,
                           handleJoin,
+                          handleRemoveParticipant,
                           router,
                         }: {
   eventData: EventData
@@ -679,6 +713,7 @@ function SidebarContent({
   setInviteUsername: (v: string) => void
   handleInvite: () => void
   handleJoin: () => void
+  handleRemoveParticipant: (id: string) => void
   router: ReturnType<typeof useRouter>
 }) {
   const [showBestTimesDetails, setShowBestTimesDetails] = useState(false)
@@ -774,17 +809,36 @@ function SidebarContent({
           </CardHeader>
           <CardContent className="p-3.5 pt-0 space-y-1.5">
             <div className="space-y-1 max-h-40 overflow-y-auto">
-              {eventData.participants.map((p) => (
-                  <div key={p.id} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-muted/50 transition-colors">
-                    <Avatar className="h-6 w-6 shrink-0">
-                      <AvatarFallback className="text-[10px] font-semibold">{p.name[0].toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <span className="text-xs font-medium truncate">{p.name}</span>
-                    {p.id === eventData.creatorId && (
-                        <Badge variant="secondary" className="text-[10px] h-5 px-2">Host</Badge>
-                    )}
-                  </div>
-              ))}
+              {eventData.participants.map((p) => {
+                const canRemove = isCreator && p.id !== eventData.creatorId
+                return (
+                    <div
+                        key={p.id}
+                        className="flex items-center gap-2 p-1.5 rounded-md hover:bg-muted/50 transition-colors group"
+                    >
+                      <Avatar className="h-6 w-6 shrink-0">
+                        <AvatarFallback className="text-[10px] font-semibold">{p.name[0].toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <span className="text-xs font-medium truncate flex-1">{p.name}</span>
+                      {p.id === eventData.creatorId && (
+                          <Badge variant="secondary" className="text-[10px] h-5 px-2">
+                            Host
+                          </Badge>
+                      )}
+                      {canRemove && (
+                          <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => handleRemoveParticipant(p.id)}
+                              title="Remove participant"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                      )}
+                    </div>
+                )
+              })}
             </div>
             {!isLoggedIn && (
                 <Button className="w_full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>

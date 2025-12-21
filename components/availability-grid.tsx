@@ -526,7 +526,13 @@ export function AvailabilityGrid({
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setScrollMode(!scrollMode)}
+                        onClick={() => {
+                            const next = !scrollMode
+                            if (next && disableMode) {
+                                onToggleDisableMode() // exiting paint -> enter scroll, ensure disable mode is off
+                            }
+                            setScrollMode(next)
+                        }}
                         className={cn("transition-all rounded-full text-xs", scrollMode && "bg-accent text-accent-foreground shadow-sm")}
                     >
                         {scrollMode ? "Scroll Mode" : "Paint Mode"}
@@ -571,7 +577,6 @@ export function AvailabilityGrid({
                             const statuses = expandedDates.map((date) => getSlotStatus(date, hour, minute))
                             const allHidden = statuses.every((s) => shouldHideSlot(s.isDisabled))
 
-                            // If the whole row is disabled/hidden, collapse the row entirely.
                             if (allHidden) return null
 
                             return (
@@ -582,7 +587,6 @@ export function AvailabilityGrid({
 
                                     {statuses.map(({ key, isMyAvailability, availableCount, total, participants, isDisabled }) => {
                                         if (shouldHideSlot(isDisabled)) {
-                                            // Render spacer to keep columns aligned
                                             return <div key={key} className="w-32 md:w-40 shrink-0 h-10" aria-hidden />
                                         }
 
