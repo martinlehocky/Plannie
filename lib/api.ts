@@ -1,29 +1,33 @@
 // Simple token helpers
-export const setTokens = (access: string, refresh: string) => {
+export const setTokens = (access?: string | null) => {
+    if (!access) {
+        clearTokens()
+        return
+    }
     localStorage.setItem("token", access)
-    localStorage.setItem("refresh_token", refresh)
 }
+
 export const clearTokens = () => {
     localStorage.removeItem("token")
-    localStorage.removeItem("refresh_token")
+    localStorage.removeItem("refresh_token") // legacy cleanup
     localStorage.removeItem("username")
 }
-export const getAccessToken = () => (typeof window !== "undefined" ? localStorage.getItem("token") : null)
-const getRefreshToken = () => (typeof window !== "undefined" ? localStorage.getItem("refresh_token") : null)
 
-// Refresh flow
+export const getAccessToken = (): string | undefined =>
+    typeof window !== "undefined" ? localStorage.getItem("token") ?? undefined : undefined
+
+// Refresh flow using HttpOnly refresh cookie
 const refreshAccessToken = async () => {
-    const rt = getRefreshToken()
-    if (!rt) throw new Error("no refresh token")
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/refresh`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: rt }),
+        body: "{}",
     })
     if (!res.ok) throw new Error("refresh failed")
     const data = await res.json()
-    if (data.token && data.refresh_token) {
-        setTokens(data.token, data.refresh_token)
+    if (data.token) {
+        setTokens(data.token)
         return data.token as string
     }
     throw new Error("invalid refresh response")
@@ -31,26 +35,39 @@ const refreshAccessToken = async () => {
 
 // fetchWithAuth: retries once after refresh on 401
 export const fetchWithAuth = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const doFetch = async (): Promise<Response> => {
-        const t = getAccessToken()
+    const doFetch = async (token?: string): Promise<Response> => {
         const headers = new Headers(init.headers || {})
-        if (t) headers.set("Authorization", `Bearer ${t}`)
-        headers.set("Content-Type", headers.get("Content-Type") || "application/json")
-        return fetch(input, { ...init, headers })
+        if (token) headers.set("Authorization", `Bearer ${token}`)
+        if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json")
+        return fetch(input, { ...init, headers, credentials: "include" })
     }
 
-    let res = await doFetch()
+    const current = getAccessToken()
+    let res = await doFetch(current)
     if (res.status === 401) {
         try {
             const newToken = await refreshAccessToken()
-            const headers = new Headers(init.headers || {})
-            headers.set("Authorization", `Bearer ${newToken}`)
-            headers.set("Content-Type", headers.get("Content-Type") || "application/json")
-            res = await fetch(input, { ...init, headers })
+            res = await doFetch(newToken)
         } catch {
             clearTokens()
             throw new Error("auth_failed")
         }
     }
     return res
+}
+
+// Optional: call this on logout
+export const logout = async () => {
+    try {
+        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/logout`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+        })
+    } catch {
+        // ignore network errors on logout
+    } finally {
+        clearTokens()
+    }
 }

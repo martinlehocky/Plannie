@@ -598,7 +598,7 @@ export function AvailabilityGrid({
                                                 isDisabled={isDisabled}
                                                 disableMode={disableMode}
                                                 isCreator={isCreator}
-                                                disableTooltip={isPainting || (disableMode && isCreator)}
+                                                disableTooltip={isPainting || (disableMode && isCreator) || !scrollMode}
                                                 scrollMode={scrollMode}
                                                 onMouseDown={(e) => handleMouseDown(e, key, isMyAvailability, isDisabled)}
                                                 onMouseEnter={() => handleMouseEnter(key, isDisabled)}

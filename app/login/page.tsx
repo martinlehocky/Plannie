@@ -10,7 +10,8 @@ import { useToast } from "@/hooks/use-toast"
 import { zxcvbn, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
 import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en"
-import { setTokens, clearTokens } from "@/lib/api"
+import { setTokens } from "@/lib/api"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -89,11 +90,12 @@ export default function LoginPage() {
             const resLogin = await fetch(`${API_BASE}/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include", // receive HttpOnly refresh cookie
                 body: JSON.stringify({ username, password }),
             })
             const dataLogin = await resLogin.json().catch(() => ({}))
             if (resLogin.ok && dataLogin.token) {
-                setTokens(dataLogin.token, dataLogin.refresh_token || "")
+                setTokens(dataLogin.token) // access token only; refresh is HttpOnly cookie
                 localStorage.setItem("username", dataLogin.username || username)
                 toast({
                     title: isRegister ? "Account created" : "Success",
@@ -130,12 +132,15 @@ export default function LoginPage() {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
-            <div className="absolute top-4 left-4">
+            <div className="absolute top-4 left-4 flex items-center gap-2">
                 <Link href="/">
                     <Button variant="outline" size="sm" className="font-semibold">
                         ← Back to Home
                     </Button>
                 </Link>
+            </div>
+            <div className="absolute top-4 right-4">
+                <ThemeToggle />
             </div>
 
             <Card className="w-full max-w-md shadow-lg border-2">

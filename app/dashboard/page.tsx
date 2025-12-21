@@ -20,7 +20,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { fetchWithAuth, clearTokens } from "@/lib/api"
+import { fetchWithAuth, clearTokens, logout } from "@/lib/api"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -77,8 +77,8 @@ export default function Dashboard() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
-    const handleLogout = () => {
-        clearTokens()
+    const handleLogout = async () => {
+        await logout()
         router.push("/login")
     }
 

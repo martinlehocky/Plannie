@@ -41,7 +41,6 @@ Security & Architecture Notes
 - Tiered rate limiting: auth 3/min, reads 5/min, writes 10/min.
 - Graceful shutdown closes DB.
 - Indexes on username, creator_id, event_id.
-- Backward-compatible API shapes.
 - SSE: lightweight broadcaster per event for near-real-time updates.
 */
 
@@ -51,15 +50,17 @@ var (
 )
 
 const (
-	accessTTL        = 15 * time.Minute
-	refreshTTL       = 30 * 24 * time.Hour
-	lockoutThreshold = 5
-	lockoutWindow    = 15 * time.Minute
-	schemaVersion    = 1
+	accessTTL         = 15 * time.Minute
+	refreshTTL        = 30 * 24 * time.Hour
+	lockoutThreshold  = 5
+	lockoutWindow     = 15 * time.Minute
+	schemaVersion     = 1
+	refreshCookieName = "rt"
 )
 
 var (
-	reqTimeout = 5 * time.Second // override via REQUEST_TIMEOUT_MS
+	reqTimeout   = 5 * time.Second // override via REQUEST_TIMEOUT_MS
+	cookieSecure = true            // override via COOKIE_SECURE=false for local HTTP
 )
 
 // SSE broadcaster
@@ -476,7 +477,19 @@ func buildCORS() cors.Config {
 	}
 	cfg.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"}
 	cfg.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+	cfg.AllowCredentials = true
 	return cfg
+}
+
+// Cookies
+func setRefreshCookie(c *gin.Context, token string) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(refreshCookieName, token, int(refreshTTL/time.Second), "/", "", cookieSecure, true)
+}
+
+func clearRefreshCookie(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(refreshCookieName, "", -1, "/", "", cookieSecure, true)
 }
 
 // Auth middleware
@@ -522,6 +535,10 @@ func main() {
 	}
 	jwtSecret = []byte(secret)
 
+	if cs := os.Getenv("COOKIE_SECURE"); strings.ToLower(cs) == "false" {
+		cookieSecure = false
+	}
+
 	dbPath := os.Getenv("DATABASE_PATH")
 	if dbPath == "" {
 		dbPath = "app.db"
@@ -564,6 +581,7 @@ func main() {
 	r.POST("/register", rateLimit(3, 3), registerHandler)
 	r.POST("/login", rateLimit(3, 3), loginHandler)
 	r.POST("/refresh", rateLimit(3, 3), refreshHandler)
+	r.POST("/logout", rateLimit(3, 3), logoutHandler)
 
 	// Protected routes
 	authProtected := r.Group("/")
@@ -732,6 +750,9 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
+	// Set HttpOnly refresh cookie and return access token
+	setRefreshCookie(c, refresh)
+
 	c.JSON(http.StatusOK, gin.H{
 		"token":         access,
 		"refresh_token": refresh,
@@ -746,9 +767,11 @@ func refreshHandler(c *gin.Context) {
 	var input struct {
 		RefreshToken string `json:"refresh_token"`
 	}
-	if err := c.BindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
+	_ = c.BindJSON(&input) // ignore error; we also read cookie
+	if input.RefreshToken == "" {
+		if cookie, err := c.Cookie(refreshCookieName); err == nil {
+			input.RefreshToken = cookie
+		}
 	}
 	if input.RefreshToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing refresh token"})
@@ -844,10 +867,53 @@ func refreshHandler(c *gin.Context) {
 		return
 	}
 
+	// Set new refresh cookie
+	setRefreshCookie(c, newRefresh)
+
 	c.JSON(http.StatusOK, gin.H{
 		"token":         access,
 		"refresh_token": newRefresh,
 	})
+}
+
+func logoutHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	var input struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	_ = c.BindJSON(&input)
+	if input.RefreshToken == "" {
+		if cookie, err := c.Cookie(refreshCookieName); err == nil {
+			input.RefreshToken = cookie
+		}
+	}
+	clearRefreshCookie(c)
+
+	if input.RefreshToken == "" {
+		c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
+		return
+	}
+
+	parsed, err := jwt.ParseWithClaims(input.RefreshToken, &jwt.RegisteredClaims{}, func(t *jwt.Token) (interface{}, error) {
+		return jwtSecret, nil
+	})
+	if err != nil || !parsed.Valid {
+		c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
+		return
+	}
+	claims, _ := parsed.Claims.(*jwt.RegisteredClaims)
+	if claims == nil || claims.ID == "" {
+		c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
+		return
+	}
+
+	if _, err := db.ExecContext(ctx, `UPDATE refresh_tokens SET revoked = 1 WHERE id = ?`, claims.ID); err != nil {
+		logIfTimeout(err, "logout: revoke")
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
 }
 
 func updateUserHandler(c *gin.Context) {
@@ -1536,4 +1602,5 @@ JWT_SECRET=change_me
 DATABASE_PATH=app.db
 CORS_ORIGINS=http://localhost:3000
 REQUEST_TIMEOUT_MS=5000
+COOKIE_SECURE=false
 */

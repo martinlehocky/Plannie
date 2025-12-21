@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar, Clock, Users, Share2, Sparkles, Zap } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { clearTokens } from "@/lib/api"
+import { logout } from "@/lib/api"
 
 export default function LandingPage() {
     const router = useRouter()
@@ -21,8 +21,8 @@ export default function LandingPage() {
         setUsername(storedUsername)
     }, [])
 
-    const handleSignOut = () => {
-        clearTokens()
+    const handleSignOut = async () => {
+        await logout()
         setIsLoggedIn(false)
         setUsername("")
     }
