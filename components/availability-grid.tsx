@@ -141,7 +141,7 @@ const SlotCell = memo(function SlotCell({
                         ? "bg-purple-700 text-white shadow-md hover:bg-purple-800 ring-1 ring-inset ring-black/20"
                         : availableCount > 0
                             ? "text-slate-50"
-                            : "bg-muted",
+                            : "bg-[#09090b]",
                 disableMode && isCreator && "ring-1 ring-primary/60"
             )}
             style={
@@ -626,7 +626,7 @@ export function AvailabilityGrid({
                 )}
 
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-background/70 backdrop-blur-sm border border-border/40 shadow-sm">
-                    <div className="w-3 h-3 md:w-4 md:h-4 rounded bg-muted/60 shrink-0" />
+                    <div className="w-3 h-3 md:w-4 md:h-4 rounded bg-[#09090b] shrink-0" />
                     <span className="whitespace-nowrap">Unavailable</span>
                 </div>
 
