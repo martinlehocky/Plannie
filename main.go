@@ -38,10 +38,11 @@ Security & Architecture Notes
 - Username/password validation: username alnum 3–30; password ≥8 with a number and a special character.
 - JWT: short-lived access (15m) + refresh tokens (family/version) for revocation/rotation.
 - CORS via env; security headers middleware added.
-- Tiered rate limiting: auth 3/min, reads 5/min, writes 10/min.
+- Tiered rate limiting: auth 10/min, reads 60/min, writes 20-30/min.
 - Graceful shutdown closes DB.
 - Indexes on username, creator_id, event_id.
 - SSE: lightweight broadcaster per event for near-real-time updates.
+- Performance: WAL mode enabled for high concurrency.
 */
 
 var (
@@ -51,7 +52,8 @@ var (
 
 const (
 	accessTTL         = 15 * time.Minute
-	refreshTTL        = 30 * 24 * time.Hour
+	refreshTTL        = 30 * 24 * time.Hour // long-lived (remember me)
+	refreshTTLShort   = 24 * time.Hour      // shorter when rememberMe=false
 	lockoutThreshold  = 5
 	lockoutWindow     = 15 * time.Minute
 	schemaVersion     = 1
@@ -106,7 +108,6 @@ func ssePublish(eventID string, payload []byte) {
 		select {
 		case sub.ch <- payload:
 		default:
-			// drop slow subscriber
 			delete(sseSubs[eventID], sub)
 			close(sub.ch)
 		}
@@ -175,7 +176,7 @@ type EventUpdate struct {
 var (
 	usernameRe = regexp.MustCompile(`^[a-zA-Z0-9]{3,30}$`)
 	passDigit  = regexp.MustCompile(`[0-9]`)
-	passSpec   = regexp.MustCompile(`[!@#\$%\^&\*\(\)\-\_\+\=\{\}\[\]:;\"'<>,\.\?/\\\|]`)
+	passSpec   = regexp.MustCompile(`[!@#\$%\^&\*\(\)\-\_\+\=\{\}\[\]:;\"'<>,\\.\?/\\\|]`)
 )
 
 func validateUsername(u string) bool { return usernameRe.MatchString(u) }
@@ -213,9 +214,9 @@ func signAccessToken(userID string) (string, error) {
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtSecret)
 }
 
-func signRefreshToken(userID, family string, version int) (string, string, error) {
+func signRefreshToken(userID, family string, version int, expiresAt time.Time) (string, string, error) {
 	rc := jwt.RegisteredClaims{
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshTTL)),
+		ExpiresAt: jwt.NewNumericDate(expiresAt),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 		Subject:   userID,
 		ID:        fmt.Sprintf("%s:%d", family, version),
@@ -243,7 +244,8 @@ func parseAccessToken(tok string) (*Claims, error) {
 
 // DB open & migration
 func openDB(path string) (*sql.DB, error) {
-	d, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on", path))
+	// Optimisation: Enable WAL mode for better concurrency
+	d, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on&_journal_mode=WAL", path))
 	if err != nil {
 		return nil, err
 	}
@@ -482,9 +484,16 @@ func buildCORS() cors.Config {
 }
 
 // Cookies
-func setRefreshCookie(c *gin.Context, token string) {
+func setRefreshCookie(c *gin.Context, token string, expiresAt time.Time, remember bool) {
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(refreshCookieName, token, int(refreshTTL/time.Second), "/", "", cookieSecure, true)
+	maxAge := 0
+	if remember {
+		remaining := int(time.Until(expiresAt) / time.Second)
+		if remaining > 0 {
+			maxAge = remaining
+		}
+	}
+	c.SetCookie(refreshCookieName, token, maxAge, "/", "", cookieSecure, true)
 }
 
 func clearRefreshCookie(c *gin.Context) {
@@ -500,7 +509,6 @@ func authnMiddleware() gin.HandlerFunc {
 		if strings.HasPrefix(h, "Bearer ") {
 			token = strings.TrimPrefix(h, "Bearer ")
 		} else {
-			// Allow token via query (for SSE/EventSource)
 			token = c.Query("token")
 		}
 		if token == "" {
@@ -578,28 +586,28 @@ func main() {
 	})
 
 	// Auth endpoints with tiered limits
-	r.POST("/register", rateLimit(3, 3), registerHandler)
-	r.POST("/login", rateLimit(3, 3), loginHandler)
-	r.POST("/refresh", rateLimit(3, 3), refreshHandler)
-	r.POST("/logout", rateLimit(3, 3), logoutHandler)
+	r.POST("/register", rateLimit(10, 10), registerHandler)
+	r.POST("/login", rateLimit(10, 10), loginHandler)
+	r.POST("/refresh", rateLimit(10, 10), refreshHandler)
+	r.POST("/logout", rateLimit(10, 10), logoutHandler)
 
 	// Protected routes
 	authProtected := r.Group("/")
 	authProtected.Use(authnMiddleware())
 
-	authProtected.PUT("/users/me", rateLimit(10, 10), updateUserHandler)
-	authProtected.GET("/events/:id/stream", rateLimit(5, 5), sseHandler)
+	authProtected.PUT("/users/me", rateLimit(30, 30), updateUserHandler)
+	authProtected.GET("/events/:id/stream", rateLimit(60, 60), sseHandler) // Increased for SSE stability
 
-	authProtected.POST("/events", rateLimit(10, 10), createEventHandler)
-	r.GET("/events/:id", rateLimit(5, 5), getEventHandler)
-	authProtected.PUT("/events/:id", rateLimit(10, 10), updateEventHandler)
-	authProtected.DELETE("/events/:id", rateLimit(10, 10), deleteEventHandler)
+	authProtected.POST("/events", rateLimit(20, 20), createEventHandler)
+	r.GET("/events/:id", rateLimit(60, 60), getEventHandler) // Critical fix: increased from 5 to 60
+	authProtected.PUT("/events/:id", rateLimit(30, 30), updateEventHandler)
+	authProtected.DELETE("/events/:id", rateLimit(20, 20), deleteEventHandler)
 
-	authProtected.POST("/events/:id/invite", rateLimit(10, 10), inviteHandler)
-	authProtected.POST("/events/:id/join", rateLimit(10, 10), joinHandler)
-	authProtected.POST("/events/:id/leave", rateLimit(10, 10), leaveHandler)
+	authProtected.POST("/events/:id/invite", rateLimit(20, 20), inviteHandler)
+	authProtected.POST("/events/:id/join", rateLimit(20, 20), joinHandler)
+	authProtected.POST("/events/:id/leave", rateLimit(20, 20), leaveHandler)
 
-	authProtected.GET("/my-events", rateLimit(5, 5), myEventsHandler)
+	authProtected.GET("/my-events", rateLimit(30, 30), myEventsHandler)
 
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -683,8 +691,9 @@ func loginHandler(c *gin.Context) {
 	defer cancel()
 
 	var input struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username   string `json:"username"`
+		Password   string `json:"password"`
+		RememberMe bool   `json:"rememberMe"`
 	}
 	if err := c.BindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
@@ -731,7 +740,14 @@ func loginHandler(c *gin.Context) {
 
 	family := uuid.NewString()
 	version := 1
-	refresh, rtID, err := signRefreshToken(u.ID, family, version)
+	now := time.Now().UTC()
+	refreshExpires := now.Add(refreshTTL)
+	remember := input.RememberMe
+	if !remember {
+		refreshExpires = now.Add(refreshTTLShort)
+	}
+
+	refresh, rtID, err := signRefreshToken(u.ID, family, version, refreshExpires)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
 		return
@@ -741,17 +757,15 @@ func loginHandler(c *gin.Context) {
 		serverError(c, "login: hash refresh", err)
 		return
 	}
-	now := time.Now().UTC()
-	expires := now.Add(refreshTTL)
+
 	if _, err := db.ExecContext(ctx, `INSERT INTO refresh_tokens(id, user_id, family_id, version, token_hash, expires_at, created_at, revoked) 
 		VALUES (?,?,?,?,?,?,?,0)`,
-		rtID, u.ID, family, version, string(rtHash), expires, now); err != nil {
+		rtID, u.ID, family, version, string(rtHash), refreshExpires, now); err != nil {
 		serverError(c, "login: insert refresh", err)
 		return
 	}
 
-	// Set HttpOnly refresh cookie and return access token
-	setRefreshCookie(c, refresh)
+	setRefreshCookie(c, refresh, refreshExpires, remember)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":         access,
@@ -767,7 +781,7 @@ func refreshHandler(c *gin.Context) {
 	var input struct {
 		RefreshToken string `json:"refresh_token"`
 	}
-	_ = c.BindJSON(&input) // ignore error; we also read cookie
+	_ = c.BindJSON(&input)
 	if input.RefreshToken == "" {
 		if cookie, err := c.Cookie(refreshCookieName); err == nil {
 			input.RefreshToken = cookie
@@ -824,8 +838,9 @@ func refreshHandler(c *gin.Context) {
 		return
 	}
 
+	expires := stored.ExpiresAt
 	newVersion := version + 1
-	newRefresh, newRtID, err := signRefreshToken(userID, family, newVersion)
+	newRefresh, newRtID, err := signRefreshToken(userID, family, newVersion, expires)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
 		return
@@ -836,7 +851,6 @@ func refreshHandler(c *gin.Context) {
 		return
 	}
 	now := time.Now().UTC()
-	expires := now.Add(refreshTTL)
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -867,8 +881,8 @@ func refreshHandler(c *gin.Context) {
 		return
 	}
 
-	// Set new refresh cookie
-	setRefreshCookie(c, newRefresh)
+	remember := time.Until(expires) > 0
+	setRefreshCookie(c, newRefresh, expires, remember)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":         access,
@@ -991,7 +1005,6 @@ func updateUserHandler(c *gin.Context) {
 		return
 	}
 
-	// Revoke all refresh tokens if password changed
 	if changedPassword {
 		if _, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?`, userID); err != nil {
 			serverError(c, "updateUser: revoke refresh", err)
@@ -1008,7 +1021,6 @@ func updateUserHandler(c *gin.Context) {
 }
 
 func sseHandler(c *gin.Context) {
-	// long-lived SSE: no short timeout
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Streaming unsupported"})
@@ -1024,7 +1036,6 @@ func sseHandler(c *gin.Context) {
 	sub := sseSubscribe(eventID)
 	defer sseUnsubscribe(eventID, sub)
 
-	// initial ping
 	fmt.Fprintf(c.Writer, "event: ping\ndata: ok\n\n")
 	flusher.Flush()
 
@@ -1145,7 +1156,6 @@ func createEventHandler(c *gin.Context) {
 		return
 	}
 
-	// publish new event state
 	ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -1325,7 +1335,6 @@ func updateEventHandler(c *gin.Context) {
 			return
 		}
 
-		// notify
 		ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
 		c.JSON(http.StatusOK, gin.H{"status": "updated"})
 		return
@@ -1370,7 +1379,6 @@ func updateEventHandler(c *gin.Context) {
 		return
 	}
 
-	// notify
 	ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
 	c.JSON(http.StatusOK, gin.H{"status": "updated"})
 }
@@ -1439,7 +1447,7 @@ func inviteHandler(c *gin.Context) {
 	var targetID string
 	err := db.QueryRowContext(ctx, `SELECT id FROM users WHERE username = ?`, body.Username).Scan(&targetID)
 	if err == sql.ErrNoRows {
-		// Do not reveal existence to avoid enumeration
+		// Prevent enumeration by returning same message as success
 		c.JSON(http.StatusOK, gin.H{"message": "Invite processed"})
 		return
 	} else if err != nil {
@@ -1476,7 +1484,7 @@ func inviteHandler(c *gin.Context) {
 	}
 
 	ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
-	c.JSON(http.StatusOK, gin.H{"message": "Invited"})
+	c.JSON(http.StatusOK, gin.H{"message": "Invite processed"})
 }
 
 func joinHandler(c *gin.Context) {

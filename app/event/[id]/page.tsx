@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useEffect, useMemo, useState } from "react"
+import { use, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -93,8 +93,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [userTimezone, setUserTimezone] = useState("")
   const [inviteUsername, setInviteUsername] = useState("")
   const [sseConnected, setSseConnected] = useState(false)
-
   const [draftDirty, setDraftDirty] = useState(false)
+
+  const sseRetryDelayRef = useRef(5000) // start 5s
+  const sseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const token = useMemo(() => (typeof window !== "undefined" ? localStorage.getItem("token") : null), [])
   const tokenClaims = useMemo(() => decodeToken(token), [token])
@@ -128,6 +130,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
     try {
       const res = await fetch(`${API_BASE}/events/${id}`)
+      // If rate limited, skip updating state; keep current view.
+      if (res.status === 429) {
+        return
+      }
       if (res.ok) {
         const data: EventData = await res.json()
         data.disabledSlots = data.disabledSlots || []
@@ -135,7 +141,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         syncUserState(data)
         setRenameValue(data.name)
       } else {
-        setEventData(null)
+        // only mark not found on 404; otherwise, keep existing state
+        if (res.status === 404) setEventData(null)
       }
     } catch (error) {
       console.error("Failed to fetch event", error)
@@ -144,28 +151,49 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
+  // Poll only as a fallback when SSE is not connected; slow interval to avoid 429
   useEffect(() => {
     fetchEventData()
-    const timer = setInterval(fetchEventData, sseConnected ? 60000 : 15000)
+    if (sseConnected) return
+    const timer = setInterval(fetchEventData, 120000) // 2-minute fallback poll
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, sseConnected, draftDirty])
 
   useEffect(() => {
     if (!token) return
-    const url = `${API_BASE}/events/${id}/stream?token=${encodeURIComponent(token)}`
-    const src = new EventSource(url)
-    src.onopen = () => setSseConnected(true)
-    src.onerror = () => {
-      setSseConnected(false)
-      src.close()
+
+    const connect = () => {
+      const url = `${API_BASE}/events/${id}/stream?token=${encodeURIComponent(token)}`
+      const src = new EventSource(url)
+      src.onopen = () => {
+        setSseConnected(true)
+        sseRetryDelayRef.current = 5000 // reset backoff
+      }
+      src.onerror = () => {
+        setSseConnected(false)
+        src.close()
+        // backoff reconnect
+        const delay = Math.min(sseRetryDelayRef.current, 60000) // cap at 60s
+        if (sseTimerRef.current) clearTimeout(sseTimerRef.current)
+        sseTimerRef.current = setTimeout(() => {
+          sseTimerRef.current = null
+          sseRetryDelayRef.current = Math.min(sseRetryDelayRef.current * 2, 60000)
+          connect()
+        }, delay)
+      }
+      src.onmessage = () => {
+        if (!draftDirty) fetchEventData()
+      }
     }
-    src.onmessage = () => {
-      if (!draftDirty) fetchEventData()
-    }
+
+    connect()
     return () => {
       setSseConnected(false)
-      src.close()
+      if (sseTimerRef.current) {
+        clearTimeout(sseTimerRef.current)
+        sseTimerRef.current = null
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, token, draftDirty])
@@ -173,6 +201,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const handleSaveAvailability = async (availability: Record<string, boolean>) => {
     if (!eventData || !currentParticipant) return
 
+    // 1. Prepare clean data
     const disabled = eventData.disabledSlots || []
     const cleaned: Record<string, boolean> = {}
     Object.entries(availability).forEach(([k, v]) => {
@@ -180,8 +209,22 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     })
 
     const updatedParticipant = { ...currentParticipant, availability: cleaned }
-    const updatedParticipants = eventData.participants.filter((p) => p.id !== currentParticipant.id).concat(updatedParticipant)
 
+    // Preserve participant order
+    const updatedParticipants = eventData.participants.map(p =>
+        p.id === currentParticipant.id ? updatedParticipant : p
+    )
+
+    // 2. Snapshot current state for rollback
+    const previousEventData = eventData
+    const previousParticipant = currentParticipant
+
+    // 3. OPTIMISTIC UPDATE: Update UI immediately
+    setEventData({ ...eventData, participants: updatedParticipants })
+    setCurrentParticipant(updatedParticipant)
+    setDraftDirty(false)
+
+    // 4. Construct payload
     const payload: Partial<EventData> & { participants: Participant[] } = {
       ...eventData,
       participants: updatedParticipants,
@@ -196,11 +239,16 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         body: JSON.stringify(payload),
       })
       const d = await res.json().catch(() => ({}))
+
       if (res.ok) {
-        setDraftDirty(false)
-        await fetchEventData()
         toast({ title: "Availability Saved", description: "Updated successfully." })
+        // Success: Do nothing else, UI is already correct.
       } else {
+        // Failure: Rollback
+        setEventData(previousEventData)
+        setCurrentParticipant(previousParticipant)
+        setDraftDirty(true)
+
         if (res.status === 401) {
           clearTokens()
           router.push("/login")
@@ -209,6 +257,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         toast({ title: "Error", description: d.error || "Could not save", variant: "destructive" })
       }
     } catch (error) {
+      // Network Error: Rollback
+      setEventData(previousEventData)
+      setCurrentParticipant(previousParticipant)
+      setDraftDirty(true)
       toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
     }
   }
@@ -667,7 +719,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                           hideDisabledSlots={!isCreator}
                       />
                   ) : (
-                      <div className="flex flex-col items-center justify-center h-full textcenter p-6">
+                      <div className="flex flex-col items-center justify-center h-full text-center p-6">
                         <LogIn className="h-12 w-12 text-muted-foreground mb-4" />
                         <h3 className="text-lg font-semibold">Please Sign In</h3>
                         <p className="text-sm text-muted-foreground mt-2 mb-4">You must be logged in to participate.</p>
@@ -751,7 +803,7 @@ function SidebarContent({
                         key={i}
                         className="rounded-lg border bg-card p-2.5 space-y-1.5 shadow-sm hover:shadow transition-shadow"
                     >
-                      <div className="flex items-center justify_between gap-2">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="text-xs font-semibold text-success truncate">{formatTimeInTz(time.slot)}</div>
                         <Badge variant="secondary" className="shrink-0 text-[10px] h-5 px-2 font-semibold">
                           {time.count}/{eventData.participants.length}
@@ -841,7 +893,7 @@ function SidebarContent({
               })}
             </div>
             {!isLoggedIn && (
-                <Button className="w_full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
+                <Button className="w-full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
                   <LogIn className="h-3 w-3 mr-1.5" />
                   Sign In
                 </Button>

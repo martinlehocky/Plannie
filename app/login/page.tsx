@@ -30,6 +30,7 @@ export default function LoginPage() {
     const [isRegister, setIsRegister] = useState(false)
     const [username, setUsername] = useState("")
     const [password, setPassword] = useState("")
+    const [rememberMe, setRememberMe] = useState(true)
     const [crackTime, setCrackTime] = useState("")
     const [score, setScore] = useState(0) // 0 to 4
     const [loading, setLoading] = useState(false)
@@ -91,11 +92,11 @@ export default function LoginPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include", // receive HttpOnly refresh cookie
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify({ username, password, rememberMe }),
             })
             const dataLogin = await resLogin.json().catch(() => ({}))
             if (resLogin.ok && dataLogin.token) {
-                setTokens(dataLogin.token) // access token only; refresh is HttpOnly cookie
+                setTokens(dataLogin.token) // access token; refresh is HttpOnly cookie
                 localStorage.setItem("username", dataLogin.username || username)
                 toast({
                     title: isRegister ? "Account created" : "Success",
@@ -183,6 +184,19 @@ export default function LoginPage() {
                                 </div>
                             </div>
                         )}
+                    </div>
+
+                    <div className="flex items-center gap-2 text-sm">
+                        <input
+                            id="remember"
+                            type="checkbox"
+                            className="h-4 w-4 accent-primary"
+                            checked={rememberMe}
+                            onChange={(e) => setRememberMe(e.target.checked)}
+                        />
+                        <label htmlFor="remember" className="select-none cursor-pointer">
+                            Remember me
+                        </label>
                     </div>
 
                     <Button className="w-full h-11 text-base mt-2" onClick={handleAuth} disabled={loading}>

@@ -1,9 +1,5 @@
 // Simple token helpers
-export const setTokens = (access?: string | null) => {
-    if (!access) {
-        clearTokens()
-        return
-    }
+export const setTokens = (access: string, _refresh?: string) => {
     localStorage.setItem("token", access)
 }
 
@@ -13,18 +9,28 @@ export const clearTokens = () => {
     localStorage.removeItem("username")
 }
 
-export const getAccessToken = (): string | undefined =>
-    typeof window !== "undefined" ? localStorage.getItem("token") ?? undefined : undefined
+// Return undefined instead of null to satisfy token?: string
+export const getAccessToken = () =>
+    typeof window !== "undefined" ? localStorage.getItem("token") || undefined : undefined
 
 // Refresh flow using HttpOnly refresh cookie
 const refreshAccessToken = async () => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/refresh`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-    })
+    const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/refresh`,
+        {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: "{}", // cookie carries the refresh token
+        }
+    )
+
+    // Treat missing/expired refresh cookie as auth failure
+    if (res.status === 400 || res.status === 401) {
+        throw new Error("refresh_auth")
+    }
     if (!res.ok) throw new Error("refresh failed")
+
     const data = await res.json()
     if (data.token) {
         setTokens(data.token)
@@ -33,7 +39,7 @@ const refreshAccessToken = async () => {
     throw new Error("invalid refresh response")
 }
 
-// fetchWithAuth: retries once after refresh on 401
+// fetchWithAuth: retries once after refresh on 401; on refresh failure returns a 401 response
 export const fetchWithAuth = async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const doFetch = async (token?: string): Promise<Response> => {
         const headers = new Headers(init.headers || {})
@@ -49,8 +55,9 @@ export const fetchWithAuth = async (input: RequestInfo | URL, init: RequestInit 
             const newToken = await refreshAccessToken()
             res = await doFetch(newToken)
         } catch {
+            // refresh failed (likely expired/missing cookie) — clear and signal auth failure
             clearTokens()
-            throw new Error("auth_failed")
+            return new Response(null, { status: 401 })
         }
     }
     return res
