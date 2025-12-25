@@ -82,6 +82,7 @@ type AvailabilityGridProps = {
     onResetDisabled: () => void
     resetDisabledLoading: boolean
     hideDisabledSlots?: boolean // non-creators hide by default; creators hide only in scroll mode
+    onSlotInteraction?: () => void
 }
 
 const SlotCell = memo(function SlotCell({
@@ -239,6 +240,7 @@ export function AvailabilityGrid({
                                      onResetDisabled,
                                      resetDisabledLoading,
                                      hideDisabledSlots,
+                                     onSlotInteraction,
                                  }: AvailabilityGridProps) {
     const disabledSetFull = useMemo(() => new Set(disabledSlots), [disabledSlots])
 
@@ -358,8 +360,9 @@ export function AvailabilityGrid({
             setIsPainting(true)
             setPaintMode(newValue)
             setAvailabilityChecked(key, newValue)
+            onSlotInteraction?.()
         },
-        [scrollGuard, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked]
+        [scrollGuard, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked, onSlotInteraction]
     )
 
     const handleMouseEnter = useCallback(
@@ -415,8 +418,9 @@ export function AvailabilityGrid({
             setIsPainting(true)
             setPaintMode(newValue)
             setAvailabilityChecked(key, newValue)
+            onSlotInteraction?.()
         },
-        [scrollGuard, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked]
+        [scrollGuard, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked, onSlotInteraction]
     )
 
     const handleTouchMove = useCallback(

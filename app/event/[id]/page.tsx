@@ -94,6 +94,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [inviteUsername, setInviteUsername] = useState("")
   const [sseConnected, setSseConnected] = useState(false)
   const [draftDirty, setDraftDirty] = useState(false)
+  const [pendingDisabledSlots, setPendingDisabledSlots] = useState<string[]>([])
 
   const sseRetryDelayRef = useRef(5000) // start 5s
   const sseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -202,7 +203,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     if (!eventData || !currentParticipant) return
 
     // 1. Prepare clean data
-    const disabled = eventData.disabledSlots || []
+    const disabled = pendingDisabledSlots.length > 0 ? pendingDisabledSlots : (eventData.disabledSlots || [])
     const cleaned: Record<string, boolean> = {}
     Object.entries(availability).forEach(([k, v]) => {
       if (!disabled.includes(k) && v) cleaned[k] = v
@@ -220,7 +221,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const previousParticipant = currentParticipant
 
     // 3. OPTIMISTIC UPDATE: Update UI immediately
-    setEventData({ ...eventData, participants: updatedParticipants })
+    setEventData({ ...eventData, participants: updatedParticipants, disabledSlots: disabled })
     setCurrentParticipant(updatedParticipant)
     setDraftDirty(false)
 
@@ -228,6 +229,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const payload: Partial<EventData> & { participants: Participant[] } = {
       ...eventData,
       participants: updatedParticipants,
+      disabledSlots: disabled,
     }
     if (!isCreator) {
       delete (payload as any).disabledSlots
@@ -242,6 +244,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
       if (res.ok) {
         toast({ title: "Availability Saved", description: "Updated successfully." })
+        setPendingDisabledSlots([])
         // Success: Do nothing else, UI is already correct.
       } else {
         // Failure: Rollback
@@ -267,6 +270,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   const handleCancelDraft = () => {
     setDraftDirty(false)
+    setPendingDisabledSlots([])
     fetchEventData()
   }
 
@@ -311,30 +315,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
-  const handleToggleDisabled = async (slotKey: string) => {
+  const handleToggleDisabled = (slotKey: string) => {
     if (!eventData || !isCreator) return
-    const current = new Set(eventData.disabledSlots || [])
+
+    const current = new Set(pendingDisabledSlots.length > 0 ? pendingDisabledSlots : (eventData.disabledSlots || []))
     if (current.has(slotKey)) current.delete(slotKey)
     else current.add(slotKey)
-    const disabledSlots = Array.from(current)
-    const updatedEvent: EventData = { ...eventData, disabledSlots }
 
-    try {
-      const res = await fetchWithAuth(`${API_BASE}/events/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(updatedEvent),
-      })
-      const d = await res.json().catch(() => ({}))
-      if (res.ok) {
-        setEventData(updatedEvent)
-        toast({ title: current.has(slotKey) ? "Slot disabled" : "Slot enabled" })
-      } else {
-        if (res.status === 401) clearTokens()
-        toast({ title: "Error", description: d.error || "Error updating", variant: "destructive" })
-      }
-    } catch {
-      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
-    }
+    setPendingDisabledSlots(Array.from(current))
   }
 
   const handleResetDisabled = async () => {
@@ -350,6 +338,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       const d = await res.json().catch(() => ({}))
       if (res.ok) {
         setEventData(updatedEvent)
+        setPendingDisabledSlots([])
         toast({ title: "Disabled times reset" })
       } else {
         if (res.status === 401) clearTokens()
@@ -709,7 +698,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                           allParticipants={eventData.participants}
                           onSave={handleSaveAvailability}
                           timezone={userTimezone}
-                          disabledSlots={disabledSlotsForGrid}
+                          disabledSlots={pendingDisabledSlots.length > 0 ? pendingDisabledSlots : disabledSlotsForGrid}
                           isCreator={isCreator}
                           disableMode={disableMode}
                           onToggleDisabled={handleToggleDisabled}
