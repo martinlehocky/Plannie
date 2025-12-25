@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { format, eachDayOfInterval, startOfDay, isBefore, isAfter } from "date-fns"
 import { cn } from "@/lib/utils"
-import { Users, Ban } from "lucide-react"
+import { Users, Ban, ChevronLeft, ChevronRight } from "lucide-react"
 
 function getVisualDate(utcKey: string, targetTimezone: string): Date {
     const ts = new Date(utcKey).getTime()
@@ -253,6 +253,21 @@ export function AvailabilityGrid({
     const [disableDragTarget, setDisableDragTarget] = useState<boolean | null>(null)
     const gridRef = useRef<HTMLDivElement>(null)
 
+    // Mobile specific: whether viewport is considered mobile (below md)
+    const [isMobile, setIsMobile] = useState<boolean>(() =>
+        typeof window !== "undefined" ? window.innerWidth < 768 : false
+    )
+    useEffect(() => {
+        function onResize() {
+            setIsMobile(window.innerWidth < 768)
+        }
+        window.addEventListener("resize", onResize)
+        return () => window.removeEventListener("resize", onResize)
+    }, [])
+
+    // Index for selected day on mobile. Desktop shows all days as before.
+    const [mobileDayIndex, setMobileDayIndex] = useState(0)
+
     // Hide rules:
     // - Non-creators: hide disabled slots (default true unless hideDisabledSlots explicitly false).
     // - Creators: hide disabled slots only when in scroll mode.
@@ -307,6 +322,13 @@ export function AvailabilityGrid({
 
         return eachDayOfInterval({ start, end })
     }, [dateRange, allParticipants, disabledSlots, timezone])
+
+    // Keep mobileDayIndex within bounds when expandedDates changes
+    useEffect(() => {
+        if (mobileDayIndex >= expandedDates.length) {
+            setMobileDayIndex(Math.max(0, expandedDates.length - 1))
+        }
+    }, [expandedDates, mobileDayIndex])
 
     const timeRows = useMemo(() => {
         const rows: { hour: number; minute: number; label: string }[] = []
@@ -492,6 +514,21 @@ export function AvailabilityGrid({
         setDisableDragTarget(null)
     }
 
+    // Mobile navigation helpers: show one day at a time on mobile
+    const visibleDates = useMemo(() => {
+        if (isMobile && expandedDates.length > 0) {
+            return [expandedDates[Math.min(Math.max(0, mobileDayIndex), expandedDates.length - 1)]]
+        }
+        return expandedDates
+    }, [isMobile, expandedDates, mobileDayIndex])
+
+    const goPrevDay = () => {
+        setMobileDayIndex((prev) => Math.max(0, prev - 1))
+    }
+    const goNextDay = () => {
+        setMobileDayIndex((prev) => Math.min(expandedDates.length - 1, prev + 1))
+    }
+
     return (
         <div className="flex flex-col h-full min-h-0">
             <div className="flex items-center justify-between mb-3 shrink-0">
@@ -502,48 +539,138 @@ export function AvailabilityGrid({
                     </p>
                 </div>
                 <div className="flex items-center space-x-2">
-                    {isCreator && disableMode && (
+                    {/* Mobile-only day navigation: hidden on md and up */}
+                    <div className="md:hidden flex items-center gap-2">
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={onResetDisabled}
-                            disabled={resetDisabledLoading}
-                            className="rounded-full text-xs"
+                            onClick={goPrevDay}
+                            disabled={mobileDayIndex <= 0}
+                            className="rounded-full p-1"
+                            aria-label="Previous day"
                         >
-                            {resetDisabledLoading ? "Resetting..." : "Reset Disabled"}
+                            <ChevronLeft className="h-4 w-4" />
                         </Button>
-                    )}
-                    {isCreator && !scrollMode && (
+                        <div className="text-sm font-medium">
+                            {expandedDates && expandedDates.length > 0
+                                ? format(expandedDates[Math.min(mobileDayIndex, expandedDates.length - 1)], "EEE, MMM d")
+                                : "No days"}
+                        </div>
                         <Button
-                            variant={disableMode ? "secondary" : "outline"}
+                            variant="outline"
                             size="sm"
-                            onClick={onToggleDisableMode}
-                            className={cn("rounded-full text-xs gap-1.5", disableMode && "border-primary/70")}
+                            onClick={goNextDay}
+                            disabled={mobileDayIndex >= expandedDates.length - 1}
+                            className="rounded-full p-1"
+                            aria-label="Next day"
                         >
-                            <Ban className="h-3.5 w-3.5" />
-                            {disableMode ? "Exit disable" : "Disable times"}
+                            <ChevronRight className="h-4 w-4" />
                         </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={handleResetAvailability} className="rounded-full text-xs">
-                        Reset
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            const next = !scrollMode
-                            if (next && disableMode) {
-                                onToggleDisableMode() // exiting paint -> enter scroll, ensure disable mode is off
-                            }
-                            setScrollMode(next)
-                        }}
-                        className={cn("transition-all rounded-full text-xs", scrollMode && "bg-accent text-accent-foreground shadow-sm")}
-                    >
-                        {scrollMode ? "Scroll Mode" : "Paint Mode"}
-                    </Button>
-                    <Button onClick={handleSave} size="sm" className="shadow-sm rounded-full">
-                        Save Changes
-                    </Button>
+                    </div>
+
+                    {/* Desktop & md+ buttons: keep original placement */}
+                    <div className="hidden md:flex items-center space-x-2">
+                        {isCreator && disableMode && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={onResetDisabled}
+                                disabled={resetDisabledLoading}
+                                className="rounded-full text-xs"
+                            >
+                                {resetDisabledLoading ? "Resetting..." : "Reset Disabled"}
+                            </Button>
+                        )}
+                        {isCreator && !scrollMode && (
+                            <Button
+                                variant={disableMode ? "secondary" : "outline"}
+                                size="sm"
+                                onClick={onToggleDisableMode}
+                                className={cn("rounded-full text-xs gap-1.5", disableMode && "border-primary/70")}
+                            >
+                                <Ban className="h-3.5 w-3.5" />
+                                {disableMode ? "Exit disable" : "Disable times"}
+                            </Button>
+                        )}
+                        <Button variant="outline" size="sm" onClick={handleResetAvailability} className="rounded-full text-xs">
+                            Reset
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                const next = !scrollMode
+                                if (next && disableMode) {
+                                    onToggleDisableMode() // exiting paint -> enter scroll, ensure disable mode is off
+                                }
+                                setScrollMode(next)
+                            }}
+                            className={cn("transition-all rounded-full text-xs", scrollMode && "bg-accent text-accent-foreground shadow-sm")}
+                        >
+                            {scrollMode ? "Scroll Mode" : "Paint Mode"}
+                        </Button>
+                        <Button onClick={handleSave} size="sm" className="shadow-sm rounded-full">
+                            Save Changes
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Mobile-only compact toolbar moved to the top and made sticky so it's more accessible on small screens */}
+            <div className="md:hidden sticky top-0 z-40 mb-3">
+                <div className="flex items-center justify-between gap-2 p-2 bg-background/95 border border-border/40 rounded-xl backdrop-blur-md">
+                    <div className="flex items-center gap-2">
+                        {isCreator && disableMode && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={onResetDisabled}
+                                disabled={resetDisabledLoading}
+                                className="rounded-full text-xs px-2 py-1"
+                            >
+                                {resetDisabledLoading ? "..." : "Reset"}
+                            </Button>
+                        )}
+                        {isCreator && !scrollMode && (
+                            <Button
+                                variant={disableMode ? "secondary" : "outline"}
+                                size="sm"
+                                onClick={onToggleDisableMode}
+                                className={cn("rounded-full text-xs px-2 py-1", disableMode && "border-primary/70")}
+                                aria-label={disableMode ? "Exit disable mode" : "Enter disable mode"}
+                            >
+                                <Ban className="h-3 w-3" />
+                            </Button>
+                        )}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleResetAvailability}
+                            className="rounded-full text-xs px-2 py-1"
+                        >
+                            Reset
+                        </Button>
+                        <Button
+                            variant={scrollMode ? "secondary" : "outline"}
+                            size="sm"
+                            onClick={() => {
+                                const next = !scrollMode
+                                if (next && disableMode) {
+                                    onToggleDisableMode()
+                                }
+                                setScrollMode(next)
+                            }}
+                            className="rounded-full text-xs px-2 py-1"
+                        >
+                            {scrollMode ? "Scroll" : "Paint"}
+                        </Button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <Button onClick={handleSave} size="sm" className="shadow-sm rounded-full px-3 py-1">
+                            Save
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -566,7 +693,9 @@ export function AvailabilityGrid({
                             <div className="w-20 md:w-24 shrink-0 p-2 md:p-3 text-[10px] md:text-xs font-semibold uppercase tracking-wide text-muted-foreground/70 bg-background/95 backdrop-blur-md sticky left-0 z-30 border-r border-border/40 flex items-center">
                                 Time
                             </div>
-                            {expandedDates.map((date) => (
+
+                            {/* Header: on desktop show all dates; on mobile show only the visibleDates (1 day) */}
+                            {visibleDates.map((date) => (
                                 <div
                                     key={date.toString()}
                                     className="w-32 md:w-40 shrink-0 px-3 py-3 text-center border-l border-border/30 bg-background/80 backdrop-blur-sm shadow-[0_6px_20px_-18px_rgba(0,0,0,0.45)]"
@@ -578,7 +707,8 @@ export function AvailabilityGrid({
                         </div>
 
                         {timeRows.map(({ hour, minute, label }) => {
-                            const statuses = expandedDates.map((date) => getSlotStatus(date, hour, minute))
+                            // statuses based on visibleDates (mobile one-day view) so other logic remains unchanged on desktop
+                            const statuses = visibleDates.map((date) => getSlotStatus(date, hour, minute))
                             const allHidden = statuses.every((s) => shouldHideSlot(s.isDisabled))
 
                             if (allHidden) return null
