@@ -124,8 +124,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
-  const fetchEventData = async () => {
-    if (draftDirty) return
+  // UPDATED: Added `force` parameter to allow bypassing the draftDirty check
+  const fetchEventData = async (force = false) => {
+    if (draftDirty && !force) return
     const savedTz = localStorage.getItem("preferredTimezone")
     setUserTimezone(savedTz || Intl.DateTimeFormat().resolvedOptions().timeZone)
 
@@ -156,7 +157,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   useEffect(() => {
     fetchEventData()
     if (sseConnected) return
-    const timer = setInterval(fetchEventData, 120000) // 2-minute fallback poll
+    const timer = setInterval(() => fetchEventData(), 120000) // 2-minute fallback poll
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, sseConnected, draftDirty])
@@ -271,7 +272,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const handleCancelDraft = () => {
     setDraftDirty(false)
     setPendingDisabledSlots([])
-    fetchEventData()
+    // UPDATED: Pass true to force the fetch even though we are inside an event handler
+    fetchEventData(true)
   }
 
   const handleRename = async () => {
@@ -682,10 +684,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
               <Card className="overflow-hidden flex flex-col shadow-sm min-h-[400px] lg:min-h-0 border-border/50">
                 <CardContent
+                    // UPDATED: Removed onPointerDown to prevent button clicks from flagging "unsaved changes"
                     className="p-4 flex-1 overflow-auto min-h-0"
-                    onPointerDown={() => {
-                      if (isLoggedIn) setDraftDirty(true)
-                    }}
                 >
                   {isLoggedIn && currentParticipant ? (
                       <AvailabilityGrid
@@ -706,6 +706,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                           onResetDisabled={handleResetDisabled}
                           resetDisabledLoading={resetDisabledLoading}
                           hideDisabledSlots={!isCreator}
+                          // UPDATED: Added prop to detect specific slot interactions only
+                          onSlotInteraction={() => {
+                            if (isLoggedIn) setDraftDirty(true)
+                          }}
                       />
                   ) : (
                       <div className="flex flex-col items-center justify-center h-full text-center p-6">
