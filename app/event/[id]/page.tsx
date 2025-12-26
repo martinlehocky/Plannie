@@ -22,6 +22,7 @@ import {
   RefreshCw,
   AlertTriangle,
   X,
+  Clock,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { format } from "date-fns"
@@ -505,6 +506,17 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
+  // New helper: human-friendly duration text
+  const formatDurationText = (mins: number | undefined | null) => {
+    if (!mins || Number.isNaN(mins) || mins <= 0) return ""
+    const h = Math.floor(mins / 60)
+    const m = mins % 60
+    const parts: string[] = []
+    if (h > 0) parts.push(`${h} ${h === 1 ? "hr" : "hrs"}`)
+    if (m > 0) parts.push(`${m} ${m === 1 ? "min" : "mins"}`)
+    return parts.join(" ")
+  }
+
   if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>
   if (!eventData) return <div className="flex items-center justify-center min-h-screen">Event not found</div>
 
@@ -570,6 +582,15 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                     {format(new Date(eventData.dateRange.from), "MMM d")} - {format(new Date(eventData.dateRange.to), "MMM d")}
                   </span>
                   </div>
+
+                  {/* Duration display */}
+                  {eventData.duration > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span className="font-medium">{formatDurationText(eventData.duration)}</span>
+                      </div>
+                  )}
+
                   <div className="flex items-center gap-1.5">
                     <Globe className="h-3.5 w-3.5 shrink-0" />
                     <span className="capitalize truncate max-w-[140px] font-medium">{userTimezone.replace(/_/g, " ")}</span>
@@ -696,7 +717,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                             from: new Date(eventData.dateRange.from),
                             to: new Date(eventData.dateRange.to),
                           }}
-                          duration={30}
+                          duration={eventData.duration ?? 30}
                           currentParticipant={currentParticipant}
                           allParticipants={eventData.participants}
                           onSave={handleSaveAvailability}

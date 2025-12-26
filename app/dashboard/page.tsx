@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { format } from "date-fns"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
-import { LogOut, Trash2, Settings, Plus, ArrowLeft } from "lucide-react"
+import { LogOut, Trash2, Settings, Plus, ArrowLeft, Clock } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
     AlertDialog,
@@ -31,6 +31,7 @@ interface Event {
         from: string
         to: string
     }
+    duration?: number
     isOwner?: boolean
 }
 
@@ -104,6 +105,38 @@ export default function Dashboard() {
         }
     }
 
+    const handleLeaveEvent = async (e: React.MouseEvent, eventId: string) => {
+        e.stopPropagation()
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/events/${eventId}/leave`, { method: "POST" })
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
+            if (res.ok) {
+                setEvents((prev) => prev.filter((ev) => ev.id !== eventId))
+                toast({ title: "Left event", description: "You have left the event." })
+            } else {
+                const data = await res.json().catch(() => ({}))
+                toast({ title: "Error", description: data.error || "Could not leave event.", variant: "destructive" })
+            }
+        } catch (error) {
+            console.error("Failed to leave event", error)
+            toast({ title: "Error", description: "Could not reach the server.", variant: "destructive" })
+        }
+    }
+
+    const formatDurationText = (mins?: number) => {
+        if (!mins || Number.isNaN(mins) || mins <= 0) return ""
+        const h = Math.floor(mins / 60)
+        const m = mins % 60
+        const parts: string[] = []
+        if (h > 0) parts.push(`${h} ${h === 1 ? "hr" : "hrs"}`)
+        if (m > 0) parts.push(`${m} ${m === 1 ? "min" : "mins"}`)
+        return parts.join(" ")
+    }
+
     if (loading) return <div className="min-h-screen flex items-center justify-center">Loading dashboard...</div>
 
     return (
@@ -167,42 +200,75 @@ export default function Dashboard() {
                             >
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                     <CardTitle className="text-xl">{event.name}</CardTitle>
-                                    {event.isOwner && (
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Delete Event?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        This action cannot be undone. This will permanently delete "{event.name}" for all participants.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                    <AlertDialogAction
-                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                        onClick={(e) => handleDelete(e, event.id)}
+
+                                    <div className="flex items-center gap-2">
+                                        {/* If user is NOT the owner, show a Leave button */}
+                                        {!event.isOwner && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="text-destructive hover:bg-destructive/10"
+                                                onClick={(e) => handleLeaveEvent(e, event.id)}
+                                                title="Leave event"
+                                            >
+                                                <LogOut className="h-4 w-4" />
+                                            </Button>
+                                        )}
+
+                                        {/* If user is the owner, show delete dialog as before */}
+                                        {event.isOwner && (
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                        onClick={(e) => e.stopPropagation()}
                                                     >
-                                                        Delete
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    )}
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Delete Event?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            This action cannot be undone. This will permanently delete "{event.name}" for all participants.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                        <AlertDialogAction
+                                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                            onClick={(e) => handleDelete(e, event.id)}
+                                                        >
+                                                            Delete
+                                                        </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        )}
+                                    </div>
                                 </CardHeader>
                                 <CardContent>
                                     {event.dateRange && (
-                                        <p className="text-sm text-muted-foreground">
-                                            {format(new Date(event.dateRange.from), "MMM d")} - {format(new Date(event.dateRange.to), "MMM d, yyyy")}
+                                        <p className="text-sm text-muted-foreground flex items-center gap-3">
+                                            <span>
+                                                {format(new Date(event.dateRange.from), "MMM d")} - {format(new Date(event.dateRange.to), "MMM d, yyyy")}
+                                            </span>
+
+                                            {event.duration && (
+                                                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                                    <Clock className="h-4 w-4" />
+                                                    <span className="font-medium">{formatDurationText(event.duration)}</span>
+                                                </span>
+                                            )}
+                                        </p>
+                                    )}
+
+                                    {!event.dateRange && event.duration && (
+                                        <p className="text-sm text-muted-foreground inline-flex items-center gap-2">
+                                            <Clock className="h-4 w-4" />
+                                            <span className="font-medium">{formatDurationText(event.duration)}</span>
                                         </p>
                                     )}
                                 </CardContent>

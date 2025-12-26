@@ -333,14 +333,13 @@ export function AvailabilityGrid({
     const timeRows = useMemo(() => {
         const rows: { hour: number; minute: number; label: string }[] = []
         const baseDate = startOfDay(new Date())
+        const minutesInDay = 24 * 60
+        // Enforce a minimum grid granularity of 30 minutes. Durations >= 30 are used as-is.
+        const step = Math.max(30, Math.max(1, Math.floor(duration))) // at least 30, avoid 0 or floats
 
-        for (let hour = 0; hour < 24; hour++) {
-            for (let minute = 0; minute < 60; minute += duration) {
-                const d = new Date(baseDate)
-                d.setHours(hour)
-                d.setMinutes(minute)
-                rows.push({ hour, minute, label: format(d, "h:mm a") })
-            }
+        for (let mins = 0; mins < minutesInDay; mins += step) {
+            const d = new Date(baseDate.getTime() + mins * 60000)
+            rows.push({ hour: d.getHours(), minute: d.getMinutes(), label: format(d, "h:mm a") })
         }
         return rows
     }, [duration])
