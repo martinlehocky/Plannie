@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar, Clock, Users, Share2, Sparkles, Zap } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { logout } from "@/lib/api"
+import { logout, getAccessToken, getStoredUsername } from "@/lib/api"
 
 export default function LandingPage() {
     const router = useRouter()
@@ -15,8 +15,8 @@ export default function LandingPage() {
     const [username, setUsername] = useState("")
 
     useEffect(() => {
-        const token = localStorage.getItem("token")
-        const storedUsername = localStorage.getItem("username") || ""
+        const token = getAccessToken()
+        const storedUsername = getStoredUsername() || ""
         setIsLoggedIn(!!token)
         setUsername(storedUsername)
     }, [])

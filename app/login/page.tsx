@@ -96,8 +96,17 @@ export default function LoginPage() {
             })
             const dataLogin = await resLogin.json().catch(() => ({}))
             if (resLogin.ok && dataLogin.token) {
-                setTokens(dataLogin.token) // access token; refresh is HttpOnly cookie
-                localStorage.setItem("username", dataLogin.username || username)
+                // Store access token in localStorage if rememberMe, otherwise sessionStorage
+                setTokens(dataLogin.token, rememberMe)
+                try {
+                    if (rememberMe) {
+                        localStorage.setItem("username", dataLogin.username || username)
+                    } else {
+                        sessionStorage.setItem("username", dataLogin.username || username)
+                    }
+                } catch {
+                    // ignore storage errors
+                }
                 toast({
                     title: isRegister ? "Account created" : "Success",
                     description: isRegister ? "You are now signed in." : "Welcome back!",

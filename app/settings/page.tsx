@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { zxcvbn, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
 import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en"
-import { fetchWithAuth, clearTokens } from "@/lib/api"
+import { fetchWithAuth, clearTokens, getAccessToken, getStoredUsername } from "@/lib/api"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -50,12 +50,12 @@ export default function SettingsPage() {
     const [passwordsMatch, setPasswordsMatch] = useState(true)
 
     useEffect(() => {
-        const token = localStorage.getItem("token")
+        const token = getAccessToken()
         if (!token) {
             router.replace("/login")
             return
         }
-        setUsername(localStorage.getItem("username") || "")
+        setUsername(getStoredUsername() || "")
         const systemTz = Intl.DateTimeFormat().resolvedOptions().timeZone
         const savedTz = localStorage.getItem("preferredTimezone")
         setPreferredTimezone(savedTz || systemTz)
@@ -93,7 +93,7 @@ export default function SettingsPage() {
     }
 
     const handleSave = async () => {
-        const token = localStorage.getItem("token")
+        const token = getAccessToken()
         if (!token) {
             clearTokens()
             router.replace("/login")
@@ -144,6 +144,18 @@ export default function SettingsPage() {
             }
             if (res.ok) {
                 if (data.username) {
+                    // Persist username in the same place as access token (if present)
+                    try {
+                        const hadSession = !!sessionStorage.getItem("token")
+                        if (hadSession) {
+                            sessionStorage.setItem("username", data.username)
+                            localStorage.removeItem("username")
+                        } else {
+                            localStorage.setItem("username", data.username)
+                        }
+                    } catch {
+                        // ignore
+                    }
                     localStorage.setItem("username", data.username)
                     setUsername(data.username)
                 }

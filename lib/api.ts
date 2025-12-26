@@ -1,17 +1,41 @@
 // Simple token helpers
-export const setTokens = (access: string, _refresh?: string) => {
-    localStorage.setItem("token", access)
+export const setTokens = (access: string, remember = true) => {
+    if (typeof window === "undefined") return
+    try {
+        if (remember) {
+            localStorage.setItem("token", access)
+        } else {
+            sessionStorage.setItem("token", access)
+        }
+    } catch {
+        // storage might be disabled or throw in private mode — ignore
+    }
 }
 
 export const clearTokens = () => {
-    localStorage.removeItem("token")
-    localStorage.removeItem("refresh_token") // legacy cleanup
-    localStorage.removeItem("username")
+    if (typeof window === "undefined") return
+    try {
+        localStorage.removeItem("token")
+        localStorage.removeItem("refresh_token") // legacy cleanup
+        localStorage.removeItem("username")
+        sessionStorage.removeItem("token")
+        sessionStorage.removeItem("refresh_token")
+        sessionStorage.removeItem("username")
+    } catch {
+        // ignore
+    }
 }
 
 // Return undefined instead of null to satisfy token?: string
 export const getAccessToken = () =>
-    typeof window !== "undefined" ? localStorage.getItem("token") || undefined : undefined
+    typeof window !== "undefined"
+        ? (sessionStorage.getItem("token") || localStorage.getItem("token") || undefined)
+        : undefined
+
+export const getStoredUsername = () =>
+    typeof window !== "undefined"
+        ? (sessionStorage.getItem("username") || localStorage.getItem("username") || undefined)
+        : undefined
 
 // Refresh flow using HttpOnly refresh cookie
 const refreshAccessToken = async () => {
@@ -33,7 +57,18 @@ const refreshAccessToken = async () => {
 
     const data = await res.json()
     if (data.token) {
-        setTokens(data.token)
+        // Preserve storage choice: if a session token exists, keep sessionStorage; otherwise use localStorage.
+        try {
+            const hadSession = typeof window !== "undefined" && !!sessionStorage.getItem("token")
+            const hadLocal = typeof window !== "undefined" && !!localStorage.getItem("token")
+            if (hadSession && !hadLocal) {
+                sessionStorage.setItem("token", data.token)
+            } else {
+                localStorage.setItem("token", data.token)
+            }
+        } catch {
+            // ignore
+        }
         return data.token as string
     }
     throw new Error("invalid refresh response")

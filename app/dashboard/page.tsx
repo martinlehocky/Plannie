@@ -20,7 +20,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { fetchWithAuth, clearTokens, logout } from "@/lib/api"
+import { fetchWithAuth, clearTokens, logout, getAccessToken, getStoredUsername } from "@/lib/api"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -42,8 +42,8 @@ export default function Dashboard() {
     const { toast } = useToast()
 
     useEffect(() => {
-        const token = localStorage.getItem("token")
-        const storedUsername = localStorage.getItem("username") || ""
+        const token = getAccessToken()
+        const storedUsername = getStoredUsername() || ""
         setUsername(storedUsername)
 
         if (!token) {

@@ -13,7 +13,7 @@ import type { DateRange } from "react-day-picker"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
-import { fetchWithAuth, clearTokens, logout } from "@/lib/api"
+import { fetchWithAuth, clearTokens, logout, getAccessToken, getStoredUsername } from "@/lib/api"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -30,7 +30,7 @@ export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
   useEffect(() => {
-    const token = localStorage.getItem("token")
+    const token = getAccessToken()
     setIsLoggedIn(!!token)
   }, [])
 

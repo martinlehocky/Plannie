@@ -39,7 +39,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { fetchWithAuth, clearTokens } from "@/lib/api"
+import { fetchWithAuth, clearTokens, getAccessToken, getStoredUsername } from "@/lib/api"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -62,7 +62,7 @@ type EventData = {
 
 type TokenClaims = { uid?: string; sub?: string; uname?: string; username?: string; userId?: string; id?: string; name?: string }
 
-function decodeToken(token: string | null): TokenClaims {
+function decodeToken(token: string | null | undefined): TokenClaims {
   if (!token) return {}
   const parts = token.split(".")
   if (parts.length !== 3) return {}
@@ -99,13 +99,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const sseRetryDelayRef = useRef(5000) // start 5s
   const sseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const token = useMemo(() => (typeof window !== "undefined" ? localStorage.getItem("token") : null), [])
+  // Use getAccessToken so we support sessionStorage (no-remember) and localStorage (remember)
+  const token = useMemo(() => getAccessToken() ?? null, [])
   const tokenClaims = useMemo(() => decodeToken(token), [token])
   const userId = tokenClaims.uid || tokenClaims.sub || tokenClaims.userId || tokenClaims.id || null
   const usernameClaim = tokenClaims.uname || tokenClaims.username || tokenClaims.name || null
 
   const syncUserState = (data: EventData) => {
-    const loggedIn = !!token
+    const loggedIn = !!getAccessToken()
     setIsLoggedIn(loggedIn)
     setIsCreator(loggedIn && userId !== null && data.creatorId === userId)
 
@@ -116,7 +117,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     } else {
       setIsParticipant(false)
       if (loggedIn && userId && !draftDirty) {
-        const name = localStorage.getItem("username") || usernameClaim || "You"
+        // use getStoredUsername to respect session vs persistent username
+        const name = getStoredUsername() || usernameClaim || "You"
         setCurrentParticipant({ id: userId, name, availability: {} })
       } else if (!loggedIn) {
         setCurrentParticipant(null)
@@ -163,10 +165,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }, [id, sseConnected, draftDirty])
 
   useEffect(() => {
-    if (!token) return
+    const accessToken = getAccessToken()
+    if (!accessToken) return
 
     const connect = () => {
-      const url = `${API_BASE}/events/${id}/stream?token=${encodeURIComponent(token)}`
+      const url = `${API_BASE}/events/${id}/stream?token=${encodeURIComponent(accessToken)}`
       const src = new EventSource(url)
       src.onopen = () => {
         setSseConnected(true)
@@ -198,7 +201,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, token, draftDirty])
+  }, [id, draftDirty])
 
   const handleSaveAvailability = async (availability: Record<string, boolean>) => {
     if (!eventData || !currentParticipant) return
