@@ -49,7 +49,6 @@ const refreshAccessToken = async () => {
         }
     )
 
-    // Treat missing/expired refresh cookie as auth failure
     if (res.status === 400 || res.status === 401) {
         throw new Error("refresh_auth")
     }
@@ -57,7 +56,6 @@ const refreshAccessToken = async () => {
 
     const data = await res.json()
     if (data.token) {
-        // Preserve storage choice: if a session token exists, keep sessionStorage; otherwise use localStorage.
         try {
             const hadSession = typeof window !== "undefined" && !!sessionStorage.getItem("token")
             const hadLocal = typeof window !== "undefined" && !!localStorage.getItem("token")
@@ -90,7 +88,6 @@ export const fetchWithAuth = async (input: RequestInfo | URL, init: RequestInit 
             const newToken = await refreshAccessToken()
             res = await doFetch(newToken)
         } catch {
-            // refresh failed (likely expired/missing cookie) — clear and signal auth failure
             clearTokens()
             return new Response(null, { status: 401 })
         }
@@ -123,7 +120,7 @@ export const forgotPassword = async (emailOrUsername: string) => {
     })
 }
 
-export const resetPassword = async (args: { tokenId: string; token: string; newPassword: string }) => {
+export const resetPassword = async (args: { tokenId: string; token: string; newPassword: string; confirmNewPassword: string }) => {
     try {
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/reset-password`, {
             method: "POST",
@@ -132,6 +129,7 @@ export const resetPassword = async (args: { tokenId: string; token: string; newP
                 tokenId: args.tokenId,
                 token: args.token,
                 newPassword: args.newPassword,
+                confirmNewPassword: args.confirmNewPassword,
             }),
         })
         const data = await res.json().catch(() => ({}))

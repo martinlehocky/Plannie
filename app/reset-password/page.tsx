@@ -15,6 +15,7 @@ export default function ResetPasswordPage() {
     const [tokenId, setTokenId] = useState("")
     const [token, setToken] = useState("")
     const [password, setPassword] = useState("")
+    const [confirmPassword, setConfirmPassword] = useState("")
     const [loading, setLoading] = useState(false)
     const { toast } = useToast()
     const router = useRouter()
@@ -27,12 +28,21 @@ export default function ResetPasswordPage() {
     }, [search])
 
     const submit = async () => {
-        if (!tokenId || !token || !password) {
-            toast({ title: "Missing fields", description: "Token and password are required.", variant: "destructive" })
+        if (!tokenId || !token) {
+            toast({ title: "Invalid link", description: "The reset link is missing required parameters.", variant: "destructive" })
             return
         }
+        if (!password || !confirmPassword) {
+            toast({ title: "Missing fields", description: "Please enter and confirm your new password.", variant: "destructive" })
+            return
+        }
+        if (password !== confirmPassword) {
+            toast({ title: "Passwords do not match", description: "Please re-enter matching passwords.", variant: "destructive" })
+            return
+        }
+
         setLoading(true)
-        const res = await resetPassword({ tokenId, token, newPassword: password })
+        const res = await resetPassword({ tokenId, token, newPassword: password, confirmNewPassword: confirmPassword })
         if (res.ok) {
             toast({ title: "Password reset", description: "Please sign in with your new password." })
             router.push("/login")
@@ -61,22 +71,17 @@ export default function ResetPasswordPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <Input
-                        placeholder="Token ID"
-                        value={tokenId}
-                        onChange={(e) => setTokenId(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && submit()}
-                    />
-                    <Input
-                        placeholder="Token"
-                        value={token}
-                        onChange={(e) => setToken(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && submit()}
-                    />
-                    <Input
                         type="password"
                         placeholder="New password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && submit()}
+                    />
+                    <Input
+                        type="password"
+                        placeholder="Confirm new password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && submit()}
                     />
                     <Button className="w-full h-11 text-base mt-2" onClick={submit} disabled={loading}>
