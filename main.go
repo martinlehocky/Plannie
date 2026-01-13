@@ -31,18 +31,12 @@ import (
 )
 
 /*
-Security & Architecture Notes
-- SQLite storage via database/sql + prepared statements; transactions for multi-table ops.
-- Schema migrations with simple version table.
-- Login attempt tracking + lockout (5 attempts in 15 minutes).
-- Username/password validation: username alnum 3–30; password ≥8 with a number and a special character.
-- JWT: short-lived access (15m) + refresh tokens (family/version) for revocation/rotation.
-- CORS via env; security headers middleware added.
-- Tiered rate limiting: auth 10/min, reads 60/min, writes 20-30/min.
-- Graceful shutdown closes DB.
-- Indexes on username, creator_id, event_id.
-- SSE: lightweight broadcaster per event for near-real-time updates.
-- Performance: WAL mode enabled for high concurrency.
+Security & Architecture Notes (updated)
+- Added email verification & password reset tokens (email_tokens table).
+- Users table now has email + email_verified.
+- Email token hashing re-uses sha256+bcrypt pattern to avoid exposing raw tokens.
+- Token links include tokenID and raw token.
+- On password reset we revoke refresh tokens for that user.
 */
 
 var (
@@ -56,7 +50,7 @@ const (
 	refreshTTLShort   = 24 * time.Hour      // shorter when rememberMe=false
 	lockoutThreshold  = 5
 	lockoutWindow     = 15 * time.Minute
-	schemaVersion     = 1
+	schemaVersion     = 2
 	refreshCookieName = "rt"
 )
 
@@ -65,7 +59,7 @@ var (
 	cookieSecure = true            // override via COOKIE_SECURE=false for local HTTP
 )
 
-// SSE broadcaster
+// SSE broadcaster (unchanged)
 type subscriber struct {
 	ch chan []byte
 }
@@ -123,6 +117,8 @@ type Claims struct {
 type User struct {
 	ID           string    `json:"id"`
 	Username     string    `json:"username"`
+	Email        string    `json:"email"`
+	EmailVerified bool     `json:"email_verified"`
 	PasswordHash string    `json:"-"` // ensure never serialized
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
@@ -177,6 +173,7 @@ var (
 	usernameRe = regexp.MustCompile(`^[a-zA-Z0-9]{3,30}$`)
 	passDigit  = regexp.MustCompile(`[0-9]`)
 	passSpec   = regexp.MustCompile(`[!@#\$%\^&\*\(\)\-\_\+\=\{\}\[\]:;\"'<>,\\.\?/\\\|]`)
+	emailRe    = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 )
 
 func validateUsername(u string) bool { return usernameRe.MatchString(u) }
@@ -186,6 +183,7 @@ func validatePassword(p string) bool {
 	}
 	return passDigit.MatchString(p) && passSpec.MatchString(p)
 }
+func validateEmail(e string) bool { return e != "" && emailRe.MatchString(e) }
 
 // hashToken and verifyTokenHash avoid bcrypt 72-byte limit by hashing first
 func hashToken(token string) (string, error) {
@@ -242,7 +240,7 @@ func parseAccessToken(tok string) (*Claims, error) {
 	return nil, errors.New("invalid token")
 }
 
-// DB open & migration
+// DB open & migration (updated to include email + email_tokens)
 func openDB(path string) (*sql.DB, error) {
 	// Optimisation: Enable WAL mode for better concurrency
 	d, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on&_journal_mode=WAL", path))
@@ -273,6 +271,8 @@ func migrate(ctx context.Context, d *sql.DB) error {
 	if current >= schemaVersion {
 		return nil
 	}
+
+	// Because you said it's OK to reset DB in dev, we'll create the latest schema.
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -283,6 +283,8 @@ func migrate(ctx context.Context, d *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS users (
 			id TEXT PRIMARY KEY,
 			username TEXT NOT NULL UNIQUE,
+			email TEXT NOT NULL UNIQUE,
+			email_verified INTEGER NOT NULL DEFAULT 0,
 			password_hash TEXT NOT NULL,
 			created_at TIMESTAMP NOT NULL,
 			updated_at TIMESTAMP NOT NULL
@@ -329,10 +331,23 @@ func migrate(ctx context.Context, d *sql.DB) error {
 			ip TEXT,
 			created_at TIMESTAMP NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS email_tokens (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			kind TEXT NOT NULL, -- "verify" or "reset"
+			token_hash TEXT NOT NULL,
+			expires_at TIMESTAMP NOT NULL,
+			created_at TIMESTAMP NOT NULL,
+			used INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
 		`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);`,
+		`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`,
 		`CREATE INDEX IF NOT EXISTS idx_events_creator ON events(creator_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_participants_event ON event_participants(event_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(user_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_email_tokens_user ON email_tokens(user_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_email_tokens_kind_expires ON email_tokens(kind, expires_at);`,
 	}
 	for _, s := range stmts {
 		if _, err := tx.ExecContext(ctx, s); err != nil {
@@ -345,7 +360,7 @@ func migrate(ctx context.Context, d *sql.DB) error {
 	return tx.Commit()
 }
 
-// Rate limiting
+// Rate limiting helpers (unchanged)
 type visitor struct {
 	limiter  *rate.Limiter
 	lastSeen time.Time
@@ -382,7 +397,6 @@ func cleanupVisitorsLoop() {
 	}
 }
 
-// login_attempts cleanup
 func cleanupLoginAttemptsLoop() {
 	for {
 		time.Sleep(1 * time.Hour)
@@ -432,7 +446,6 @@ func logIfTimeout(err error, where string) {
 	}
 }
 
-// Centralized server error helper with logging
 func serverError(c *gin.Context, where string, err error) {
 	if err != nil {
 		logIfTimeout(err, where)
@@ -441,7 +454,7 @@ func serverError(c *gin.Context, where string, err error) {
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
 }
 
-// Login attempts
+// Login attempts (unchanged)
 func recordLoginAttempt(ctx context.Context, username, userID, ip string) {
 	_, err := db.ExecContext(ctx, `INSERT INTO login_attempts(user_id, username, ip, created_at) VALUES (?,?,?,?)`,
 		userID, username, ip, time.Now().UTC())
@@ -464,7 +477,7 @@ func isLockedOut(ctx context.Context, userID string) (bool, error) {
 	return count >= lockoutThreshold, nil
 }
 
-// CORS
+// CORS and cookies (unchanged)
 func buildCORS() cors.Config {
 	cfg := cors.DefaultConfig()
 	origins := os.Getenv("CORS_ORIGINS")
@@ -483,7 +496,6 @@ func buildCORS() cors.Config {
 	return cfg
 }
 
-// Cookies
 func setRefreshCookie(c *gin.Context, token string, expiresAt time.Time, remember bool) {
 	c.SetSameSite(http.SameSiteLaxMode)
 	maxAge := 0
@@ -501,7 +513,7 @@ func clearRefreshCookie(c *gin.Context) {
 	c.SetCookie(refreshCookieName, "", -1, "/", "", cookieSecure, true)
 }
 
-// Auth middleware
+// Auth middleware (unchanged)
 func authnMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
@@ -591,6 +603,11 @@ func main() {
 	r.POST("/refresh", rateLimit(10, 10), refreshHandler)
 	r.POST("/logout", rateLimit(10, 10), logoutHandler)
 
+	// New email endpoints
+	r.GET("/verify-email", rateLimit(10, 10), verifyEmailHandler)
+	r.POST("/forgot-password", rateLimit(5, 5), forgotPasswordHandler)
+	r.POST("/reset-password", rateLimit(5, 5), resetPasswordHandler)
+
 	// Protected routes
 	authProtected := r.Group("/")
 	authProtected.Use(authnMiddleware())
@@ -646,6 +663,7 @@ func registerHandler(c *gin.Context) {
 
 	var input struct {
 		Username string `json:"username"`
+		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 	if err := c.BindJSON(&input); err != nil {
@@ -656,18 +674,22 @@ func registerHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid username"})
 		return
 	}
+	if !validateEmail(input.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email"})
+		return
+	}
 	if !validatePassword(input.Password) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Weak password (>=8 chars with number and special)"})
 		return
 	}
 
 	var exists int
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE username = ?`, input.Username).Scan(&exists); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE username = ? OR email = ?`, input.Username, input.Email).Scan(&exists); err != nil {
 		serverError(c, "register: count user", err)
 		return
 	}
 	if exists > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username taken"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username or email already taken"})
 		return
 	}
 
@@ -678,11 +700,24 @@ func registerHandler(c *gin.Context) {
 	}
 	now := time.Now().UTC()
 	id := uuid.NewString()
-	if _, err := db.ExecContext(ctx, `INSERT INTO users(id, username, password_hash, created_at, updated_at) VALUES (?,?,?,?,?)`,
-		id, input.Username, string(hash), now, now); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO users(id, username, email, email_verified, password_hash, created_at, updated_at) VALUES (?,?,?,?,?,?,?)`,
+		id, input.Username, input.Email, 0, string(hash), now, now); err != nil {
 		serverError(c, "register: insert user", err)
 		return
 	}
+
+	// create email verification token + send email
+	raw, tokenID, err := createEmailToken(id, "verify", 48*time.Hour)
+	if err == nil {
+		appURL := os.Getenv("APP_BASE_URL")
+		if appURL == "" {
+			appURL = "http://localhost:3000"
+		}
+		verifyURL := fmt.Sprintf("%s/verify-email?tid=%s&t=%s", appURL, tokenID, raw)
+		html := fmt.Sprintf(`<p>Welcome %s,</p><p>Please verify your email by clicking <a href="%s">this link</a>. The link expires in 48 hours.</p>`, input.Username, verifyURL)
+		go sendEmailSMTP(input.Email, "Verify your account", html)
+	}
+
 	c.JSON(http.StatusCreated, gin.H{"id": id, "username": input.Username})
 }
 
@@ -705,8 +740,8 @@ func loginHandler(c *gin.Context) {
 	}
 
 	var u User
-	err := db.QueryRowContext(ctx, `SELECT id, username, password_hash FROM users WHERE username = ?`, input.Username).
-		Scan(&u.ID, &u.Username, &u.PasswordHash)
+	err := db.QueryRowContext(ctx, `SELECT id, username, password_hash, email_verified FROM users WHERE username = ?`, input.Username).
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.EmailVerified)
 	if err == sql.ErrNoRows {
 		recordLoginAttempt(ctx, "", input.Username, clientIP(c))
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
@@ -723,6 +758,12 @@ func loginHandler(c *gin.Context) {
 	}
 	if locked {
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Account locked. Try later."})
+		return
+	}
+
+	// require email verified
+	if !u.EmailVerified {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Email not verified"})
 		return
 	}
 
@@ -758,7 +799,7 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
-	if _, err := db.ExecContext(ctx, `INSERT INTO refresh_tokens(id, user_id, family_id, version, token_hash, expires_at, created_at, revoked) 
+	if _, err := db.ExecContext(ctx, `INSERT INTO refresh_tokens(id, user_id, family_id, version, token_hash, expires_at, created_at, revoked)
 		VALUES (?,?,?,?,?,?,?,0)`,
 		rtID, u.ID, family, version, string(rtHash), refreshExpires, now); err != nil {
 		serverError(c, "login: insert refresh", err)
@@ -939,6 +980,7 @@ func updateUserHandler(c *gin.Context) {
 		Username    string `json:"username"`
 		OldPassword string `json:"oldPassword"`
 		NewPassword string `json:"newPassword"`
+		Email       string `json:"email"`
 	}
 	if err := c.BindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
@@ -953,8 +995,8 @@ func updateUserHandler(c *gin.Context) {
 	defer tx.Rollback()
 
 	var current User
-	if err := tx.QueryRowContext(ctx, `SELECT id, username, password_hash FROM users WHERE id = ?`, userID).
-		Scan(&current.ID, &current.Username, &current.PasswordHash); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT id, username, password_hash, email FROM users WHERE id = ?`, userID).
+		Scan(&current.ID, &current.Username, &current.PasswordHash, &current.Email); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
@@ -975,6 +1017,25 @@ func updateUserHandler(c *gin.Context) {
 			return
 		}
 		updatedUsername = input.Username
+	}
+
+	updatedEmail := current.Email
+	if input.Email != "" && input.Email != current.Email {
+		if !validateEmail(input.Email) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email"})
+			return
+		}
+		var count int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE email = ? AND id <> ?`, input.Email, userID).Scan(&count); err != nil {
+			serverError(c, "updateUser: email count", err)
+			return
+		}
+		if count > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Email taken"})
+			return
+		}
+		updatedEmail = input.Email
+		// mark as unverified and send verification email
 	}
 
 	updatedHash := current.PasswordHash
@@ -999,9 +1060,35 @@ func updateUserHandler(c *gin.Context) {
 
 	now := time.Now().UTC()
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE users SET username = ?, password_hash = ?, updated_at = ? WHERE id = ?
-	`, updatedUsername, updatedHash, now, userID); err != nil {
+		UPDATE users SET username = ?, email = ?, password_hash = ?, updated_at = ? WHERE id = ?
+	`, updatedUsername, updatedEmail, updatedHash, now, userID); err != nil {
 		serverError(c, "updateUser: update user", err)
+		return
+	}
+
+	if input.Email != "" && input.Email != current.Email {
+		// mark email unverified and send new verification token
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET email_verified = 0 WHERE id = ?`, userID); err != nil {
+			serverError(c, "updateUser: set unverified", err)
+			return
+		}
+		// commit first to ensure email exists
+		if err := tx.Commit(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+			return
+		}
+		// send verification token (non-blocking)
+		raw, tokenID, err := createEmailToken(userID, "verify", 48*time.Hour)
+		if err == nil {
+			appURL := os.Getenv("APP_BASE_URL")
+			if appURL == "" {
+				appURL = "http://localhost:3000"
+			}
+			verifyURL := fmt.Sprintf("%s/verify-email?tid=%s&t=%s", appURL, tokenID, raw)
+			html := fmt.Sprintf(`<p>Please verify your new email by clicking <a href="%s">this link</a></p>`, verifyURL)
+			go sendEmailSMTP(updatedEmail, "Verify your email", html)
+		}
+		c.JSON(http.StatusOK, gin.H{"username": updatedUsername})
 		return
 	}
 
@@ -1603,12 +1690,114 @@ func myEventsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-/*
-Example .env
-
-JWT_SECRET=change_me
-DATABASE_PATH=app.db
-CORS_ORIGINS=http://localhost:3000
-REQUEST_TIMEOUT_MS=5000
-COOKIE_SECURE=false
+/* Email token + verification/reset handlers rely on helper functions in email.go:
+   - createEmailToken(userID, kind, ttl) (rawToken, tokenID, err)
+   - verifyEmailTokenByID(tokenID, rawToken, kind) -> userID, error
+   - sendEmailSMTP(to, subject, html) -> error
 */
+
+// verifyEmailHandler - GET used by email link: /verify-email?tid=<id>&t=<raw>
+func verifyEmailHandler(c *gin.Context) {
+	tid := c.Query("tid")
+	raw := c.Query("t")
+	if tid == "" || raw == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing token"})
+		return
+	}
+	userID, err := verifyEmailTokenByID(tid, raw, "verify")
+	if err != nil {
+		// If link invalid, redirect to frontend verified page with error
+		appURL := os.Getenv("APP_BASE_URL")
+		if appURL == "" {
+			appURL = "http://localhost:3000"
+		}
+		c.Redirect(http.StatusFound, fmt.Sprintf("%s/verified?success=0", appURL))
+		return
+	}
+	// Mark user verified
+	if _, err := db.Exec(`UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?`, time.Now().UTC(), userID); err != nil {
+		logIfTimeout(err, "verifyEmail: update user")
+	}
+	appURL := os.Getenv("APP_BASE_URL")
+	if appURL == "" {
+		appURL = "http://localhost:3000"
+	}
+	c.Redirect(http.StatusFound, fmt.Sprintf("%s/verified?success=1", appURL))
+}
+
+// forgotPasswordHandler - requests a reset (no enumeration leak)
+func forgotPasswordHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+	var in struct {
+		EmailOrUsername string `json:"email"`
+	}
+	_ = c.BindJSON(&in)
+	// look up user by email first, then username
+	var userID, email string
+	err := db.QueryRowContext(ctx, `SELECT id, email FROM users WHERE email = ? OR username = ?`, in.EmailOrUsername, in.EmailOrUsername).
+		Scan(&userID, &email)
+	if err == sql.ErrNoRows {
+		// Always respond with generic message
+		c.JSON(http.StatusOK, gin.H{"message": "If an account exists, we sent a reset link"})
+		return
+	} else if err != nil {
+		serverError(c, "forgotPassword: select user", err)
+		return
+	}
+	raw, tokenID, err := createEmailToken(userID, "reset", 1*time.Hour)
+	if err == nil {
+		appURL := os.Getenv("APP_BASE_URL")
+		if appURL == "" {
+			appURL = "http://localhost:3000"
+		}
+		resetURL := fmt.Sprintf("%s/reset-password?tid=%s&t=%s", appURL, tokenID, raw)
+		html := fmt.Sprintf(`<p>To reset your password, click <a href="%s">this link</a>. The link expires in 1 hour.</p>`, resetURL)
+		go sendEmailSMTP(email, "Reset your password", html)
+	}
+	// Generic response
+	c.JSON(http.StatusOK, gin.H{"message": "If an account exists, we sent a reset link"})
+}
+
+// resetPasswordHandler - consumes token + sets new password
+func resetPasswordHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+	var in struct {
+		TokenID    string `json:"tokenId"`
+		Token      string `json:"token"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := c.BindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+	if in.TokenID == "" || in.Token == "" || in.NewPassword == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing fields"})
+		return
+	}
+	if !validatePassword(in.NewPassword) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Weak password"})
+		return
+	}
+	userID, err := verifyEmailTokenByID(in.TokenID, in.Token, "reset")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired token"})
+		return
+	}
+	// update password
+	h, err := bcrypt.GenerateFromPassword([]byte(in.NewPassword), 12)
+	if err != nil {
+		serverError(c, "resetPassword: hash", err)
+		return
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`, string(h), time.Now().UTC(), userID); err != nil {
+		serverError(c, "resetPassword: update", err)
+		return
+	}
+	// revoke refresh tokens for the user
+	if _, err := db.ExecContext(ctx, `UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?`, userID); err != nil {
+		logIfTimeout(err, "resetPassword: revoke")
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Password updated"})
+}

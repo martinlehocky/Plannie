@@ -29,6 +29,7 @@ zxcvbnOptions.setOptions(options)
 export default function LoginPage() {
     const [isRegister, setIsRegister] = useState(false)
     const [username, setUsername] = useState("")
+    const [email, setEmail] = useState("") // NEW: email field for registration
     const [password, setPassword] = useState("")
     const [rememberMe, setRememberMe] = useState(true)
     const [crackTime, setCrackTime] = useState("")
@@ -58,8 +59,8 @@ export default function LoginPage() {
     }
 
     const handleAuth = async () => {
-        if (!username || !password) {
-            toast({ title: "Missing fields", description: "Username and password are required.", variant: "destructive" })
+        if (!username || !password || (isRegister && !email)) {
+            toast({ title: "Missing fields", description: "Username, email (on signup) and password are required.", variant: "destructive" })
             return
         }
         if (isRegister && !passwordLooksValid()) {
@@ -78,16 +79,27 @@ export default function LoginPage() {
                 const resReg = await fetch(`${API_BASE}/register`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username, password }),
+                    body: JSON.stringify({ username, email, password }),
                 })
                 const dataReg = await resReg.json().catch(() => ({}))
                 if (!resReg.ok) {
                     toast({ title: "Error", description: dataReg.error || "Could not register", variant: "destructive" })
+                    setLoading(false)
                     return
                 }
+                toast({
+                    title: "Account created",
+                    description: "Please check your email for a verification link before logging in.",
+                })
+                // after signup, we don't log in automatically; ask user to verify
+                setIsRegister(false)
+                setPassword("")
+                setScore(0)
+                setLoading(false)
+                return
             }
 
-            // Login (for both signup flow and direct login)
+            // Login (for direct login)
             const resLogin = await fetch(`${API_BASE}/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -108,8 +120,8 @@ export default function LoginPage() {
                     // ignore storage errors
                 }
                 toast({
-                    title: isRegister ? "Account created" : "Success",
-                    description: isRegister ? "You are now signed in." : "Welcome back!",
+                    title: "Success",
+                    description: "Welcome back!",
                 })
                 router.push("/dashboard")
             } else {
@@ -165,6 +177,16 @@ export default function LoginPage() {
                         className="h-11"
                         onKeyDown={(e) => e.key === "Enter" && handleAuth()}
                     />
+
+                    {isRegister && (
+                        <Input
+                            placeholder="Email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            className="h-11"
+                            onKeyDown={(e) => e.key === "Enter" && handleAuth()}
+                        />
+                    )}
 
                     <div className="space-y-2">
                         <Input
@@ -224,6 +246,14 @@ export default function LoginPage() {
                             {isRegister ? "Already have an account? Login" : "Need an account? Sign Up"}
                         </button>
                     </div>
+
+                    {!isRegister && (
+                        <div className="text-center pt-2">
+                            <Link href="/forgot-password" className="text-sm text-primary hover:underline font-medium">
+                                Forgot password?
+                            </Link>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
