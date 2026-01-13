@@ -29,7 +29,7 @@ zxcvbnOptions.setOptions(options)
 export default function LoginPage() {
     const [isRegister, setIsRegister] = useState(false)
     const [username, setUsername] = useState("")
-    const [email, setEmail] = useState("") // NEW: email field for registration
+    const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [rememberMe, setRememberMe] = useState(true)
     const [crackTime, setCrackTime] = useState("")
@@ -58,9 +58,15 @@ export default function LoginPage() {
         return password.length >= 8 && hasDigit && hasSpec
     }
 
+    const emailLooksValid = () => {
+        if (!isRegister) return true
+        if (!email) return false
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    }
+
     const handleAuth = async () => {
-        if (!username || !password || (isRegister && !email)) {
-            toast({ title: "Missing fields", description: "Username, email (on signup) and password are required.", variant: "destructive" })
+        if (!username || !password) {
+            toast({ title: "Missing fields", description: "Username and password are required.", variant: "destructive" })
             return
         }
         if (isRegister && !passwordLooksValid()) {
@@ -71,11 +77,19 @@ export default function LoginPage() {
             })
             return
         }
+        if (isRegister && !emailLooksValid()) {
+            toast({
+                title: "Invalid email",
+                description: "Please enter a valid email address.",
+                variant: "destructive",
+            })
+            return
+        }
 
         setLoading(true)
         try {
             if (isRegister) {
-                // Register
+                // Register (now requires email)
                 const resReg = await fetch(`${API_BASE}/register`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -84,22 +98,11 @@ export default function LoginPage() {
                 const dataReg = await resReg.json().catch(() => ({}))
                 if (!resReg.ok) {
                     toast({ title: "Error", description: dataReg.error || "Could not register", variant: "destructive" })
-                    setLoading(false)
                     return
                 }
-                toast({
-                    title: "Account created",
-                    description: "Please check your email for a verification link before logging in.",
-                })
-                // after signup, we don't log in automatically; ask user to verify
-                setIsRegister(false)
-                setPassword("")
-                setScore(0)
-                setLoading(false)
-                return
             }
 
-            // Login (for direct login)
+            // Login (for both signup flow and direct login)
             const resLogin = await fetch(`${API_BASE}/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -120,8 +123,8 @@ export default function LoginPage() {
                     // ignore storage errors
                 }
                 toast({
-                    title: "Success",
-                    description: "Welcome back!",
+                    title: isRegister ? "Account created" : "Success",
+                    description: isRegister ? "You are now signed in." : "Welcome back!",
                 })
                 router.push("/dashboard")
             } else {
@@ -181,6 +184,7 @@ export default function LoginPage() {
                     {isRegister && (
                         <Input
                             placeholder="Email"
+                            type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="h-11"
@@ -228,6 +232,15 @@ export default function LoginPage() {
                         <label htmlFor="remember" className="select-none cursor-pointer">
                             Remember me
                         </label>
+                        {!isRegister && (
+                            <button
+                                className="ml-auto text-sm text-primary hover:underline"
+                                type="button"
+                                onClick={() => router.push("/forgot")}
+                            >
+                                Forgot password?
+                            </button>
+                        )}
                     </div>
 
                     <Button className="w-full h-11 text-base mt-2" onClick={handleAuth} disabled={loading}>
@@ -240,20 +253,13 @@ export default function LoginPage() {
                             onClick={() => {
                                 setIsRegister(!isRegister)
                                 setPassword("")
+                                setEmail("")
                                 setScore(0)
                             }}
                         >
                             {isRegister ? "Already have an account? Login" : "Need an account? Sign Up"}
                         </button>
                     </div>
-
-                    {!isRegister && (
-                        <div className="text-center pt-2">
-                            <Link href="/forgot-password" className="text-sm text-primary hover:underline font-medium">
-                                Forgot password?
-                            </Link>
-                        </div>
-                    )}
                 </CardContent>
             </Card>
         </div>

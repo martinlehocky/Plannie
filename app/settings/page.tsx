@@ -28,6 +28,7 @@ const options = {
 zxcvbnOptions.setOptions(options)
 
 const usernameRe = /^[a-zA-Z0-9]{3,30}$/
+const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const passwordValid = (p: string) => {
     if (p.length === 0) return true // allow empty when not changing
     const hasDigit = /[0-9]/.test(p)
@@ -40,6 +41,7 @@ export default function SettingsPage() {
     const { toast } = useToast()
 
     const [username, setUsername] = useState("")
+    const [email, setEmail] = useState("")
     const [preferredTimezone, setPreferredTimezone] = useState("")
     const [oldPassword, setOldPassword] = useState("")
     const [newPassword, setNewPassword] = useState("")
@@ -105,6 +107,10 @@ export default function SettingsPage() {
             toast({ title: "Invalid username", description: "Use 3-30 alphanumeric characters.", variant: "destructive" })
             return
         }
+        if (email && !emailRe.test(email)) {
+            toast({ title: "Invalid email", description: "Please enter a valid email address.", variant: "destructive" })
+            return
+        }
         if (newPassword && !passwordValid(newPassword)) {
             toast({
                 title: "Weak password",
@@ -131,6 +137,7 @@ export default function SettingsPage() {
                 method: "PUT",
                 body: JSON.stringify({
                     username,
+                    email: email || undefined,
                     oldPassword: oldPassword || undefined,
                     newPassword: newPassword || undefined,
                 }),
@@ -144,7 +151,6 @@ export default function SettingsPage() {
             }
             if (res.ok) {
                 if (data.username) {
-                    // Persist username in the same place as access token (if present)
                     try {
                         const hadSession = !!sessionStorage.getItem("token")
                         if (hadSession) {
@@ -195,6 +201,20 @@ export default function SettingsPage() {
                             <Label htmlFor="username">Username</Label>
                             <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} />
                             <p className="text-[11px] text-muted-foreground">3–30 chars, letters and numbers only.</p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="email">Email</Label>
+                            <Input
+                                id="email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="you@example.com"
+                            />
+                            <p className="text-[11px] text-muted-foreground">
+                                Changing email will require re-verification.
+                            </p>
                         </div>
 
                         <div className="space-y-2">

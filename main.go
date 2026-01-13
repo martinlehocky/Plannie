@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -8,9 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/smtp"
 	"os"
 	"os/signal"
 	"regexp"
@@ -55,14 +58,16 @@ const (
 )
 
 var (
-	reqTimeout   = 5 * time.Second // override via REQUEST_TIMEOUT_MS
-	cookieSecure = true            // override via COOKIE_SECURE=false for local HTTP
+	reqTimeout       = 5 * time.Second // override via REQUEST_TIMEOUT_MS
+	cookieSecure     = true            // override via COOKIE_SECURE=false for local HTTP
+	brevoAPIKey      string
+	brevoSenderEmail string
+	brevoSenderName  string
+	resetCodeTTL     = 15 * time.Minute
 )
 
 // SSE broadcaster (unchanged)
-type subscriber struct {
-	ch chan []byte
-}
+type subscriber struct{ ch chan []byte }
 
 var (
 	sseMu        sync.Mutex
@@ -115,13 +120,13 @@ type Claims struct {
 
 // DB models
 type User struct {
-	ID           string    `json:"id"`
-	Username     string    `json:"username"`
-	Email        string    `json:"email"`
-	EmailVerified bool     `json:"email_verified"`
-	PasswordHash string    `json:"-"` // ensure never serialized
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	Username      string    `json:"username"`
+	Email         string    `json:"email"`
+	EmailVerified bool      `json:"email_verified"`
+	PasswordHash  string    `json:"-"` // ensure never serialized
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type Event struct {
@@ -200,6 +205,113 @@ func verifyTokenHash(hash string, token string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(hex.EncodeToString(sum[:])))
 }
 
+// Email helpers (SMTP + token)
+func sendEmailSMTP(to, subject, htmlBody string) error {
+	host := os.Getenv("SMTP_HOST")
+	portStr := os.Getenv("SMTP_PORT")
+	user := os.Getenv("SMTP_USER")
+	pass := os.Getenv("SMTP_PASS")
+	from := os.Getenv("EMAIL_FROM")
+	if host == "" || portStr == "" || from == "" {
+		return fmt.Errorf("SMTP not configured")
+	}
+	port, _ := strconv.Atoi(portStr)
+	auth := smtp.PlainAuth("", user, pass, host)
+
+	msg := "MIME-Version: 1.0\r\n" +
+		"Content-Type: text/html; charset=\"utf-8\"\r\n" +
+		fmt.Sprintf("From: %s\r\n", from) +
+		fmt.Sprintf("To: %s\r\n", to) +
+		fmt.Sprintf("Subject: %s\r\n\r\n", subject) +
+		htmlBody
+
+	addr := fmt.Sprintf("%s:%d", host, port)
+	return smtp.SendMail(addr, auth, from, []string{to}, []byte(msg))
+}
+
+// createEmailToken creates a token row in email_tokens and returns (rawToken, tokenID).
+func createEmailToken(userID, kind string, ttl time.Duration) (rawToken, tokenID string, err error) {
+	raw := uuid.NewString()
+	tokenID = uuid.NewString()
+	expires := time.Now().UTC().Add(ttl)
+
+	hashed, err := hashToken(raw)
+	if err != nil {
+		return "", "", err
+	}
+
+	_, err = db.Exec(`INSERT INTO email_tokens(id, user_id, kind, token_hash, expires_at, created_at, used) VALUES (?,?,?,?,?,?,0)`,
+		tokenID, userID, kind, hashed, expires, time.Now().UTC())
+	if err != nil {
+		return "", "", err
+	}
+	return raw, tokenID, nil
+}
+
+// verifyEmailTokenByID verifies tokenID/rawToken/kind, marks used, returns userID.
+func verifyEmailTokenByID(tokenID, rawToken, kind string) (userID string, err error) {
+	var id, uid, thash string
+	var expires time.Time
+	var used int
+	err = db.QueryRow(`SELECT id, user_id, token_hash, expires_at, used FROM email_tokens WHERE id = ? AND kind = ?`, tokenID, kind).
+		Scan(&id, &uid, &thash, &expires, &used)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("invalid token")
+	} else if err != nil {
+		return "", err
+	}
+	if used == 1 || time.Now().After(expires) {
+		return "", fmt.Errorf("expired or used")
+	}
+	if err := verifyTokenHash(thash, rawToken); err != nil {
+		return "", fmt.Errorf("invalid token")
+	}
+	if _, err := db.Exec(`UPDATE email_tokens SET used = 1 WHERE id = ?`, id); err != nil {
+		// non-fatal
+	}
+	return uid, nil
+}
+
+// Brevo email helper (transactional API)
+type brevoEmailReq struct {
+	Sender      map[string]string   `json:"sender"`
+	To          []map[string]string `json:"to"`
+	Subject     string              `json:"subject"`
+	HTMLContent string              `json:"htmlContent"`
+}
+
+func sendEmailBrevo(toEmail, subject, html string) error {
+	if brevoAPIKey == "" || brevoSenderEmail == "" {
+		return errors.New("brevo not configured")
+	}
+	payload := brevoEmailReq{
+		Sender: map[string]string{
+			"email": brevoSenderEmail,
+			"name":  brevoSenderName,
+		},
+		To: []map[string]string{{
+			"email": toEmail,
+			"name":  toEmail, // fallback to satisfy Brevo requirement
+		}},
+		Subject:     subject,
+		HTMLContent: html,
+	}
+	b, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", "https://api.brevo.com/v3/smtp/email", bytes.NewReader(b))
+	req.Header.Set("api-key", brevoAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("brevo send failed: %s", string(body))
+	}
+	return nil
+}
+
 // JWT helpers
 func signAccessToken(userID string) (string, error) {
 	claims := &Claims{
@@ -242,7 +354,6 @@ func parseAccessToken(tok string) (*Claims, error) {
 
 // DB open & migration (updated to include email + email_tokens)
 func openDB(path string) (*sql.DB, error) {
-	// Optimisation: Enable WAL mode for better concurrency
 	d, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?_foreign_keys=on&_journal_mode=WAL", path))
 	if err != nil {
 		return nil, err
@@ -272,7 +383,6 @@ func migrate(ctx context.Context, d *sql.DB) error {
 		return nil
 	}
 
-	// Because you said it's OK to reset DB in dev, we'll create the latest schema.
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -334,7 +444,7 @@ func migrate(ctx context.Context, d *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS email_tokens (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,
-			kind TEXT NOT NULL, -- "verify" or "reset"
+			kind TEXT NOT NULL,
 			token_hash TEXT NOT NULL,
 			expires_at TIMESTAMP NOT NULL,
 			created_at TIMESTAMP NOT NULL,
@@ -454,6 +564,26 @@ func serverError(c *gin.Context, where string, err error) {
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
 }
 
+func getEnvInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+// API base (for backend links)
+func apiBaseURL() string {
+	if v := os.Getenv("NEXT_PUBLIC_API_BASE_URL"); v != "" {
+		return v
+	}
+	if v := os.Getenv("API_BASE_URL"); v != "" {
+		return v
+	}
+	return "http://localhost:8080"
+}
+
 // Login attempts (unchanged)
 func recordLoginAttempt(ctx context.Context, username, userID, ip string) {
 	_, err := db.ExecContext(ctx, `INSERT INTO login_attempts(user_id, username, ip, created_at) VALUES (?,?,?,?)`,
@@ -482,7 +612,7 @@ func buildCORS() cors.Config {
 	cfg := cors.DefaultConfig()
 	origins := os.Getenv("CORS_ORIGINS")
 	if origins == "" {
-		cfg.AllowAllOrigins = true // dev default
+		cfg.AllowAllOrigins = true
 	} else {
 		parts := strings.Split(origins, ",")
 		for i := range parts {
@@ -570,6 +700,12 @@ func main() {
 		}
 	}
 
+	// Brevo / reset config
+	brevoAPIKey = os.Getenv("BREVO_API_KEY")
+	brevoSenderEmail = os.Getenv("BREVO_SENDER_EMAIL")
+	brevoSenderName = os.Getenv("BREVO_SENDER_NAME")
+	resetCodeTTL = time.Duration(getEnvInt("RESET_CODE_TTL_MINUTES", 15)) * time.Minute
+
 	var err error
 	db, err = openDB(dbPath)
 	if err != nil {
@@ -613,10 +749,10 @@ func main() {
 	authProtected.Use(authnMiddleware())
 
 	authProtected.PUT("/users/me", rateLimit(30, 30), updateUserHandler)
-	authProtected.GET("/events/:id/stream", rateLimit(60, 60), sseHandler) // Increased for SSE stability
+	authProtected.GET("/events/:id/stream", rateLimit(60, 60), sseHandler)
 
 	authProtected.POST("/events", rateLimit(20, 20), createEventHandler)
-	r.GET("/events/:id", rateLimit(60, 60), getEventHandler) // Critical fix: increased from 5 to 60
+	r.GET("/events/:id", rateLimit(60, 60), getEventHandler)
 	authProtected.PUT("/events/:id", rateLimit(30, 30), updateEventHandler)
 	authProtected.DELETE("/events/:id", rateLimit(20, 20), deleteEventHandler)
 
@@ -706,16 +842,16 @@ func registerHandler(c *gin.Context) {
 		return
 	}
 
-	// create email verification token + send email
 	raw, tokenID, err := createEmailToken(id, "verify", 48*time.Hour)
 	if err == nil {
-		appURL := os.Getenv("APP_BASE_URL")
-		if appURL == "" {
-			appURL = "http://localhost:3000"
-		}
-		verifyURL := fmt.Sprintf("%s/verify-email?tid=%s&t=%s", appURL, tokenID, raw)
+		apiURL := apiBaseURL()
+		verifyURL := fmt.Sprintf("%s/verify-email?tid=%s&t=%s", apiURL, tokenID, raw)
 		html := fmt.Sprintf(`<p>Welcome %s,</p><p>Please verify your email by clicking <a href="%s">this link</a>. The link expires in 48 hours.</p>`, input.Username, verifyURL)
-		go sendEmailSMTP(input.Email, "Verify your account", html)
+		go func() {
+			if err := sendEmailBrevo(input.Email, "Verify your account", html); err != nil {
+				log.Printf("sendEmailBrevo verify: %v", err)
+			}
+		}()
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"id": id, "username": input.Username})
@@ -761,7 +897,6 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
-	// require email verified
 	if !u.EmailVerified {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Email not verified"})
 		return
@@ -1035,7 +1170,6 @@ func updateUserHandler(c *gin.Context) {
 			return
 		}
 		updatedEmail = input.Email
-		// mark as unverified and send verification email
 	}
 
 	updatedHash := current.PasswordHash
@@ -1067,26 +1201,24 @@ func updateUserHandler(c *gin.Context) {
 	}
 
 	if input.Email != "" && input.Email != current.Email {
-		// mark email unverified and send new verification token
 		if _, err := tx.ExecContext(ctx, `UPDATE users SET email_verified = 0 WHERE id = ?`, userID); err != nil {
 			serverError(c, "updateUser: set unverified", err)
 			return
 		}
-		// commit first to ensure email exists
 		if err := tx.Commit(); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
 			return
 		}
-		// send verification token (non-blocking)
 		raw, tokenID, err := createEmailToken(userID, "verify", 48*time.Hour)
 		if err == nil {
-			appURL := os.Getenv("APP_BASE_URL")
-			if appURL == "" {
-				appURL = "http://localhost:3000"
-			}
-			verifyURL := fmt.Sprintf("%s/verify-email?tid=%s&t=%s", appURL, tokenID, raw)
+			apiURL := apiBaseURL()
+			verifyURL := fmt.Sprintf("%s/verify-email?tid=%s&t=%s", apiURL, tokenID, raw)
 			html := fmt.Sprintf(`<p>Please verify your new email by clicking <a href="%s">this link</a></p>`, verifyURL)
-			go sendEmailSMTP(updatedEmail, "Verify your email", html)
+			go func() {
+				if err := sendEmailBrevo(updatedEmail, "Verify your email", html); err != nil {
+					log.Printf("sendEmailBrevo verify-change: %v", err)
+				}
+			}()
 		}
 		c.JSON(http.StatusOK, gin.H{"username": updatedUsername})
 		return
@@ -1534,7 +1666,6 @@ func inviteHandler(c *gin.Context) {
 	var targetID string
 	err := db.QueryRowContext(ctx, `SELECT id FROM users WHERE username = ?`, body.Username).Scan(&targetID)
 	if err == sql.ErrNoRows {
-		// Prevent enumeration by returning same message as success
 		c.JSON(http.StatusOK, gin.H{"message": "Invite processed"})
 		return
 	} else if err != nil {
@@ -1690,10 +1821,9 @@ func myEventsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-/* Email token + verification/reset handlers rely on helper functions in email.go:
+/* Email token + verification/reset handlers rely on helper functions:
    - createEmailToken(userID, kind, ttl) (rawToken, tokenID, err)
    - verifyEmailTokenByID(tokenID, rawToken, kind) -> userID, error
-   - sendEmailSMTP(to, subject, html) -> error
 */
 
 // verifyEmailHandler - GET used by email link: /verify-email?tid=<id>&t=<raw>
@@ -1706,7 +1836,6 @@ func verifyEmailHandler(c *gin.Context) {
 	}
 	userID, err := verifyEmailTokenByID(tid, raw, "verify")
 	if err != nil {
-		// If link invalid, redirect to frontend verified page with error
 		appURL := os.Getenv("APP_BASE_URL")
 		if appURL == "" {
 			appURL = "http://localhost:3000"
@@ -1714,7 +1843,6 @@ func verifyEmailHandler(c *gin.Context) {
 		c.Redirect(http.StatusFound, fmt.Sprintf("%s/verified?success=0", appURL))
 		return
 	}
-	// Mark user verified
 	if _, err := db.Exec(`UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?`, time.Now().UTC(), userID); err != nil {
 		logIfTimeout(err, "verifyEmail: update user")
 	}
@@ -1733,47 +1861,53 @@ func forgotPasswordHandler(c *gin.Context) {
 		EmailOrUsername string `json:"email"`
 	}
 	_ = c.BindJSON(&in)
-	// look up user by email first, then username
 	var userID, email string
 	err := db.QueryRowContext(ctx, `SELECT id, email FROM users WHERE email = ? OR username = ?`, in.EmailOrUsername, in.EmailOrUsername).
 		Scan(&userID, &email)
 	if err == sql.ErrNoRows {
-		// Always respond with generic message
 		c.JSON(http.StatusOK, gin.H{"message": "If an account exists, we sent a reset link"})
 		return
 	} else if err != nil {
 		serverError(c, "forgotPassword: select user", err)
 		return
 	}
-	raw, tokenID, err := createEmailToken(userID, "reset", 1*time.Hour)
+	raw, tokenID, err := createEmailToken(userID, "reset", resetCodeTTL)
 	if err == nil {
 		appURL := os.Getenv("APP_BASE_URL")
 		if appURL == "" {
 			appURL = "http://localhost:3000"
 		}
 		resetURL := fmt.Sprintf("%s/reset-password?tid=%s&t=%s", appURL, tokenID, raw)
-		html := fmt.Sprintf(`<p>To reset your password, click <a href="%s">this link</a>. The link expires in 1 hour.</p>`, resetURL)
-		go sendEmailSMTP(email, "Reset your password", html)
+		html := fmt.Sprintf(`<p>To reset your password, click <a href="%s">this link</a>. The link expires in %d minutes.</p>`, resetURL, int(resetCodeTTL.Minutes()))
+		go func() {
+			if err := sendEmailBrevo(email, "Reset your password", html); err != nil {
+				log.Printf("sendEmailBrevo reset: %v", err)
+			}
+		}()
 	}
-	// Generic response
 	c.JSON(http.StatusOK, gin.H{"message": "If an account exists, we sent a reset link"})
 }
 
-// resetPasswordHandler - consumes token + sets new password
+// resetPasswordHandler - consumes token + sets new password (with confirmation)
 func resetPasswordHandler(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
 	defer cancel()
 	var in struct {
-		TokenID    string `json:"tokenId"`
-		Token      string `json:"token"`
-		NewPassword string `json:"newPassword"`
+		TokenID            string `json:"tokenId"`
+		Token              string `json:"token"`
+		NewPassword        string `json:"newPassword"`
+		ConfirmNewPassword string `json:"confirmNewPassword"`
 	}
 	if err := c.BindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
-	if in.TokenID == "" || in.Token == "" || in.NewPassword == "" {
+	if in.TokenID == "" || in.Token == "" || in.NewPassword == "" || in.ConfirmNewPassword == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing fields"})
+		return
+	}
+	if in.NewPassword != in.ConfirmNewPassword {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Passwords do not match"})
 		return
 	}
 	if !validatePassword(in.NewPassword) {
@@ -1785,7 +1919,6 @@ func resetPasswordHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired token"})
 		return
 	}
-	// update password
 	h, err := bcrypt.GenerateFromPassword([]byte(in.NewPassword), 12)
 	if err != nil {
 		serverError(c, "resetPassword: hash", err)
@@ -1795,7 +1928,6 @@ func resetPasswordHandler(c *gin.Context) {
 		serverError(c, "resetPassword: update", err)
 		return
 	}
-	// revoke refresh tokens for the user
 	if _, err := db.ExecContext(ctx, `UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?`, userID); err != nil {
 		logIfTimeout(err, "resetPassword: revoke")
 	}

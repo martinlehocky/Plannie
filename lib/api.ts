@@ -113,3 +113,30 @@ export const logout = async () => {
         clearTokens()
     }
 }
+
+// New helpers for password reset flows
+export const forgotPassword = async (emailOrUsername: string) => {
+    return fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailOrUsername }),
+    })
+}
+
+export const resetPassword = async (args: { tokenId: string; token: string; newPassword: string }) => {
+    try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/reset-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                tokenId: args.tokenId,
+                token: args.token,
+                newPassword: args.newPassword,
+            }),
+        })
+        const data = await res.json().catch(() => ({}))
+        return { ok: res.ok, error: data.error as string | undefined }
+    } catch {
+        return { ok: false, error: "Network error" }
+    }
+}

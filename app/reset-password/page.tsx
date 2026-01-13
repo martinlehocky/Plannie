@@ -1,50 +1,94 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Input } from "@/components/ui/input"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { resetPassword } from "@/lib/api"
 
 export default function ResetPasswordPage() {
     const search = useSearchParams()
-    const tid = search?.get("tid") ?? ""
-    const t = search?.get("t") ?? ""
-    const [pw, setPw] = useState("")
+    const [tokenId, setTokenId] = useState("")
+    const [token, setToken] = useState("")
+    const [password, setPassword] = useState("")
     const [loading, setLoading] = useState(false)
     const { toast } = useToast()
     const router = useRouter()
 
+    useEffect(() => {
+        const tid = search.get("tid") || ""
+        const t = search.get("t") || ""
+        if (tid) setTokenId(tid)
+        if (t) setToken(t)
+    }, [search])
+
     const submit = async () => {
-        if (!pw) { toast({title:"Missing", description:"Enter a new password", variant:"destructive"}); return }
+        if (!tokenId || !token || !password) {
+            toast({ title: "Missing fields", description: "Token and password are required.", variant: "destructive" })
+            return
+        }
         setLoading(true)
-        try {
-            const res = await fetch(`${API_BASE}/reset-password`, {
-                method: "POST",
-                headers: {"Content-Type":"application/json"},
-                body: JSON.stringify({ tokenId: tid, token: t, newPassword: pw }),
-            })
-            if (res.ok) {
-                toast({ title: "Password updated", description: "You can now sign in." })
-                router.push("/")
-            } else {
-                const d = await res.json().catch(()=>({}))
-                toast({ title: "Error", description: d.error || "Could not reset", variant: "destructive" })
-            }
-        } catch {
-            toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
-        } finally { setLoading(false) }
+        const res = await resetPassword({ tokenId, token, newPassword: password })
+        if (res.ok) {
+            toast({ title: "Password reset", description: "Please sign in with your new password." })
+            router.push("/login")
+        } else {
+            toast({ title: "Error", description: res.error || "Invalid or expired token", variant: "destructive" })
+        }
+        setLoading(false)
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-            <div className="w-full max-w-md">
-                <h1 className="text-2xl mb-4">Reset password</h1>
-                <Input type="password" placeholder="New password" value={pw} onChange={(e)=>setPw(e.target.value)} />
-                <Button className="mt-4" onClick={submit} disabled={loading}>Set new password</Button>
+        <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
+            <div className="absolute top-4 left-4 flex items-center gap-2">
+                <Link href="/">
+                    <Button variant="outline" size="sm" className="font-semibold">
+                        ← Back to Home
+                    </Button>
+                </Link>
             </div>
+            <div className="absolute top-4 right-4">
+                <ThemeToggle />
+            </div>
+
+            <Card className="w-full max-w-md shadow-lg border-2">
+                <CardHeader>
+                    <CardTitle className="text-2xl text-center">Set a new password</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Input
+                        placeholder="Token ID"
+                        value={tokenId}
+                        onChange={(e) => setTokenId(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && submit()}
+                    />
+                    <Input
+                        placeholder="Token"
+                        value={token}
+                        onChange={(e) => setToken(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && submit()}
+                    />
+                    <Input
+                        type="password"
+                        placeholder="New password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && submit()}
+                    />
+                    <Button className="w-full h-11 text-base mt-2" onClick={submit} disabled={loading}>
+                        {loading ? "Updating..." : "Reset password"}
+                    </Button>
+                    <div className="text-center text-sm">
+                        <Link href="/login" className="text-primary hover:underline">
+                            Back to sign in
+                        </Link>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     )
 }
