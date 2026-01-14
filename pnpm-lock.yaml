@@ -149,6 +149,12 @@ importers:
       react-dom:
         specifier: 19.2.0
         version: 19.2.0(react@19.2.0)
+      react-google-recaptcha:
+        specifier: ^2.1.0
+        version: 2.1.0(react@19.2.0)
+      react-google-recaptcha-enterprise:
+        specifier: ^1.0.3
+        version: 1.0.3(react@19.2.0)
       react-hook-form:
         specifier: ^7.60.0
         version: 7.69.0(react@19.2.0)
@@ -192,6 +198,9 @@ importers:
       '@types/react-dom':
         specifier: ^19
         version: 19.2.3(@types/react@19.2.7)
+      '@types/react-google-recaptcha':
+        specifier: ^2.1.9
+        version: 2.1.9
       postcss:
         specifier: ^8.5
         version: 8.5.6
@@ -1227,6 +1236,9 @@ packages:
     peerDependencies:
       '@types/react': ^19.2.0
 
+  '@types/react-google-recaptcha@2.1.9':
+    resolution: {integrity: sha512-nT31LrBDuoSZJN4QuwtQSF3O89FVHC4jLhM+NtKEmVF5R1e8OY0Jo4//x2Yapn2aNHguwgX5doAq8Zo+Ehd0ug==}
+
   '@types/react@19.2.7':
     resolution: {integrity: sha512-MWtvHrGZLFttgeEj28VXHxpmwYbor/ATPYbBfSFZEIRK0ecCFLl2Qo55z52Hss+UV9CRN7trSeq1zbgx7YDWWg==}
 
@@ -1407,6 +1419,9 @@ packages:
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
+  hoist-non-react-statics@3.3.2:
+    resolution: {integrity: sha512-/gGivxi8JPKWNm/W0jSmzcMPpfpPLc3dY/6GxhX2hQ9iGj3aDfklV4ET7NjKpSinLpJ5vafa9iiGIEZg10SfBw==}
+
   input-otp@1.4.1:
     resolution: {integrity: sha512-+yvpmKYKHi9jIGngxagY9oWiiblPB7+nEO75F2l2o4vs+6vpPZZmUl4tBNYuTCvQjhvEIbdNeJu70bhfYP2nbw==}
     peerDependencies:
@@ -1565,6 +1580,11 @@ packages:
   prop-types@15.8.1:
     resolution: {integrity: sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==}
 
+  react-async-script@1.2.0:
+    resolution: {integrity: sha512-bCpkbm9JiAuMGhkqoAiC0lLkb40DJ0HOEJIku+9JDjxX3Rcs+ztEOG13wbrOskt3n2DTrjshhaQ/iay+SnGg5Q==}
+    peerDependencies:
+      react: '>=16.4.1'
+
   react-day-picker@9.8.0:
     resolution: {integrity: sha512-E0yhhg7R+pdgbl/2toTb0xBhsEAtmAx1l7qjIWYfcxOy8w4rTSVfbtBoSzVVhPwKP/5E9iL38LivzoE3AQDhCQ==}
     engines: {node: '>=18'}
@@ -1575,6 +1595,16 @@ packages:
     resolution: {integrity: sha512-UlbRu4cAiGaIewkPyiRGJk0imDN2T3JjieT6spoL2UeSf5od4n5LB/mQ4ejmxhCFT1tYe8IvaFulzynWovsEFQ==}
     peerDependencies:
       react: ^19.2.0
+
+  react-google-recaptcha-enterprise@1.0.3:
+    resolution: {integrity: sha512-pRtKoYTVGCAPGk1TdNfmlZE1l8U0WNUe98h/MV5c0AsYxFRw5U167DldKc/Gfhv4a8pSCiqM8+ZdWQVQnW1vEg==}
+    peerDependencies:
+      react: '>=16.4.1'
+
+  react-google-recaptcha@2.1.0:
+    resolution: {integrity: sha512-K9jr7e0CWFigi8KxC3WPvNqZZ47df2RrMAta6KmRoE4RUi7Ys6NmNjytpXpg4HI/svmQJLKR+PncEPaNJ98DqQ==}
+    peerDependencies:
+      react: '>=16.4.1'
 
   react-hook-form@7.69.0:
     resolution: {integrity: sha512-yt6ZGME9f4F6WHwevrvpAjh42HMvocuSnSIHUGycBqXIJdhqGSPQzTpGF+1NLREk/58IdPxEMfPcFCjlMhclGw==}
@@ -2745,6 +2775,10 @@ snapshots:
     dependencies:
       '@types/react': 19.2.7
 
+  '@types/react-google-recaptcha@2.1.9':
+    dependencies:
+      '@types/react': 19.2.7
+
   '@types/react@19.2.7':
     dependencies:
       csstype: 3.2.3
@@ -2901,6 +2935,10 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
+  hoist-non-react-statics@3.3.2:
+    dependencies:
+      react-is: 16.13.1
+
   input-otp@1.4.1(react-dom@19.2.0(react@19.2.0))(react@19.2.0):
     dependencies:
       react: 19.2.0
@@ -3031,6 +3069,12 @@ snapshots:
       object-assign: 4.1.1
       react-is: 16.13.1
 
+  react-async-script@1.2.0(react@19.2.0):
+    dependencies:
+      hoist-non-react-statics: 3.3.2
+      prop-types: 15.8.1
+      react: 19.2.0
+
   react-day-picker@9.8.0(react@19.2.0):
     dependencies:
       '@date-fns/tz': 1.2.0
@@ -3042,6 +3086,18 @@ snapshots:
     dependencies:
       react: 19.2.0
       scheduler: 0.27.0
+
+  react-google-recaptcha-enterprise@1.0.3(react@19.2.0):
+    dependencies:
+      prop-types: 15.8.1
+      react: 19.2.0
+      react-async-script: 1.2.0(react@19.2.0)
+
+  react-google-recaptcha@2.1.0(react@19.2.0):
+    dependencies:
+      prop-types: 15.8.1
+      react: 19.2.0
+      react-async-script: 1.2.0(react@19.2.0)
 
   react-hook-form@7.69.0(react@19.2.0):
     dependencies:

@@ -23,6 +23,8 @@ import (
 	"syscall"
 	"time"
 
+	recaptcha "cloud.google.com/go/recaptchaenterprise/v2/apiv1"
+	recaptchapb "cloud.google.com/go/recaptchaenterprise/v2/apiv1/recaptchaenterprisepb"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -43,18 +45,23 @@ Security & Architecture Notes (updated)
 */
 
 var (
-	db        *sql.DB
-	jwtSecret []byte
+	db                 *sql.DB
+	jwtSecret          []byte
+	recaptchaClient    *recaptcha.Client
+	recaptchaProjectID string
+	recaptchaSiteKey   string
+	recaptchaMinScore  = 0.0 // for checkbox, typically not used
 )
 
 const (
-	accessTTL         = 15 * time.Minute
-	refreshTTL        = 30 * 24 * time.Hour // long-lived (remember me)
-	refreshTTLShort   = 24 * time.Hour      // shorter when rememberMe=false
-	lockoutThreshold  = 5
-	lockoutWindow     = 15 * time.Minute
-	schemaVersion     = 2
-	refreshCookieName = "rt"
+	accessTTL               = 15 * time.Minute
+	refreshTTL              = 30 * 24 * time.Hour // long-lived (remember me)
+	refreshTTLShort         = 24 * time.Hour      // shorter when rememberMe=false
+	lockoutThreshold        = 5
+	lockoutWindow           = 15 * time.Minute
+	schemaVersion           = 2
+	refreshCookieName       = "rt"
+	recaptchaActionRegister = "register"
 )
 
 var (
@@ -64,6 +71,7 @@ var (
 	brevoSenderEmail string
 	brevoSenderName  string
 	resetCodeTTL     = 15 * time.Minute
+	verifyTTL        = 24 * time.Hour // verification link validity
 )
 
 // SSE broadcaster (unchanged)
@@ -312,6 +320,47 @@ func sendEmailBrevo(toEmail, subject, html string) error {
 	return nil
 }
 
+// reCAPTCHA Enterprise helper
+func verifyRecaptchaEnterprise(ctx context.Context, token, action, remoteIP string) error {
+	if recaptchaClient == nil || recaptchaProjectID == "" || recaptchaSiteKey == "" {
+		return nil // recaptcha not configured
+	}
+	if token == "" {
+		return fmt.Errorf("missing recaptcha token")
+	}
+
+	event := &recaptchapb.Event{
+		Token:   token,
+		SiteKey: recaptchaSiteKey,
+	}
+	assessment := &recaptchapb.Assessment{Event: event}
+	req := &recaptchapb.CreateAssessmentRequest{
+		Parent:     fmt.Sprintf("projects/%s", recaptchaProjectID),
+		Assessment: assessment,
+	}
+
+	resp, err := recaptchaClient.CreateAssessment(ctx, req)
+	if err != nil {
+		return fmt.Errorf("recaptcha assessment failed: %w", err)
+	}
+
+	if resp.TokenProperties == nil || !resp.TokenProperties.Valid {
+		return fmt.Errorf("invalid recaptcha token: %v", resp.GetTokenProperties().GetInvalidReason())
+	}
+
+	if action != "" && resp.TokenProperties.Action != "" && resp.TokenProperties.Action != action {
+		return fmt.Errorf("recaptcha action mismatch")
+	}
+
+	if resp.RiskAnalysis != nil && recaptchaMinScore > 0 {
+		if float64(resp.RiskAnalysis.Score) < recaptchaMinScore {
+			return fmt.Errorf("recaptcha score too low")
+		}
+	}
+
+	return nil
+}
+
 // JWT helpers
 func signAccessToken(userID string) (string, error) {
 	claims := &Claims{
@@ -517,6 +566,19 @@ func cleanupLoginAttemptsLoop() {
 	}
 }
 
+// Delete unverified users older than verifyTTL
+func cleanupUnverifiedUsersLoop() {
+	for {
+		time.Sleep(time.Hour)
+		cutoff := time.Now().Add(-verifyTTL)
+		if res, err := db.Exec(`DELETE FROM users WHERE email_verified = 0 AND created_at < ?`, cutoff.UTC()); err != nil {
+			log.Printf("cleanup unverified error: %v", err)
+		} else if rows, _ := res.RowsAffected(); rows > 0 {
+			log.Printf("cleanup unverified: deleted %d users", rows)
+		}
+	}
+}
+
 func rateLimit(rps rate.Limit, burst int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := clientIP(c)
@@ -706,6 +768,15 @@ func main() {
 	brevoSenderName = os.Getenv("BREVO_SENDER_NAME")
 	resetCodeTTL = time.Duration(getEnvInt("RESET_CODE_TTL_MINUTES", 15)) * time.Minute
 
+	// reCAPTCHA Enterprise config
+	recaptchaProjectID = os.Getenv("RECAPTCHA_ENTERPRISE_PROJECT_ID")
+	recaptchaSiteKey = os.Getenv("RECAPTCHA_ENTERPRISE_SITE_KEY")
+	if v := os.Getenv("RECAPTCHA_ENTERPRISE_MIN_SCORE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			recaptchaMinScore = f
+		}
+	}
+
 	var err error
 	db, err = openDB(dbPath)
 	if err != nil {
@@ -717,8 +788,16 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 
+	if recaptchaProjectID != "" && recaptchaSiteKey != "" {
+		recaptchaClient, err = recaptcha.NewClient(ctx)
+		if err != nil {
+			log.Fatalf("init recaptcha enterprise client: %v", err)
+		}
+	}
+
 	go cleanupVisitorsLoop()
 	go cleanupLoginAttemptsLoop()
+	go cleanupUnverifiedUsersLoop()
 
 	r := gin.Default()
 	r.Use(securityHeaders())
@@ -786,6 +865,9 @@ func main() {
 	if err := srv.Shutdown(ctxShutdown); err != nil {
 		log.Printf("server shutdown error: %v", err)
 	}
+	if recaptchaClient != nil {
+		_ = recaptchaClient.Close()
+	}
 	if err := db.Close(); err != nil {
 		log.Printf("db close error: %v", err)
 	}
@@ -798,9 +880,11 @@ func registerHandler(c *gin.Context) {
 	defer cancel()
 
 	var input struct {
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Username        string `json:"username"`
+		Email           string `json:"email"`
+		Password        string `json:"password"`
+		RecaptchaToken  string `json:"recaptchaToken"`
+		RecaptchaAction string `json:"recaptchaAction"`
 	}
 	if err := c.BindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
@@ -817,6 +901,13 @@ func registerHandler(c *gin.Context) {
 	if !validatePassword(input.Password) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Weak password (>=8 chars with number and special)"})
 		return
+	}
+
+	if recaptchaClient != nil {
+		if err := verifyRecaptchaEnterprise(ctx, input.RecaptchaToken, recaptchaActionRegister, clientIP(c)); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Recaptcha failed"})
+			return
+		}
 	}
 
 	var exists int
@@ -842,11 +933,11 @@ func registerHandler(c *gin.Context) {
 		return
 	}
 
-	raw, tokenID, err := createEmailToken(id, "verify", 48*time.Hour)
+	raw, tokenID, err := createEmailToken(id, "verify", verifyTTL)
 	if err == nil {
 		apiURL := apiBaseURL()
 		verifyURL := fmt.Sprintf("%s/verify-email?tid=%s&t=%s", apiURL, tokenID, raw)
-		html := fmt.Sprintf(`<p>Welcome %s,</p><p>Please verify your email by clicking <a href="%s">this link</a>. The link expires in 48 hours.</p>`, input.Username, verifyURL)
+		html := fmt.Sprintf(`<p>Welcome %s,</p><p>Please verify your email by clicking <a href="%s">this link</a>. The link expires in 24 hours.</p>`, input.Username, verifyURL)
 		go func() {
 			if err := sendEmailBrevo(input.Email, "Verify your account", html); err != nil {
 				log.Printf("sendEmailBrevo verify: %v", err)
@@ -1209,11 +1300,11 @@ func updateUserHandler(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
 			return
 		}
-		raw, tokenID, err := createEmailToken(userID, "verify", 48*time.Hour)
+		raw, tokenID, err := createEmailToken(userID, "verify", verifyTTL)
 		if err == nil {
 			apiURL := apiBaseURL()
 			verifyURL := fmt.Sprintf("%s/verify-email?tid=%s&t=%s", apiURL, tokenID, raw)
-			html := fmt.Sprintf(`<p>Please verify your new email by clicking <a href="%s">this link</a></p>`, verifyURL)
+			html := fmt.Sprintf(`<p>Please verify your new email by clicking <a href="%s">this link</a>. The link expires in 24 hours.</p>`, verifyURL)
 			go func() {
 				if err := sendEmailBrevo(updatedEmail, "Verify your email", html); err != nil {
 					log.Printf("sendEmailBrevo verify-change: %v", err)

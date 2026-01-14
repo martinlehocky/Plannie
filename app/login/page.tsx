@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -14,6 +15,10 @@ import { setTokens } from "@/lib/api"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""
+
+// Load reCAPTCHA Enterprise client-side only
+const ReCAPTCHA = dynamic(() => import("react-google-recaptcha-enterprise"), { ssr: false })
 
 // Initialize zxcvbn options once
 const options = {
@@ -35,11 +40,12 @@ export default function LoginPage() {
     const [crackTime, setCrackTime] = useState("")
     const [score, setScore] = useState(0) // 0 to 4
     const [loading, setLoading] = useState(false)
+    const [tosAccepted, setTosAccepted] = useState(false)
+    const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
 
     const router = useRouter()
     const { toast } = useToast()
 
-    // Password strength meter
     useEffect(() => {
         if (!password) {
             setCrackTime("")
@@ -51,7 +57,6 @@ export default function LoginPage() {
         setCrackTime(result.crackTimesDisplay.offlineSlowHashing1e4PerSecond)
     }, [password])
 
-    // Match backend rules: >=8 chars with a number and a special character
     const passwordLooksValid = () => {
         const hasDigit = /[0-9]/.test(password)
         const hasSpec = /[!@#$%^&*()\-_=+{}[\]:;"'<>,.?/\\|]/.test(password)
@@ -63,6 +68,13 @@ export default function LoginPage() {
         if (!email) return false
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     }
+
+    useEffect(() => {
+        if (!isRegister) {
+            setRecaptchaToken(null)
+            setTosAccepted(false)
+        }
+    }, [isRegister])
 
     const handleAuth = async () => {
         if (!username || !password) {
@@ -85,15 +97,29 @@ export default function LoginPage() {
             })
             return
         }
+        if (isRegister) {
+            if (!tosAccepted) {
+                toast({ title: "Accept Terms", description: "Please accept the Terms of Service.", variant: "destructive" })
+                return
+            }
+            if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+                toast({ title: "Complete reCAPTCHA", description: "Please complete the verification.", variant: "destructive" })
+                return
+            }
+        }
 
         setLoading(true)
         try {
             if (isRegister) {
-                // Register (now requires email)
                 const resReg = await fetch(`${API_BASE}/register`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username, email, password }),
+                    body: JSON.stringify({
+                        username,
+                        email,
+                        password,
+                        recaptchaToken: recaptchaToken ?? undefined,
+                    }),
                 })
                 const dataReg = await resReg.json().catch(() => ({}))
                 if (!resReg.ok) {
@@ -102,16 +128,14 @@ export default function LoginPage() {
                 }
             }
 
-            // Login (for both signup flow and direct login)
             const resLogin = await fetch(`${API_BASE}/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                credentials: "include", // receive HttpOnly refresh cookie
+                credentials: "include",
                 body: JSON.stringify({ username, password, rememberMe }),
             })
             const dataLogin = await resLogin.json().catch(() => ({}))
             if (resLogin.ok && dataLogin.token) {
-                // Store access token in localStorage if rememberMe, otherwise sessionStorage
                 setTokens(dataLogin.token, rememberMe)
                 try {
                     if (rememberMe) {
@@ -154,6 +178,8 @@ export default function LoginPage() {
                 return "bg-gray-200"
         }
     }
+
+    const recaptchaEnabled = isRegister && !!RECAPTCHA_SITE_KEY
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
@@ -243,6 +269,32 @@ export default function LoginPage() {
                         )}
                     </div>
 
+                    {isRegister && (
+                        <div className="flex items-center gap-2 text-sm">
+                            <input
+                                id="tos"
+                                type="checkbox"
+                                className="h-4 w-4 accent-primary"
+                                checked={tosAccepted}
+                                onChange={(e) => setTosAccepted(e.target.checked)}
+                            />
+                            <label htmlFor="tos" className="select-none cursor-pointer">
+                                I accept the Terms of Service
+                            </label>
+                        </div>
+                    )}
+
+                    {recaptchaEnabled && (
+                        <div className="flex justify-center">
+                            <ReCAPTCHA
+                                sitekey={RECAPTCHA_SITE_KEY}
+                                onChange={(token) => setRecaptchaToken(token)}
+                                onExpired={() => setRecaptchaToken(null)}
+                                onErrored={() => setRecaptchaToken(null)}
+                            />
+                        </div>
+                    )}
+
                     <Button className="w-full h-11 text-base mt-2" onClick={handleAuth} disabled={loading}>
                         {loading ? "Please wait..." : isRegister ? "Sign Up" : "Login"}
                     </Button>
@@ -255,6 +307,8 @@ export default function LoginPage() {
                                 setPassword("")
                                 setEmail("")
                                 setScore(0)
+                                setRecaptchaToken(null)
+                                setTosAccepted(false)
                             }}
                         >
                             {isRegister ? "Already have an account? Login" : "Need an account? Sign Up"}
