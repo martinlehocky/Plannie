@@ -8,11 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Calendar, Clock, Users, Share2, Sparkles, Zap } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { logout, getAccessToken, getStoredUsername } from "@/lib/api"
+import { useTranslations } from "@/components/language-provider"
+import { LanguageToggle } from "@/components/language-toggle"
 
 export default function LandingPage() {
     const router = useRouter()
     const [isLoggedIn, setIsLoggedIn] = useState(false)
     const [username, setUsername] = useState("")
+    const { t } = useTranslations()
 
     useEffect(() => {
         const token = getAccessToken()
@@ -36,42 +39,43 @@ export default function LandingPage() {
                         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                             <Calendar className="w-5 h-5 text-primary-foreground" />
                         </div>
-                        <span className="font-bold text-xl">Plannie</span>
+                        <span className="font-bold text-xl">{t("common.appName")}</span>
                     </div>
 
                     <div className="flex items-center gap-3">
                         {isLoggedIn && (
                             <span className="text-sm text-muted-foreground hidden sm:inline">
-                Signed in as <span className="font-semibold text-foreground">{username || "you"}</span>
+                {t("common.signedInAs", { name: username || t("common.guest") })}
               </span>
                         )}
 
                         {isLoggedIn && (
                             <Link href="/dashboard">
                                 <Button variant="outline" size="sm" className="font-semibold">
-                                    My Dashboard
+                                    {t("common.myDashboard")}
                                 </Button>
                             </Link>
                         )}
 
                         <Link href="/create">
                             <Button size="sm" className="font-semibold">
-                                Create Event
+                                {t("common.createEvent")}
                             </Button>
                         </Link>
 
                         {isLoggedIn ? (
                             <Button variant="ghost" size="sm" className="font-semibold" onClick={handleSignOut}>
-                                Sign Out
+                                {t("common.signOut")}
                             </Button>
                         ) : (
                             <Link href="/login">
                                 <Button variant="ghost" size="sm" className="font-semibold">
-                                    Sign In / Register
+                                    {t("common.signInRegister")}
                                 </Button>
                             </Link>
                         )}
 
+                        <LanguageToggle className="w-[150px]" />
                         <ThemeToggle />
                     </div>
                 </div>
@@ -82,33 +86,32 @@ export default function LandingPage() {
                 <div className="container mx-auto max-w-6xl text-center space-y-8">
                     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary border border-primary/20">
                         <Sparkles className="w-4 h-4" />
-                        <span className="text-sm font-medium">Modern Group Scheduling</span>
+                        <span className="text-sm font-medium">{t("landing.badge")}</span>
                     </div>
 
                     <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-balance">
-                        Find the Perfect Time
+                        {t("landing.title")}
                         <br />
-                        <span className="text-primary">Everyone Can Meet</span>
+                        <span className="text-primary">{t("landing.highlight")}</span>
                     </h1>
 
                     <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-balance">
-                        Coordinate meetings effortlessly. Select your availability, share a link, and watch as the best times emerge
-                        through beautiful heatmap visualization.
+                        {t("landing.description")}
                     </p>
 
                     <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
                         <Link href="/create">
                             <Button size="lg" className="h-14 px-8 text-lg font-semibold">
                                 <Calendar className="w-5 h-5 mr-2" />
-                                Create Free Event
+                                {t("landing.primaryCta")}
                             </Button>
                         </Link>
                         <Button variant="outline" size="lg" className="h-14 px-8 text-lg font-semibold bg-transparent" asChild>
-                            <a href="#features">Learn More</a>
+                            <a href="#features">{t("landing.secondaryCta")}</a>
                         </Button>
                     </div>
 
-                    <p className="text-sm text-muted-foreground">No sign-up required • Free forever • Works on any device</p>
+                    <p className="text-sm text-muted-foreground">{t("landing.heroNote")}</p>
                 </div>
             </section>
 
@@ -116,10 +119,8 @@ export default function LandingPage() {
             <section id="features" className="py-16 px-4">
                 <div className="container mx-auto max-w-6xl">
                     <div className="text-center mb-12">
-                        <h2 className="text-3xl md:text-5xl font-bold mb-4">Why Choose Plannie?</h2>
-                        <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                            Built for teams, clubs, friends, and anyone who needs to coordinate schedules without the hassle.
-                        </p>
+                        <h2 className="text-3xl md:text-5xl font-bold mb-4">{t("landing.whyTitle")}</h2>
+                        <p className="text-muted-foreground text-lg max-w-2xl mx-auto">{t("landing.whySubtitle")}</p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -128,10 +129,8 @@ export default function LandingPage() {
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Zap className="w-6 h-6 text-primary" />
                                 </div>
-                                <CardTitle className="text-xl">Lightning Fast</CardTitle>
-                                <CardDescription className="text-base">
-                                    Create events in seconds. No complicated setup or lengthy forms. Just pick dates and share.
-                                </CardDescription>
+                                <CardTitle className="text-xl">{t("landing.features.lightning.title")}</CardTitle>
+                                <CardDescription className="text-base">{t("landing.features.lightning.description")}</CardDescription>
                             </CardHeader>
                         </Card>
 
@@ -140,10 +139,8 @@ export default function LandingPage() {
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Users className="w-6 h-6 text-primary" />
                                 </div>
-                                <CardTitle className="text-xl">Visual Heatmap</CardTitle>
-                                <CardDescription className="text-base">
-                                    See group availability at a glance with our intuitive heatmap. Darker colors mean more people available.
-                                </CardDescription>
+                                <CardTitle className="text-xl">{t("landing.features.heatmap.title")}</CardTitle>
+                                <CardDescription className="text-base">{t("landing.features.heatmap.description")}</CardDescription>
                             </CardHeader>
                         </Card>
 
@@ -152,10 +149,8 @@ export default function LandingPage() {
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Share2 className="w-6 h-6 text-primary" />
                                 </div>
-                                <CardTitle className="text-xl">Easy Sharing</CardTitle>
-                                <CardDescription className="text-base">
-                                    Share a simple link with your group. No accounts needed, works on any device, anywhere.
-                                </CardDescription>
+                                <CardTitle className="text-xl">{t("landing.features.sharing.title")}</CardTitle>
+                                <CardDescription className="text-base">{t("landing.features.sharing.description")}</CardDescription>
                             </CardHeader>
                         </Card>
 
@@ -164,10 +159,8 @@ export default function LandingPage() {
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Calendar className="w-6 h-6 text-primary" />
                                 </div>
-                                <CardTitle className="text-xl">Smart Dates</CardTitle>
-                                <CardDescription className="text-base">
-                                    Automatically expands to show all dates you need. Add more dates dynamically as needed.
-                                </CardDescription>
+                                <CardTitle className="text-xl">{t("landing.features.smartDates.title")}</CardTitle>
+                                <CardDescription className="text-base">{t("landing.features.smartDates.description")}</CardDescription>
                             </CardHeader>
                         </Card>
 
@@ -176,10 +169,8 @@ export default function LandingPage() {
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Clock className="w-6 h-6 text-primary" />
                                 </div>
-                                <CardTitle className="text-xl">Time Zones</CardTitle>
-                                <CardDescription className="text-base">
-                                    Automatically handles time zones. Everyone sees times in their local time zone.
-                                </CardDescription>
+                                <CardTitle className="text-xl">{t("landing.features.timezones.title")}</CardTitle>
+                                <CardDescription className="text-base">{t("landing.features.timezones.description")}</CardDescription>
                             </CardHeader>
                         </Card>
 
@@ -188,10 +179,8 @@ export default function LandingPage() {
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Sparkles className="w-6 h-6 text-primary" />
                                 </div>
-                                <CardTitle className="text-xl">Modern Design</CardTitle>
-                                <CardDescription className="text-base">
-                                    Beautiful, mobile-responsive interface with dark mode support. Looks great everywhere.
-                                </CardDescription>
+                                <CardTitle className="text-xl">{t("landing.features.design.title")}</CardTitle>
+                                <CardDescription className="text-base">{t("landing.features.design.description")}</CardDescription>
                             </CardHeader>
                         </Card>
                     </div>
@@ -202,8 +191,8 @@ export default function LandingPage() {
             <section className="py-16 px-4 bg-muted/30">
                 <div className="container mx-auto max-w-4xl">
                     <div className="text-center mb-12">
-                        <h2 className="text-3xl md:text-5xl font-bold mb-4">How It Works</h2>
-                        <p className="text-muted-foreground text-lg">Getting started takes less than a minute</p>
+                        <h2 className="text-3xl md:text-5xl font-bold mb-4">{t("landing.howTitle")}</h2>
+                        <p className="text-muted-foreground text-lg">{t("landing.howSubtitle")}</p>
                     </div>
 
                     <div className="space-y-8">
@@ -212,10 +201,8 @@ export default function LandingPage() {
                                 1
                             </div>
                             <div>
-                                <h3 className="text-xl font-semibold mb-2">Create Your Event</h3>
-                                <p className="text-muted-foreground">
-                                    Give your event a name, select the date range, and set the meeting duration. That's it!
-                                </p>
+                                <h3 className="text-xl font-semibold mb-2">{t("landing.steps.create.title")}</h3>
+                                <p className="text-muted-foreground">{t("landing.steps.create.description")}</p>
                             </div>
                         </div>
 
@@ -224,10 +211,8 @@ export default function LandingPage() {
                                 2
                             </div>
                             <div>
-                                <h3 className="text-xl font-semibold mb-2">Share the Link</h3>
-                                <p className="text-muted-foreground">
-                                    Copy the event link and share it with your group via email, Slack, WhatsApp, or any messaging app.
-                                </p>
+                                <h3 className="text-xl font-semibold mb-2">{t("landing.steps.share.title")}</h3>
+                                <p className="text-muted-foreground">{t("landing.steps.share.description")}</p>
                             </div>
                         </div>
 
@@ -236,10 +221,8 @@ export default function LandingPage() {
                                 3
                             </div>
                             <div>
-                                <h3 className="text-xl font-semibold mb-2">Select Availability</h3>
-                                <p className="text-muted-foreground">
-                                    Each person clicks and drags to mark when they're available. Changes are saved automatically.
-                                </p>
+                                <h3 className="text-xl font-semibold mb-2">{t("landing.steps.select.title")}</h3>
+                                <p className="text-muted-foreground">{t("landing.steps.select.description")}</p>
                             </div>
                         </div>
 
@@ -248,10 +231,8 @@ export default function LandingPage() {
                                 4
                             </div>
                             <div>
-                                <h3 className="text-xl font-semibold mb-2">Find Best Time</h3>
-                                <p className="text-muted-foreground">
-                                    Watch the heatmap update in real-time. Darker times mean more people available. Pick the best time!
-                                </p>
+                                <h3 className="text-xl font-semibold mb-2">{t("landing.steps.pick.title")}</h3>
+                                <p className="text-muted-foreground">{t("landing.steps.pick.description")}</p>
                             </div>
                         </div>
                     </div>
@@ -263,14 +244,12 @@ export default function LandingPage() {
                 <div className="container mx-auto max-w-4xl text-center">
                     <Card className="border-2 shadow-2xl bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
                         <CardContent className="pt-12 pb-12 space-y-6">
-                            <h2 className="text-3xl md:text-5xl font-bold text-balance">Ready to Schedule Your Next Meeting?</h2>
-                            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                                Join thousands of teams coordinating schedules with Plannie. No credit card required.
-                            </p>
+                            <h2 className="text-3xl md:text-5xl font-bold text-balance">{t("landing.ctaTitle")}</h2>
+                            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">{t("landing.ctaDescription")}</p>
                             <Link href="/create">
                                 <Button size="lg" className="h-14 px-10 text-lg font-semibold">
                                     <Calendar className="w-5 h-5 mr-2" />
-                                    Create Your First Event
+                                    {t("landing.ctaButton")}
                                 </Button>
                             </Link>
                         </CardContent>
@@ -281,7 +260,7 @@ export default function LandingPage() {
             {/* Footer */}
             <footer className="border-t py-8 px-4">
                 <div className="container mx-auto text-center text-sm text-muted-foreground">
-                    <p>Made with ❤️ for better scheduling</p>
+                    <p>{t("landing.footer")}</p>
                 </div>
             </footer>
         </div>

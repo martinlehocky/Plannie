@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { format } from "date-fns"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { LanguageToggle } from "@/components/language-toggle"
 import { Button } from "@/components/ui/button"
 import { LogOut, Trash2, Settings, Plus, ArrowLeft, Clock } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -21,6 +22,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { fetchWithAuth, clearTokens, logout, getAccessToken, getStoredUsername } from "@/lib/api"
+import { useTranslations } from "@/components/language-provider"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -39,6 +41,7 @@ export default function Dashboard() {
     const [events, setEvents] = useState<Event[]>([])
     const [loading, setLoading] = useState(true)
     const [username, setUsername] = useState("")
+    const { t } = useTranslations()
     const router = useRouter()
     const { toast } = useToast()
 
@@ -94,14 +97,18 @@ export default function Dashboard() {
             }
             if (res.ok) {
                 setEvents((prev) => prev.filter((ev) => ev.id !== eventId))
-                toast({ title: "Event deleted", description: "The event has been permanently removed." })
+                toast({ title: t("dashboard.toasts.eventDeletedTitle"), description: t("dashboard.toasts.eventDeletedDescription") })
             } else {
                 const data = await res.json().catch(() => ({}))
-                toast({ title: "Error", description: data.error || "Could not delete event.", variant: "destructive" })
+                toast({
+                    title: t("dashboard.toasts.errorTitle"),
+                    description: data.error || t("dashboard.toasts.deleteFailed"),
+                    variant: "destructive",
+                })
             }
         } catch (error) {
             console.error("Failed to delete", error)
-            toast({ title: "Error", description: "Could not reach the server.", variant: "destructive" })
+            toast({ title: t("dashboard.toasts.errorTitle"), description: t("dashboard.toasts.unreachable"), variant: "destructive" })
         }
     }
 
@@ -116,14 +123,18 @@ export default function Dashboard() {
             }
             if (res.ok) {
                 setEvents((prev) => prev.filter((ev) => ev.id !== eventId))
-                toast({ title: "Left event", description: "You have left the event." })
+                toast({ title: t("dashboard.toasts.leftEventTitle"), description: t("dashboard.toasts.leftEventDescription") })
             } else {
                 const data = await res.json().catch(() => ({}))
-                toast({ title: "Error", description: data.error || "Could not leave event.", variant: "destructive" })
+                toast({
+                    title: t("dashboard.toasts.errorTitle"),
+                    description: data.error || t("dashboard.toasts.leaveFailed"),
+                    variant: "destructive",
+                })
             }
         } catch (error) {
             console.error("Failed to leave event", error)
-            toast({ title: "Error", description: "Could not reach the server.", variant: "destructive" })
+            toast({ title: t("dashboard.toasts.errorTitle"), description: t("dashboard.toasts.unreachable"), variant: "destructive" })
         }
     }
 
@@ -132,12 +143,12 @@ export default function Dashboard() {
         const h = Math.floor(mins / 60)
         const m = mins % 60
         const parts: string[] = []
-        if (h > 0) parts.push(`${h} ${h === 1 ? "hr" : "hrs"}`)
-        if (m > 0) parts.push(`${m} ${m === 1 ? "min" : "mins"}`)
+        if (h > 0) parts.push(`${h} ${h === 1 ? t("dashboard.duration.hour") : t("dashboard.duration.hours")}`)
+        if (m > 0) parts.push(`${m} ${m === 1 ? t("dashboard.duration.minute") : t("dashboard.duration.minutes")}`)
         return parts.join(" ")
     }
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center">Loading dashboard...</div>
+    if (loading) return <div className="min-h-screen flex items-center justify-center">{t("dashboard.loading")}</div>
 
     return (
         <div className="min-h-screen bg-background">
@@ -146,14 +157,14 @@ export default function Dashboard() {
                 <Button variant="ghost" size="sm" className="gap-2" asChild>
                     <Link href="/">
                         <ArrowLeft className="h-4 w-4" />
-                        <span className="hidden md:inline">Back to Home</span>
-                        <span className="md:hidden">Home</span>
+                        <span className="hidden md:inline">{t("common.backToHome")}</span>
+                        <span className="md:hidden">{t("common.home")}</span>
                     </Link>
                 </Button>
 
                 <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground hidden sm:inline">
-            Signed in as <span className="font-semibold text-foreground">{username || "you"}</span>
+            {t("common.signedInAs", { name: username || t("common.guest") })}
           </span>
 
                     <Link href="/settings">
@@ -164,8 +175,9 @@ export default function Dashboard() {
 
                     <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
                         <LogOut className="h-4 w-4" />
-                        <span className="hidden md:inline">Sign Out</span>
+                        <span className="hidden md:inline">{t("common.signOut")}</span>
                     </Button>
+                    <LanguageToggle className="w-[150px]" />
                     <ThemeToggle />
                 </div>
             </div>
@@ -173,21 +185,21 @@ export default function Dashboard() {
             {/* Main content */}
             <div className="w-full max-w-4xl mx-auto space-y-6 p-4 md:p-8">
                 <div className="flex items-center justify-between">
-                    <h1 className="text-3xl font-bold">My Events</h1>
+                    <h1 className="text-3xl font-bold">{t("dashboard.myEvents")}</h1>
                     <Button className="gap-2" asChild>
                         <Link href="/create">
                             <Plus className="h-4 w-4" />
-                            <span className="hidden md:inline">New Event</span>
-                            <span className="md:hidden">New</span>
+                            <span className="hidden md:inline">{t("dashboard.newEvent")}</span>
+                            <span className="md:hidden">{t("dashboard.newShort")}</span>
                         </Link>
                     </Button>
                 </div>
 
                 {events.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
-                        <p>No events found.</p>
+                        <p>{t("dashboard.empty")}</p>
                         <Button variant="link" className="underline hover:text-primary" asChild>
-                            <Link href="/create">Create your first event</Link>
+                            <Link href="/create">{t("dashboard.emptyCta")}</Link>
                         </Button>
                     </div>
                 ) : (
@@ -209,7 +221,7 @@ export default function Dashboard() {
                                                 size="icon"
                                                 className="text-destructive hover:bg-destructive/10"
                                                 onClick={(e) => handleLeaveEvent(e, event.id)}
-                                                title="Leave event"
+                                                title={t("dashboard.leaveTitle")}
                                             >
                                                 <LogOut className="h-4 w-4" />
                                             </Button>
@@ -228,24 +240,24 @@ export default function Dashboard() {
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>
                                                 </AlertDialogTrigger>
-                                                <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle>Delete Event?</AlertDialogTitle>
+                                                    <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                                                        <AlertDialogHeader>
+                                                        <AlertDialogTitle>{t("dashboard.deleteConfirmTitle")}</AlertDialogTitle>
                                                         <AlertDialogDescription>
-                                                            This action cannot be undone. This will permanently delete "{event.name}" for all participants.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <AlertDialogFooter>
-                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                        <AlertDialogAction
-                                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                            onClick={(e) => handleDelete(e, event.id)}
-                                                        >
-                                                            Delete
-                                                        </AlertDialogAction>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
+                                                             {t("dashboard.deleteConfirmDescription", { name: event.name })}
+                                                         </AlertDialogDescription>
+                                                     </AlertDialogHeader>
+                                                     <AlertDialogFooter>
+                                                         <AlertDialogCancel>{t("dashboard.cancel")}</AlertDialogCancel>
+                                                         <AlertDialogAction
+                                                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                             onClick={(e) => handleDelete(e, event.id)}
+                                                         >
+                                                             {t("dashboard.delete")}
+                                                         </AlertDialogAction>
+                                                     </AlertDialogFooter>
+                                                 </AlertDialogContent>
+                                             </AlertDialog>
                                         )}
                                     </div>
                                 </CardHeader>

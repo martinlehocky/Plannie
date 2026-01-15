@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/toaster"
+import { LanguageProvider } from "@/components/language-provider"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -37,11 +38,28 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`font-sans antialiased`}>
-        {children}
-        <Toaster />
-        <Analytics />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+(function() {
+  try {
+    var stored = localStorage.getItem("language");
+    var nav = navigator.language || (navigator.languages && navigator.languages[0]) || "";
+    var lang = stored === "de" ? "de" : (nav && nav.toLowerCase().startsWith("de") ? "de" : "en");
+    document.documentElement.lang = lang;
+  } catch (_) {
+    document.documentElement.lang = "en";
+  }
+})();`,
+          }}
+        />
+        <LanguageProvider>
+          {children}
+          <Toaster />
+          <Analytics />
+        </LanguageProvider>
       </body>
     </html>
   )
