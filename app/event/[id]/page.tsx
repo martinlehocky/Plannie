@@ -59,6 +59,11 @@ type EventData = {
   participants: Participant[]
   creatorId?: string
   disabledSlots?: string[]
+  draft?: {
+    availability: Record<string, boolean>
+    disabledSlots: string[]
+    updatedAt?: string | null
+  }
 }
 
 type TokenClaims = { uid?: string; sub?: string; uname?: string; username?: string; userId?: string; id?: string; name?: string }
@@ -96,11 +101,20 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [sseConnected, setSseConnected] = useState(false)
   const [draftDirty, setDraftDirty] = useState(false)
   const [pendingDisabledSlots, setPendingDisabledSlots] = useState<string[]>([])
+  const [draftAvailability, setDraftAvailability] = useState<Record<string, boolean>>({})
+  const [pendingDraft, setPendingDraft] = useState<{
+    availability: Record<string, boolean>
+    disabledSlots: string[]
+    updatedAt?: string | null
+  } | null>(null)
+  const [gridKey, setGridKey] = useState(0) // force remount grid on revert/resume
+
+  const lastSavedEventRef = useRef<EventData | null>(null)
+  const lastSavedParticipantRef = useRef<Participant | null>(null)
 
   const sseRetryDelayRef = useRef(5000) // start 5s
   const sseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Use getAccessToken so we support sessionStorage (no-remember) and localStorage (remember)
   const token = useMemo(() => getAccessToken() ?? null, [])
   const tokenClaims = useMemo(() => decodeToken(token), [token])
   const userId = tokenClaims.uid || tokenClaims.sub || tokenClaims.userId || tokenClaims.id || null
@@ -114,29 +128,53 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const existing = data.participants.find((p) => p.id === userId)
     if (existing) {
       setIsParticipant(true)
-      if (!draftDirty) setCurrentParticipant(existing)
+      if (!draftDirty) {
+        setCurrentParticipant(existing)
+        lastSavedParticipantRef.current = existing
+        setDraftAvailability(existing.availability || {})
+      }
     } else {
       setIsParticipant(false)
       if (loggedIn && userId && !draftDirty) {
-        // use getStoredUsername to respect session vs persistent username
         const name = getStoredUsername() || usernameClaim || "You"
-        setCurrentParticipant({ id: userId, name, availability: {} })
+        const fallback = { id: userId, name, availability: {} }
+        setCurrentParticipant(fallback)
+        setDraftAvailability({})
       } else if (!loggedIn) {
         setCurrentParticipant(null)
+        setDraftAvailability({})
       }
     }
   }
 
-  // UPDATED: Added `force` parameter to allow bypassing the draftDirty check
+  const applyServerDraft = (draft: EventData["draft"]) => {
+    if (!draft) return
+    const hasAvail = Object.keys(draft.availability || {}).length > 0
+    const hasDisabled = (draft.disabledSlots || []).length > 0
+    if (!hasAvail && !hasDisabled) return
+    setPendingDraft({
+      availability: draft.availability || {},
+      disabledSlots: draft.disabledSlots || [],
+      updatedAt: draft.updatedAt,
+    })
+  }
+
+  // UPDATED: Added `force` parameter and snapshot restore on 429
   const fetchEventData = async (force = false) => {
     if (draftDirty && !force) return
     const savedTz = localStorage.getItem("preferredTimezone")
     setUserTimezone(savedTz || Intl.DateTimeFormat().resolvedOptions().timeZone)
 
     try {
-      const res = await fetch(`${API_BASE}/events/${id}`)
-      // If rate limited, skip updating state; keep current view.
+      const res = await fetch(`${API_BASE}/events/${id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
       if (res.status === 429) {
+        // fall back to last saved snapshot if available
+        if (lastSavedEventRef.current) {
+          setEventData(lastSavedEventRef.current)
+          setCurrentParticipant(lastSavedParticipantRef.current)
+        }
         return
       }
       if (res.ok) {
@@ -145,8 +183,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         setEventData(data)
         syncUserState(data)
         setRenameValue(data.name)
+        lastSavedEventRef.current = data
+        if (lastSavedParticipantRef.current && currentParticipant?.id === lastSavedParticipantRef.current.id) {
+          // keep
+        }
+        applyServerDraft(data.draft)
       } else {
-        // only mark not found on 404; otherwise, keep existing state
         if (res.status === 404) setEventData(null)
       }
     } catch (error) {
@@ -179,8 +221,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       src.onerror = () => {
         setSseConnected(false)
         src.close()
-        // backoff reconnect
-        const delay = Math.min(sseRetryDelayRef.current, 60000) // cap at 60s
+        const delay = Math.min(sseRetryDelayRef.current, 60000)
         if (sseTimerRef.current) clearTimeout(sseTimerRef.current)
         sseTimerRef.current = setTimeout(() => {
           sseTimerRef.current = null
@@ -204,11 +245,18 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, draftDirty])
 
+  const clearDraftOnServer = async () => {
+    try {
+      await fetchWithAuth(`${API_BASE}/events/${id}/draft`, { method: "DELETE" })
+    } catch {
+      /* no-op */
+    }
+  }
+
   const handleSaveAvailability = async (availability: Record<string, boolean>) => {
     if (!eventData || !currentParticipant) return
 
-    // 1. Prepare clean data
-    const disabled = pendingDisabledSlots.length > 0 ? pendingDisabledSlots : (eventData.disabledSlots || [])
+    const disabled = pendingDisabledSlots.length > 0 ? pendingDisabledSlots : eventData.disabledSlots || []
     const cleaned: Record<string, boolean> = {}
     Object.entries(availability).forEach(([k, v]) => {
       if (!disabled.includes(k) && v) cleaned[k] = v
@@ -216,21 +264,17 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
     const updatedParticipant = { ...currentParticipant, availability: cleaned }
 
-    // Preserve participant order
-    const updatedParticipants = eventData.participants.map(p =>
+    const updatedParticipants = eventData.participants.map((p) =>
         p.id === currentParticipant.id ? updatedParticipant : p
     )
 
-    // 2. Snapshot current state for rollback
     const previousEventData = eventData
     const previousParticipant = currentParticipant
 
-    // 3. OPTIMISTIC UPDATE: Update UI immediately
     setEventData({ ...eventData, participants: updatedParticipants, disabledSlots: disabled })
     setCurrentParticipant(updatedParticipant)
     setDraftDirty(false)
 
-    // 4. Construct payload
     const payload: Partial<EventData> & { participants: Participant[] } = {
       ...eventData,
       participants: updatedParticipants,
@@ -250,9 +294,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       if (res.ok) {
         toast({ title: "Availability Saved", description: "Updated successfully." })
         setPendingDisabledSlots([])
-        // Success: Do nothing else, UI is already correct.
+        lastSavedEventRef.current = { ...eventData, participants: updatedParticipants, disabledSlots: disabled }
+        lastSavedParticipantRef.current = updatedParticipant
+        await clearDraftOnServer()
       } else {
-        // Failure: Rollback
         setEventData(previousEventData)
         setCurrentParticipant(previousParticipant)
         setDraftDirty(true)
@@ -265,7 +310,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         toast({ title: "Error", description: d.error || "Could not save", variant: "destructive" })
       }
     } catch (error) {
-      // Network Error: Rollback
       setEventData(previousEventData)
       setCurrentParticipant(previousParticipant)
       setDraftDirty(true)
@@ -273,10 +317,15 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
-  const handleCancelDraft = () => {
+  const handleCancelDraft = async () => {
     setDraftDirty(false)
     setPendingDisabledSlots([])
-    // UPDATED: Pass true to force the fetch even though we are inside an event handler
+    await clearDraftOnServer().catch(() => {})
+    if (lastSavedEventRef.current) {
+      setEventData(lastSavedEventRef.current)
+      setCurrentParticipant(lastSavedParticipantRef.current)
+      setGridKey((k) => k + 1)
+    }
     fetchEventData(true)
   }
 
@@ -307,7 +356,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       })
       const d = await res.json().catch(() => ({}))
       if (res.ok) {
-        setEventData({ ...eventData, name: trimmed })
+        const next = { ...eventData, name: trimmed }
+        setEventData(next)
+        lastSavedEventRef.current = next
         toast({ title: "Event renamed" })
         setRenameOpen(false)
       } else {
@@ -323,12 +374,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   const handleToggleDisabled = (slotKey: string) => {
     if (!eventData || !isCreator) return
-
-    const current = new Set(pendingDisabledSlots.length > 0 ? pendingDisabledSlots : (eventData.disabledSlots || []))
+    const current = new Set(pendingDisabledSlots.length > 0 ? pendingDisabledSlots : eventData.disabledSlots || [])
     if (current.has(slotKey)) current.delete(slotKey)
     else current.add(slotKey)
-
     setPendingDisabledSlots(Array.from(current))
+    setDraftDirty(true)
   }
 
   const handleResetDisabled = async () => {
@@ -345,7 +395,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       if (res.ok) {
         setEventData(updatedEvent)
         setPendingDisabledSlots([])
+        lastSavedEventRef.current = updatedEvent
         toast({ title: "Disabled times reset" })
+        await clearDraftOnServer()
       } else {
         if (res.status === 401) clearTokens()
         toast({ title: "Error", description: d.error || "Error updating", variant: "destructive" })
@@ -363,7 +415,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       const d = await res.json().catch(() => ({}))
       if (res.ok) {
         toast({ title: "Joined!", description: "You can now mark your availability." })
-        await fetchEventData()
+        await fetchEventData(true)
       } else {
         if (res.status === 401) clearTokens()
         toast({ title: "Error", description: d.error || "Join failed", variant: "destructive" })
@@ -451,6 +503,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           setCurrentParticipant(null)
           setIsParticipant(false)
         }
+        lastSavedEventRef.current = updatedEvent
         toast({ title: "Removed participant" })
       } else {
         if (res.status === 401) clearTokens()
@@ -506,7 +559,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
-  // New helper: human-friendly duration text
   const formatDurationText = (mins: number | undefined | null) => {
     if (!mins || Number.isNaN(mins) || mins <= 0) return ""
     const h = Math.floor(mins / 60)
@@ -517,10 +569,56 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     return parts.join(" ")
   }
 
+  // Debounced draft save to backend
+  useEffect(() => {
+    if (!draftDirty || !isLoggedIn || !currentParticipant) return
+    const timer = setTimeout(async () => {
+      try {
+        const payload: any = { availability: draftAvailability }
+        if (isCreator) {
+          payload.disabledSlots =
+              pendingDisabledSlots.length > 0 ? pendingDisabledSlots : eventData?.disabledSlots || []
+        }
+        await fetchWithAuth(`${API_BASE}/events/${id}/draft`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        })
+      } catch {
+        // silent
+      }
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [draftDirty, draftAvailability, pendingDisabledSlots, isCreator, isLoggedIn, currentParticipant, eventData, id])
+
+  const resumeDraft = () => {
+    if (!pendingDraft || !currentParticipant) return
+    setDraftAvailability(pendingDraft.availability || {})
+    setCurrentParticipant({ ...currentParticipant, availability: pendingDraft.availability || {} })
+    if (isCreator) {
+      setPendingDisabledSlots(pendingDraft.disabledSlots || [])
+    }
+    setDraftDirty(true)
+    setPendingDraft(null)
+    setGridKey((k) => k + 1)
+  }
+
+  const discardDraft = async () => {
+    await clearDraftOnServer().catch(() => {})
+    setPendingDraft(null)
+    setDraftDirty(false)
+    setPendingDisabledSlots([])
+    if (lastSavedEventRef.current) {
+      setEventData(lastSavedEventRef.current)
+      setCurrentParticipant(lastSavedParticipantRef.current)
+      setGridKey((k) => k + 1)
+    }
+    fetchEventData(true)
+  }
+
   if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>
   if (!eventData) return <div className="flex items-center justify-center min-h-screen">Event not found</div>
 
-  const disabledSlotsForGrid = eventData.disabledSlots || []
+  const disabledSlotsForGrid = pendingDisabledSlots.length > 0 ? pendingDisabledSlots : eventData.disabledSlots || []
   const bestTimes = getBestTimes(3)
   const allBestTimes = getBestTimes()
 
@@ -554,7 +652,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         <AlertDialogContent className="sm:max-w-md">
                           <AlertDialogHeader>
                             <AlertDialogTitle>Rename event</AlertDialogTitle>
-                            <AlertDialogDescription>Update the event title for everyone. This change is instant.</AlertDialogDescription>
+                            <AlertDialogDescription>
+                              Update the event title for everyone. This change is instant.
+                            </AlertDialogDescription>
                           </AlertDialogHeader>
                           <div className="space-y-3 pt-2">
                             <Input
@@ -579,11 +679,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   <div className="flex items-center gap-1.5">
                     <Calendar className="h-3.5 w-3.5 shrink-0" />
                     <span className="font-medium">
-                    {format(new Date(eventData.dateRange.from), "MMM d")} - {format(new Date(eventData.dateRange.to), "MMM d")}
+                    {format(new Date(eventData.dateRange.from), "MMM d")} -{" "}
+                      {format(new Date(eventData.dateRange.to), "MMM d")}
                   </span>
                   </div>
 
-                  {/* Duration display */}
                   {eventData.duration > 0 && (
                       <div className="flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5 shrink-0" />
@@ -593,7 +693,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
                   <div className="flex items-center gap-1.5">
                     <Globe className="h-3.5 w-3.5 shrink-0" />
-                    <span className="capitalize truncate max-w-[140px] font-medium">{userTimezone.replace(/_/g, " ")}</span>
+                    <span className="capitalize truncate max-w-[140px] font-medium">
+                    {userTimezone.replace(/_/g, " ")}
+                  </span>
                   </div>
                 </div>
               </div>
@@ -707,12 +809,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               </div>
 
               <Card className="overflow-hidden flex flex-col shadow-sm min-h-[400px] lg:min-h-0 border-border/50">
-                <CardContent
-                    // UPDATED: Removed onPointerDown to prevent button clicks from flagging "unsaved changes"
-                    className="p-4 flex-1 overflow-auto min-h-0"
-                >
+                <CardContent className="p-4 flex-1 overflow-auto min-h-0">
                   {isLoggedIn && currentParticipant ? (
                       <AvailabilityGrid
+                          key={gridKey}
                           dateRange={{
                             from: new Date(eventData.dateRange.from),
                             to: new Date(eventData.dateRange.to),
@@ -722,7 +822,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                           allParticipants={eventData.participants}
                           onSave={handleSaveAvailability}
                           timezone={userTimezone}
-                          disabledSlots={pendingDisabledSlots.length > 0 ? pendingDisabledSlots : disabledSlotsForGrid}
+                          disabledSlots={disabledSlotsForGrid}
                           isCreator={isCreator}
                           disableMode={disableMode}
                           onToggleDisabled={handleToggleDisabled}
@@ -730,16 +830,20 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                           onResetDisabled={handleResetDisabled}
                           resetDisabledLoading={resetDisabledLoading}
                           hideDisabledSlots={!isCreator}
-                          // UPDATED: Added prop to detect specific slot interactions only
                           onSlotInteraction={() => {
                             if (isLoggedIn) setDraftDirty(true)
+                          }}
+                          onAvailabilityChange={(avail) => {
+                            setDraftAvailability(avail)
                           }}
                       />
                   ) : (
                       <div className="flex flex-col items-center justify-center h-full text-center p-6">
                         <LogIn className="h-12 w-12 text-muted-foreground mb-4" />
                         <h3 className="text-lg font-semibold">Please Sign In</h3>
-                        <p className="text-sm text-muted-foreground mt-2 mb-4">You must be logged in to participate.</p>
+                        <p className="text-sm text-muted-foreground mt-2 mb-4">
+                          You must be logged in to participate.
+                        </p>
                         <Button size="sm" onClick={() => router.push("/login")}>
                           Sign In Now
                         </Button>
@@ -750,6 +854,22 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </div>
           </div>
         </div>
+
+        {/* Draft prompt modal */}
+        <AlertDialog open={!!pendingDraft} onOpenChange={(open) => !open && setPendingDraft(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Resume your draft?</AlertDialogTitle>
+              <AlertDialogDescription>
+                We found unsaved changes from last time. You can resume them or discard and load the saved version.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={discardDraft}>Discard</AlertDialogCancel>
+              <AlertDialogAction onClick={resumeDraft}>Resume draft</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
   )
 }
