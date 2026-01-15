@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { forgotPassword } from "@/lib/api"
+import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 
 export default function ForgotPage() {
     const [email, setEmail] = useState("")
@@ -57,6 +58,7 @@ export default function ForgotPage() {
                     <Button className="w-full h-11 text-base mt-2" onClick={submit} disabled={loading || !email}>
                         {loading ? "Sending..." : "Send reset link"}
                     </Button>
+                    <PrivacyTermsNote />
                     <div className="text-center text-sm">
                         <Link href="/login" className="text-primary hover:underline">
                             Back to sign in

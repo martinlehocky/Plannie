@@ -13,6 +13,7 @@ import { zxcvbn, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
 import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en"
 import { fetchWithAuth, clearTokens, getAccessToken, getStoredUsername } from "@/lib/api"
+import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -299,6 +300,7 @@ export default function SettingsPage() {
                         <Save className="h-4 w-4" />
                         {loading ? "Saving..." : "Save Changes"}
                     </Button>
+                    <PrivacyTermsNote className="mt-2" />
                 </CardContent>
             </Card>
         </div>

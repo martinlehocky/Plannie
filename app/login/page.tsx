@@ -15,6 +15,7 @@ import { setTokens } from "@/lib/api"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useTranslations } from "@/components/language-provider"
 import { LanguageToggle } from "@/components/language-toggle"
+import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ""
@@ -327,6 +328,7 @@ export default function LoginPage() {
                     <Button className="w-full h-11 text-base mt-2" onClick={handleAuth} disabled={loading}>
                         {loading ? t("login.buttonWait") : isRegister ? t("login.buttonSignUp") : t("login.buttonLogin")}
                     </Button>
+                    <PrivacyTermsNote />
 
                     <div className="text-center pt-2">
                         <button
