@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   X,
   Clock,
+  BarChart3,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LanguageToggle } from "@/components/language-toggle"
@@ -40,6 +41,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { fetchWithAuth, clearTokens, getAccessToken, getStoredUsername } from "@/lib/api"
 import { useTranslations } from "@/components/language-provider"
@@ -116,6 +118,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [emailVerified, setEmailVerified] = useState(true)
   const [verificationExpiry, setVerificationExpiry] = useState<string | null>(null)
   const [hideVerificationBanner, setHideVerificationBanner] = useState(false)
+  const [bestTimesOpen, setBestTimesOpen] = useState(false)
 
   const lastSavedEventRef = useRef<EventData | null>(null)
   const lastSavedParticipantRef = useRef<Participant | null>(null)
@@ -699,6 +702,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const disabledSlotsForGrid = pendingDisabledSlots.length > 0 ? pendingDisabledSlots : eventData.disabledSlots || []
   const bestTimes = getBestTimes(3)
   const allBestTimes = getBestTimes()
+  const totalParticipants = eventData.participants.length || 1
+  const bestChartData = (allBestTimes.length ? allBestTimes : bestTimes).slice(0, 10)
 
   return (
       <div className="min-h-screen bg-background flex flex-col lg:h-screen lg:overflow-hidden">
@@ -865,6 +870,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         handleJoin={handleJoin}
                         handleRemoveParticipant={handleRemoveParticipant}
                         router={router}
+                        onOpenBestTimes={() => setBestTimesOpen(true)}
                     />
                   </CollapsibleContent>
                 </Collapsible>
@@ -885,6 +891,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       handleJoin={handleJoin}
                       handleRemoveParticipant={handleRemoveParticipant}
                       router={router}
+                      onOpenBestTimes={() => setBestTimesOpen(true)}
                   />
                 </div>
               </div>
@@ -950,6 +957,64 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <Dialog open={bestTimesOpen} onOpenChange={setBestTimesOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                {t("eventPage.bestTimesChartTitle")}
+              </DialogTitle>
+              <DialogDescription>{t("eventPage.bestTimesChartDescription")}</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {bestChartData.slice(0, 3).map((slot) => (
+                    <Badge key={slot.slot} variant="secondary" className="text-xs py-1 px-2">
+                      {formatTimeInTz(slot.slot)} — {slot.count}/{totalParticipants}
+                    </Badge>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                {bestChartData.map((slot) => {
+                  const pct = Math.max(4, (slot.count / totalParticipants) * 100)
+                  return (
+                      <div key={slot.slot} className="flex items-center gap-3">
+                        <div className="w-40 text-sm font-medium truncate">{formatTimeInTz(slot.slot)}</div>
+                        <div className="flex-1 h-8 rounded-md border border-border/60 bg-muted/60 overflow-hidden">
+                          <div
+                              className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-xs font-semibold flex items-center px-2"
+                              style={{ width: `${pct}%` }}
+                          >
+                            {slot.count}/{totalParticipants}
+                          </div>
+                        </div>
+                      </div>
+                  )
+                })}
+              </div>
+
+              <div className="text-xs text-muted-foreground flex items-center gap-3">
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block h-3 w-3 rounded-sm bg-gradient-to-r from-blue-500 to-indigo-500" />
+                {t("eventPage.legendMost")}
+              </span>
+                <span className="inline-flex items-center gap-1">
+                <span className="inline-block h-3 w-3 rounded-sm bg-muted" />
+                  {t("eventPage.legendLeast")}
+              </span>
+              </div>
+            </div>
+
+            <DialogFooter className="mt-4">
+              <Button variant="outline" onClick={() => setBestTimesOpen(false)}>
+                {t("eventPage.close")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
   )
 }
@@ -969,6 +1034,7 @@ function SidebarContent({
                           handleJoin,
                           handleRemoveParticipant,
                           router,
+                          onOpenBestTimes,
                         }: {
   eventData: EventData
   currentParticipant: Participant | null
@@ -984,8 +1050,8 @@ function SidebarContent({
   handleJoin: () => void
   handleRemoveParticipant: (id: string) => void
   router: ReturnType<typeof useRouter>
+  onOpenBestTimes: () => void
 }) {
-  const [showBestTimesDetails, setShowBestTimesDetails] = useState(false)
   const { t } = useTranslations()
 
   return (
@@ -1013,6 +1079,12 @@ function SidebarContent({
             <CardTitle className="flex items-center gap-2 text-base font-semibold">
               <Trophy className="h-4 w-4 text-yellow-500 shrink-0" /> {t("eventPage.bestTimes")}
             </CardTitle>
+            <div className="flex gap-2 mt-2">
+              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onOpenBestTimes}>
+                <BarChart3 className="h-3.5 w-3.5 mr-1" />
+                {t("eventPage.viewBestTimes")}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="p-3.5 pt-0 space-y-2.5">
             {bestTimes.length > 0 ? (
@@ -1032,36 +1104,6 @@ function SidebarContent({
                 ))
             ) : (
                 <div className="text-xs text-muted-foreground text-center py-4">{t("eventPage.noOverlaps")}</div>
-            )}
-
-            {allBestTimes.length > 0 && (
-                <div className="space-y-2">
-                  <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-between text-xs bg-transparent"
-                      onClick={() => setShowBestTimesDetails((v) => !v)}
-                  >
-                    {showBestTimesDetails ? t("eventPage.hideAllBestTimes") : t("eventPage.viewAllBestTimes")}
-                    {showBestTimesDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  </Button>
-
-                  {showBestTimesDetails && (
-                      <div className="max-h-48 overflow-y-auto space-y-1.5 border rounded-md p-2 bg-card/40">
-                        {allBestTimes.map((time, i) => (
-                            <div key={i} className="rounded-sm p-2 bg-muted/40 space-y-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="text-[11px] font-semibold truncate">{formatTimeInTz(time.slot)}</div>
-                                <Badge variant="outline" className="text-[10px] h-5 px-1.5">
-                                  {time.count}/{eventData.participants.length}
-                                </Badge>
-                              </div>
-                              <div className="text-[10px] text-muted-foreground">{time.names.join(", ")}</div>
-                            </div>
-                        ))}
-                      </div>
-                  )}
-                </div>
             )}
           </CardContent>
         </Card>
@@ -1111,7 +1153,7 @@ function SidebarContent({
               })}
             </div>
             {!isLoggedIn && (
-                <Button className="w-full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
+                <Button className="w/full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
                   <LogIn className="h-3 w-3 mr-1.5" />
                   {t("eventPage.signInRegister")}
                 </Button>

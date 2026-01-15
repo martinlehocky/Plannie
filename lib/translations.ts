@@ -49,8 +49,7 @@ export const translations: Record<Language, TranslationTree> = {
         },
         heatmap: {
           title: "Visual Heatmap",
-          description:
-              "See group availability at a glance with our intuitive heatmap. Darker colors mean more people available.",
+          description: "See group availability at a glance with our intuitive heatmap. Darker colors mean more people available.",
         },
         sharing: {
           title: "Easy Sharing",
@@ -302,6 +301,16 @@ export const translations: Record<Language, TranslationTree> = {
       invite: "Invite",
       signInRegister: "Sign In / Register",
       joinEvent: "Join Event",
+      viewBestTimes: "View best times",
+      bestTimesChartTitle: "Best times overview",
+      bestTimesChartDescription: "Top time slots with the highest availability.",
+      legendMost: "More available",
+      legendLeast: "Less available",
+      close: "Close",
+      hour: "hr",
+      hours: "hrs",
+      minute: "min",
+      minutes: "mins",
     },
     availability: {
       title: "Mark Your Availability",
@@ -630,6 +639,16 @@ export const translations: Record<Language, TranslationTree> = {
       invite: "Einladen",
       signInRegister: "Anmelden / Registrieren",
       joinEvent: "Event beitreten",
+      viewBestTimes: "Beste Zeiten anzeigen",
+      bestTimesChartTitle: "Übersicht beste Zeiten",
+      bestTimesChartDescription: "Top-Zeitfenster mit der höchsten Verfügbarkeit.",
+      legendMost: "Mehr verfügbar",
+      legendLeast: "Weniger verfügbar",
+      close: "Schließen",
+      hour: "Std.",
+      hours: "Std.",
+      minute: "Min.",
+      minutes: "Min.",
     },
     availability: {
       title: "Markiere deine Verfügbarkeit",
