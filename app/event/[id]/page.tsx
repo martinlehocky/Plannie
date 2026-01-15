@@ -25,6 +25,7 @@ import {
   Clock,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { LanguageToggle } from "@/components/language-toggle"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
@@ -41,6 +42,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { fetchWithAuth, clearTokens, getAccessToken, getStoredUsername } from "@/lib/api"
+import { useTranslations } from "@/components/language-provider"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -84,6 +86,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const { id } = use(params)
   const { toast } = useToast()
   const router = useRouter()
+  const { t } = useTranslations()
+
   const [eventData, setEventData] = useState<EventData | null>(null)
   const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(null)
   const [loading, setLoading] = useState(true)
@@ -107,7 +111,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     disabledSlots: string[]
     updatedAt?: string | null
   } | null>(null)
-  const [gridKey, setGridKey] = useState(0) // force remount grid on revert/resume
+  const [gridKey, setGridKey] = useState(0)
 
   const [emailVerified, setEmailVerified] = useState(true)
   const [verificationExpiry, setVerificationExpiry] = useState<string | null>(null)
@@ -116,7 +120,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const lastSavedEventRef = useRef<EventData | null>(null)
   const lastSavedParticipantRef = useRef<Participant | null>(null)
 
-  const sseRetryDelayRef = useRef(5000) // start 5s
+  const sseRetryDelayRef = useRef(5000)
   const sseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const token = useMemo(() => getAccessToken() ?? null, [])
@@ -197,11 +201,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
-  // Poll only as a fallback when SSE is not connected; slow interval to avoid 429
   useEffect(() => {
     fetchEventData()
     if (sseConnected) return
-    const timer = setInterval(() => fetchEventData(), 120000) // 2-minute fallback poll
+    const timer = setInterval(() => fetchEventData(), 120000)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, sseConnected, draftDirty])
@@ -317,7 +320,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       const d = await res.json().catch(() => ({}))
 
       if (res.ok) {
-        toast({ title: "Availability Saved", description: "Updated successfully." })
+        toast({ title: t("eventPage.availabilitySaved"), description: t("eventPage.updatedSuccessfully") })
         setPendingDisabledSlots([])
         lastSavedEventRef.current = { ...eventData, participants: updatedParticipants, disabledSlots: disabled }
         lastSavedParticipantRef.current = updatedParticipant
@@ -332,13 +335,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           router.push("/login")
           return
         }
-        toast({ title: "Error", description: d.error || "Could not save", variant: "destructive" })
+        toast({ title: t("eventPage.error"), description: d.error || t("eventPage.saveFailed"), variant: "destructive" })
       }
     } catch (error) {
       setEventData(previousEventData)
       setCurrentParticipant(previousParticipant)
       setDraftDirty(true)
-      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
+      toast({ title: t("eventPage.error"), description: t("eventPage.unexpectedError"), variant: "destructive" })
     }
   }
 
@@ -384,14 +387,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         const next = { ...eventData, name: trimmed }
         setEventData(next)
         lastSavedEventRef.current = next
-        toast({ title: "Event renamed" })
+        toast({ title: t("eventPage.eventRenamed") })
         setRenameOpen(false)
       } else {
         if (res.status === 401) clearTokens()
-        toast({ title: "Error", description: d.error || "Could not rename", variant: "destructive" })
+        toast({ title: t("eventPage.error"), description: d.error || t("eventPage.renameFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Could not rename", variant: "destructive" })
+      toast({ title: t("eventPage.error"), description: t("eventPage.renameFailed"), variant: "destructive" })
     } finally {
       setRenameLoading(false)
     }
@@ -421,14 +424,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         setEventData(updatedEvent)
         setPendingDisabledSlots([])
         lastSavedEventRef.current = updatedEvent
-        toast({ title: "Disabled times reset" })
+        toast({ title: t("eventPage.disabledTimesReset") })
         await clearDraftOnServer()
       } else {
         if (res.status === 401) clearTokens()
-        toast({ title: "Error", description: d.error || "Error updating", variant: "destructive" })
+        toast({ title: t("eventPage.error"), description: d.error || t("eventPage.errorUpdating"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
+      toast({ title: t("eventPage.error"), description: t("eventPage.unexpectedError"), variant: "destructive" })
     } finally {
       setResetDisabledLoading(false)
     }
@@ -439,14 +442,14 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       const res = await fetchWithAuth(`${API_BASE}/events/${id}/join`, { method: "POST" })
       const d = await res.json().catch(() => ({}))
       if (res.ok) {
-        toast({ title: "Joined!", description: "You can now mark your availability." })
+        toast({ title: t("eventPage.joined"), description: t("eventPage.youCanMark") })
         await fetchEventData(true)
       } else {
         if (res.status === 401) clearTokens()
-        toast({ title: "Error", description: d.error || "Join failed", variant: "destructive" })
+        toast({ title: t("eventPage.error"), description: d.error || t("eventPage.joinFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
+      toast({ title: t("eventPage.error"), description: t("eventPage.unexpectedError"), variant: "destructive" })
     }
   }
 
@@ -455,13 +458,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       const res = await fetchWithAuth(`${API_BASE}/events/${id}/leave`, { method: "POST" })
       if (res.ok) {
         router.push("/dashboard")
-        toast({ title: "Left Event" })
+        toast({ title: t("eventPage.leftEvent") })
       } else if (res.status === 401) {
         clearTokens()
         router.push("/login")
       }
     } catch {
-      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
+      toast({ title: t("eventPage.error"), description: t("eventPage.unexpectedError"), variant: "destructive" })
     }
   }
 
@@ -470,13 +473,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       const res = await fetchWithAuth(`${API_BASE}/events/${id}`, { method: "DELETE" })
       if (res.ok) {
         router.push("/dashboard")
-        toast({ title: "Event Deleted" })
+        toast({ title: t("eventPage.eventDeleted") })
       } else if (res.status === 401) {
         clearTokens()
         router.push("/login")
       }
     } catch {
-      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
+      toast({ title: t("eventPage.error"), description: t("eventPage.unexpectedError"), variant: "destructive" })
     }
   }
 
@@ -489,21 +492,21 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       })
       const d = await res.json().catch(() => ({}))
       if (res.ok) {
-        toast({ title: "Invited!" })
+        toast({ title: t("eventPage.invited") })
         setInviteUsername("")
         fetchEventData()
       } else {
         if (res.status === 401) clearTokens()
-        toast({ title: "Error", description: d.error || "Invite failed", variant: "destructive" })
+        toast({ title: t("eventPage.error"), description: d.error || t("eventPage.inviteFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
+      toast({ title: t("eventPage.error"), description: t("eventPage.unexpectedError"), variant: "destructive" })
     }
   }
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href)
-    toast({ title: "Link Copied!" })
+    toast({ title: t("eventPage.linkCopied") })
   }
 
   const handleRemoveParticipant = async (participantId: string) => {
@@ -529,13 +532,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           setIsParticipant(false)
         }
         lastSavedEventRef.current = updatedEvent
-        toast({ title: "Removed participant" })
+        toast({ title: t("eventPage.removedParticipant") })
       } else {
         if (res.status === 401) clearTokens()
-        toast({ title: "Error", description: d.error || "Could not remove participant", variant: "destructive" })
+        toast({ title: t("eventPage.error"), description: d.error || t("eventPage.removeFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Unexpected error", variant: "destructive" })
+      toast({ title: t("eventPage.error"), description: t("eventPage.unexpectedError"), variant: "destructive" })
     }
   }
 
@@ -549,12 +552,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         return
       }
       if (res.ok) {
-        toast({ title: "Verification email sent", description: "Check your inbox for the new verification link." })
+        toast({ title: t("eventPage.verificationSent"), description: t("eventPage.checkInbox") })
       } else {
-        toast({ title: "Error", description: data.error || "Could not resend verification email", variant: "destructive" })
+        toast({ title: t("eventPage.error"), description: data.error || t("eventPage.resendFailed"), variant: "destructive" })
       }
     } catch {
-      toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+      toast({ title: t("eventPage.error"), description: t("eventPage.failedConnect"), variant: "destructive" })
     }
   }
 
@@ -608,12 +611,11 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const h = Math.floor(mins / 60)
     const m = mins % 60
     const parts: string[] = []
-    if (h > 0) parts.push(`${h} ${h === 1 ? "hr" : "hrs"}`)
-    if (m > 0) parts.push(`${m} ${m === 1 ? "min" : "mins"}`)
+    if (h > 0) parts.push(`${h} ${h === 1 ? t("eventPage.hour") : t("eventPage.hours")}`)
+    if (m > 0) parts.push(`${m} ${m === 1 ? t("eventPage.minute") : t("eventPage.minutes")}`)
     return parts.join(" ")
   }
 
-  // Debounced draft save to backend
   useEffect(() => {
     if (!draftDirty || !isLoggedIn || !currentParticipant) return
     const timer = setTimeout(async () => {
@@ -667,18 +669,18 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             <div className="flex items-start gap-3 flex-1">
               <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
               <div className="space-y-1">
-                <p className="font-semibold">Email not verified</p>
+                <p className="font-semibold">{t("eventPage.emailNotVerifiedTitle")}</p>
                 <p className="text-sm">
-                  Please verify your email to keep your account. Unverified accounts are removed after 24 hours.
+                  {t("eventPage.emailNotVerifiedBody")}
                   {verificationExpiry && (
                       <span className="block text-xs text-amber-800 mt-1">
-                    Expires: {new Date(verificationExpiry).toLocaleString()}
+                    {t("eventPage.expiresPrefix")} {new Date(verificationExpiry).toLocaleString()}
                   </span>
                   )}
                 </p>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button size="sm" variant="outline" className="border-amber-300 text-amber-900" onClick={handleResendVerification}>
-                    Send verification email again
+                    {t("eventPage.sendVerificationAgain")}
                   </Button>
                 </div>
               </div>
@@ -691,8 +693,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     )
   }
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>
-  if (!eventData) return <div className="flex items-center justify-center min-h-screen">Event not found</div>
+  if (loading) return <div className="flex items-center justify-center min-h-screen">{t("eventPage.loading")}</div>
+  if (!eventData) return <div className="flex items-center justify-center min-h-screen">{t("eventPage.notFound")}</div>
 
   const disabledSlotsForGrid = pendingDisabledSlots.length > 0 ? pendingDisabledSlots : eventData.disabledSlots || []
   const bestTimes = getBestTimes(3)
@@ -709,7 +711,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   {draftDirty && (
                       <Badge variant="secondary" className="flex items-center gap-1 text-[11px]">
                         <AlertTriangle className="h-3 w-3" />
-                        Unsaved changes
+                        {t("eventPage.unsavedChanges")}
                       </Badge>
                   )}
                   {isCreator && (
@@ -719,7 +721,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                               size="icon"
                               variant="ghost"
                               className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Rename event"
+                              title={t("eventPage.renameEvent")}
                               onClick={() => setRenameValue(eventData.name)}
                           >
                             <Pencil className="h-4 w-4" />
@@ -727,9 +729,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         </AlertDialogTrigger>
                         <AlertDialogContent className="sm:max-w-md">
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Rename event</AlertDialogTitle>
+                            <AlertDialogTitle>{t("eventPage.renameEvent")}</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Update the event title for everyone. This change is instant.
+                              {t("eventPage.renameDescription")}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <div className="space-y-3 pt-2">
@@ -738,13 +740,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                                 value={renameValue}
                                 onChange={(e) => setRenameValue(e.target.value)}
                                 onKeyDown={(e) => e.key === "Enter" && handleRename()}
-                                placeholder="Event name"
+                                placeholder={t("eventPage.eventNamePlaceholder")}
                             />
                           </div>
                           <AlertDialogFooter className="mt-4">
-                            <AlertDialogCancel disabled={renameLoading}>Cancel</AlertDialogCancel>
+                            <AlertDialogCancel disabled={renameLoading}>{t("eventPage.cancel")}</AlertDialogCancel>
                             <AlertDialogAction onClick={handleRename} disabled={renameLoading}>
-                              {renameLoading ? "Saving..." : "Save"}
+                              {renameLoading ? t("eventPage.saving") : t("eventPage.save")}
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
@@ -778,12 +780,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              <LanguageToggle className="w-[150px]" />
               <ThemeToggle />
               {draftDirty && (
                   <div className="flex items-center gap-2">
                     <Button size="sm" variant="outline" className="h-9 text-xs" onClick={handleCancelDraft}>
                       <RefreshCw className="h-4 w-4 mr-1" />
-                      Revert unsaved
+                      {t("eventPage.revertUnsaved")}
                     </Button>
                   </div>
               )}
@@ -793,12 +796,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   onClick={() => router.push("/dashboard")}
                   className="text-xs px-3 h-9 font-medium"
               >
-                <span className="hidden sm:inline">Dashboard</span>
-                <span className="sm:hidden">Home</span>
+                <span className="hidden sm:inline">{t("eventPage.dashboard")}</span>
+                <span className="sm:hidden">{t("eventPage.home")}</span>
               </Button>
               {isParticipant && !isCreator && (
                   <Button size="sm" variant="destructive" onClick={handleLeave} className="text-xs px-3 h-9 font-medium">
-                    Leave
+                    {t("eventPage.leave")}
                   </Button>
               )}
               <Button size="sm" variant="outline" onClick={handleShare} className="px-3 h-9 bg-transparent">
@@ -813,12 +816,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                     </AlertDialogTrigger>
                     <AlertDialogContent className="mx-4 max-w-sm">
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Event?</AlertDialogTitle>
-                        <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                        <AlertDialogTitle>{t("eventPage.deleteEventTitle")}</AlertDialogTitle>
+                        <AlertDialogDescription>{t("eventPage.deleteEventDescription")}</AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+                        <AlertDialogCancel>{t("eventPage.cancel")}</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete}>{t("eventPage.delete")}</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
@@ -836,10 +839,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                     <Button variant="outline" className="w-full justify-between mb-3 h-10 font-medium bg-transparent">
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4" />
-                        <span>{eventData.participants.length} Participants</span>
+                        <span>{t("eventPage.participantsCount", { count: eventData.participants.length })}</span>
                         {bestTimes.length > 0 && (
                             <Badge variant="secondary" className="text-[10px] font-semibold">
-                              Best: {bestTimes[0].count}/{eventData.participants.length}
+                              {t("eventPage.best")} {bestTimes[0].count}/{eventData.participants.length}
                             </Badge>
                         )}
                       </div>
@@ -918,12 +921,12 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   ) : (
                       <div className="flex flex-col items-center justify-center h-full text-center p-6">
                         <LogIn className="h-12 w-12 text-muted-foreground mb-4" />
-                        <h3 className="text-lg font-semibold">Please Sign In</h3>
+                        <h3 className="text-lg font-semibold">{t("eventPage.signInTitle")}</h3>
                         <p className="text-sm text-muted-foreground mt-2 mb-4">
-                          You must be logged in to participate.
+                          {t("eventPage.signInSubtitle")}
                         </p>
                         <Button size="sm" onClick={() => router.push("/login")}>
-                          Sign In Now
+                          {t("eventPage.signInNow")}
                         </Button>
                       </div>
                   )}
@@ -933,18 +936,17 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </div>
 
-        {/* Draft prompt modal */}
         <AlertDialog open={!!pendingDraft} onOpenChange={(open) => !open && setPendingDraft(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Resume your draft?</AlertDialogTitle>
+              <AlertDialogTitle>{t("eventPage.resumeDraftTitle")}</AlertDialogTitle>
               <AlertDialogDescription>
-                We found unsaved changes from last time. You can resume them or discard and load the saved version.
+                {t("eventPage.resumeDraftDescription")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={discardDraft}>Discard</AlertDialogCancel>
-              <AlertDialogAction onClick={resumeDraft}>Resume draft</AlertDialogAction>
+              <AlertDialogCancel onClick={discardDraft}>{t("eventPage.discard")}</AlertDialogCancel>
+              <AlertDialogAction onClick={resumeDraft}>{t("eventPage.resume")}</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -984,6 +986,7 @@ function SidebarContent({
   router: ReturnType<typeof useRouter>
 }) {
   const [showBestTimesDetails, setShowBestTimesDetails] = useState(false)
+  const { t } = useTranslations()
 
   return (
       <>
@@ -997,7 +1000,7 @@ function SidebarContent({
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">You</div>
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{t("eventPage.you")}</div>
                     <div className="text-sm font-semibold truncate">{currentParticipant.name}</div>
                   </div>
                 </div>
@@ -1008,7 +1011,7 @@ function SidebarContent({
         <Card className="shadow-sm border-border/50">
           <CardHeader className="p-3.5 pb-2">
             <CardTitle className="flex items-center gap-2 text-base font-semibold">
-              <Trophy className="h-4 w-4 text-yellow-500 shrink-0" /> Best Times
+              <Trophy className="h-4 w-4 text-yellow-500 shrink-0" /> {t("eventPage.bestTimes")}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-3.5 pt-0 space-y-2.5">
@@ -1028,7 +1031,7 @@ function SidebarContent({
                     </div>
                 ))
             ) : (
-                <div className="text-xs text-muted-foreground text-center py-4">No overlaps yet</div>
+                <div className="text-xs text-muted-foreground text-center py-4">{t("eventPage.noOverlaps")}</div>
             )}
 
             {allBestTimes.length > 0 && (
@@ -1039,7 +1042,7 @@ function SidebarContent({
                       className="w-full justify-between text-xs bg-transparent"
                       onClick={() => setShowBestTimesDetails((v) => !v)}
                   >
-                    {showBestTimesDetails ? "Hide all best times" : "View all best times"}
+                    {showBestTimesDetails ? t("eventPage.hideAllBestTimes") : t("eventPage.viewAllBestTimes")}
                     {showBestTimesDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   </Button>
 
@@ -1067,7 +1070,7 @@ function SidebarContent({
           <CardHeader className="p-3.5 pb-2">
             <CardTitle className="flex items-center justify-between text-base font-semibold">
               <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 shrink-0" /> Participants
+                <Users className="h-4 w-4 shrink-0" /> {t("eventPage.participantsTitle")}
               </div>
               <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold">
                 {eventData.participants.length}
@@ -1089,7 +1092,7 @@ function SidebarContent({
                       <span className="text-xs font-medium truncate flex-1">{p.name}</span>
                       {p.id === eventData.creatorId && (
                           <Badge variant="secondary" className="text-[10px] h-5 px-2">
-                            Host
+                            {t("eventPage.host")}
                           </Badge>
                       )}
                       {canRemove && (
@@ -1098,7 +1101,7 @@ function SidebarContent({
                               variant="ghost"
                               className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                               onClick={() => handleRemoveParticipant(p.id)}
-                              title="Remove participant"
+                              title={t("eventPage.removeParticipant")}
                           >
                             <X className="h-3.5 w-3.5" />
                           </Button>
@@ -1110,12 +1113,12 @@ function SidebarContent({
             {!isLoggedIn && (
                 <Button className="w-full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
                   <LogIn className="h-3 w-3 mr-1.5" />
-                  Sign In
+                  {t("eventPage.signInRegister")}
                 </Button>
             )}
             {isLoggedIn && !isParticipant && (
                 <Button className="w-full mt-1.5" size="sm" onClick={handleJoin}>
-                  Join Event
+                  {t("eventPage.joinEvent")}
                 </Button>
             )}
           </CardContent>
@@ -1125,20 +1128,20 @@ function SidebarContent({
             <Card className="shadow-sm border-border/50">
               <CardHeader className="p-3.5 pb-2">
                 <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                  <UserPlus className="h-4 w-4 shrink-0" /> Invite
+                  <UserPlus className="h-4 w-4 shrink-0" /> {t("eventPage.invite")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-3.5 pt-0">
                 <div className="flex gap-1.5">
                   <Input
                       className="text-xs h-8"
-                      placeholder="Username"
+                      placeholder={t("eventPage.usernamePlaceholder")}
                       value={inviteUsername}
                       onChange={(e) => setInviteUsername(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleInvite()}
                   />
                   <Button size="sm" onClick={handleInvite} className="shrink-0 h-8 px-3 text-xs">
-                    Invite
+                    {t("eventPage.invite")}
                   </Button>
                 </div>
               </CardContent>
