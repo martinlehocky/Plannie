@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { ArrowLeft, Save, ShieldCheck, Globe } from "lucide-react"
+import { ArrowLeft, Save, ShieldCheck, Globe, Trash2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { zxcvbn, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
@@ -47,7 +47,9 @@ export default function SettingsPage() {
     const [oldPassword, setOldPassword] = useState("")
     const [newPassword, setNewPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
+    const [deletePassword, setDeletePassword] = useState("")
     const [loading, setLoading] = useState(false)
+    const [deleteLoading, setDeleteLoading] = useState(false)
     const [score, setScore] = useState(0)
     const [crackTime, setCrackTime] = useState("")
     const [passwordsMatch, setPasswordsMatch] = useState(true)
@@ -180,6 +182,48 @@ export default function SettingsPage() {
         }
     }
 
+    const handleDelete = async () => {
+        const token = getAccessToken()
+        if (!token) {
+            clearTokens()
+            router.replace("/login")
+            return
+        }
+        if (!deletePassword) {
+            toast({ title: "Password required", description: "Enter your current password to delete your account.", variant: "destructive" })
+            return
+        }
+        const confirmed = window.confirm(
+            "This will permanently delete your account and all associated data. This action cannot be undone. Continue?",
+        )
+        if (!confirmed) return
+
+        setDeleteLoading(true)
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/users/me`, {
+                method: "DELETE",
+                body: JSON.stringify({ password: deletePassword }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (res.status === 401) {
+                clearTokens()
+                router.replace("/login")
+                return
+            }
+            if (res.ok) {
+                toast({ title: "Account deleted", description: "Your account and data have been removed." })
+                clearTokens()
+                router.replace("/login")
+            } else {
+                toast({ title: "Error", description: data.error || "Could not delete account", variant: "destructive" })
+            }
+        } catch {
+            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+        } finally {
+            setDeleteLoading(false)
+        }
+    }
+
     return (
         <div className="min-h-screen bg-background p-4 flex items-center justify-center">
             <Card className="w-full max-w-md">
@@ -300,6 +344,38 @@ export default function SettingsPage() {
                         <Save className="h-4 w-4" />
                         {loading ? "Saving..." : "Save Changes"}
                     </Button>
+
+                    <hr className="border-muted" />
+
+                    {/* Danger Zone */}
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-medium text-destructive flex items-center gap-2">
+                            <Trash2 className="h-4 w-4" /> Danger zone
+                        </h3>
+                        <p className="text-[12px] text-muted-foreground">
+                            Permanently delete your account and all associated data. This action cannot be undone.
+                        </p>
+                        <div className="space-y-2">
+                            <Label htmlFor="deletePass">Confirm with password</Label>
+                            <Input
+                                id="deletePass"
+                                type="password"
+                                value={deletePassword}
+                                onChange={(e) => setDeletePassword(e.target.value)}
+                                placeholder="Current password"
+                            />
+                        </div>
+                        <Button
+                            variant="destructive"
+                            className="w-full gap-2"
+                            onClick={handleDelete}
+                            disabled={deleteLoading}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                            {deleteLoading ? "Deleting..." : "Delete my account"}
+                        </Button>
+                    </div>
+
                     <PrivacyTermsNote className="mt-2" />
                 </CardContent>
             </Card>

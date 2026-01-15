@@ -2,8 +2,12 @@
 
 export type Language = "en" | "de"
 
-type TranslationValue = string | TranslationTree
-type TranslationTree = Record<string, TranslationValue>
+// Avoid circular type-alias errors by using an interface for the tree
+export interface TranslationTree {
+  [key: string]: string | TranslationTree
+}
+
+export type TranslationValue = string | TranslationTree
 
 export const translations: Record<Language, TranslationTree> = {
   en: {
@@ -32,7 +36,7 @@ export const translations: Record<Language, TranslationTree> = {
       title: "Find the Perfect Time",
       highlight: "Everyone Can Meet",
       description:
-        "Coordinate meetings effortlessly. Select your availability, share a link, and watch as the best times emerge through beautiful heatmap visualization.",
+          "Coordinate meetings effortlessly. Select your availability, share a link, and watch as the best times emerge through beautiful heatmap visualization.",
       primaryCta: "Create Free Event",
       secondaryCta: "Learn More",
       heroNote: "No sign-up required • Free forever • Works on any device",
@@ -46,7 +50,7 @@ export const translations: Record<Language, TranslationTree> = {
         heatmap: {
           title: "Visual Heatmap",
           description:
-            "See group availability at a glance with our intuitive heatmap. Darker colors mean more people available.",
+              "See group availability at a glance with our intuitive heatmap. Darker colors mean more people available.",
         },
         sharing: {
           title: "Easy Sharing",
@@ -261,13 +265,13 @@ export const translations: Record<Language, TranslationTree> = {
       title: "Finde die perfekte Zeit",
       highlight: "damit alle können",
       description:
-        "Plane Treffen mühelos. Wähle deine Verfügbarkeit, teile einen Link und sieh zu, wie die besten Zeiten über eine schöne Heatmap sichtbar werden.",
+          "Plane Treffen mühelos. Wähle deine Verfügbarkeit, teile einen Link und sieh zu, wie die besten Zeiten über eine schöne Heatmap sichtbar werden.",
       primaryCta: "Kostenloses Event erstellen",
       secondaryCta: "Mehr erfahren",
       heroNote: "Keine Anmeldung nötig • Für immer kostenlos • Funktioniert auf jedem Gerät",
       whyTitle: "Warum Plannie?",
       whySubtitle:
-        "Für Teams, Vereine, Freunde und alle, die Termine ohne Aufwand koordinieren möchten.",
+          "Für Teams, Vereine, Freunde und alle, die Termine ohne Aufwand koordinieren möchten.",
       features: {
         lightning: {
           title: "Blitzschnell",
@@ -304,7 +308,7 @@ export const translations: Record<Language, TranslationTree> = {
         share: {
           title: "Link teilen",
           description:
-            "Kopiere den Event-Link und teile ihn per E-Mail, Slack, WhatsApp oder einer anderen App.",
+              "Kopiere den Event-Link und teile ihn per E-Mail, Slack, WhatsApp oder einer anderen App.",
         },
         select: {
           title: "Verfügbarkeit wählen",

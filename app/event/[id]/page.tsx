@@ -109,6 +109,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   } | null>(null)
   const [gridKey, setGridKey] = useState(0) // force remount grid on revert/resume
 
+  const [emailVerified, setEmailVerified] = useState(true)
+  const [verificationExpiry, setVerificationExpiry] = useState<string | null>(null)
+  const [hideVerificationBanner, setHideVerificationBanner] = useState(false)
+
   const lastSavedEventRef = useRef<EventData | null>(null)
   const lastSavedParticipantRef = useRef<Participant | null>(null)
 
@@ -159,7 +163,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     })
   }
 
-  // UPDATED: Added `force` parameter and snapshot restore on 429
   const fetchEventData = async (force = false) => {
     if (draftDirty && !force) return
     const savedTz = localStorage.getItem("preferredTimezone")
@@ -170,7 +173,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       })
       if (res.status === 429) {
-        // fall back to last saved snapshot if available
         if (lastSavedEventRef.current) {
           setEventData(lastSavedEventRef.current)
           setCurrentParticipant(lastSavedParticipantRef.current)
@@ -184,9 +186,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         syncUserState(data)
         setRenameValue(data.name)
         lastSavedEventRef.current = data
-        if (lastSavedParticipantRef.current && currentParticipant?.id === lastSavedParticipantRef.current.id) {
-          // keep
-        }
         applyServerDraft(data.draft)
       } else {
         if (res.status === 404) setEventData(null)
@@ -209,6 +208,32 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
 
   useEffect(() => {
     const accessToken = getAccessToken()
+    if (!accessToken) {
+      setIsLoggedIn(false)
+      return
+    }
+    const loadProfile = async () => {
+      try {
+        const res = await fetchWithAuth(`${API_BASE}/users/me`, { method: "GET" })
+        if (res.status === 401) {
+          clearTokens()
+          router.push("/login")
+          return
+        }
+        if (res.ok) {
+          const data = await res.json()
+          setEmailVerified(!!data.emailVerified)
+          setVerificationExpiry(data.verificationExpiry || null)
+        }
+      } catch (e) {
+        console.error("Failed to load profile", e)
+      }
+    }
+    loadProfile()
+  }, [router])
+
+  useEffect(() => {
+    const accessToken = getAccessToken()
     if (!accessToken) return
 
     const connect = () => {
@@ -216,7 +241,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       const src = new EventSource(url)
       src.onopen = () => {
         setSseConnected(true)
-        sseRetryDelayRef.current = 5000 // reset backoff
+        sseRetryDelayRef.current = 5000
       }
       src.onerror = () => {
         setSseConnected(false)
@@ -514,6 +539,25 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
+  const handleResendVerification = async () => {
+    try {
+      const res = await fetchWithAuth(`${API_BASE}/verify-email/resend`, { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (res.status === 401) {
+        clearTokens()
+        router.push("/login")
+        return
+      }
+      if (res.ok) {
+        toast({ title: "Verification email sent", description: "Check your inbox for the new verification link." })
+      } else {
+        toast({ title: "Error", description: data.error || "Could not resend verification email", variant: "destructive" })
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+    }
+  }
+
   const getBestTimes = (limit?: number) => {
     if (!eventData) return []
     const allSlots: Record<string, string[]> = {}
@@ -613,6 +657,38 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       setGridKey((k) => k + 1)
     }
     fetchEventData(true)
+  }
+
+  const renderVerificationBanner = () => {
+    if (emailVerified || hideVerificationBanner) return null
+    return (
+        <div className="mx-auto w-full max-w-7xl px-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 p-4 shadow-sm">
+            <div className="flex items-start gap-3 flex-1">
+              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="font-semibold">Email not verified</p>
+                <p className="text-sm">
+                  Please verify your email to keep your account. Unverified accounts are removed after 24 hours.
+                  {verificationExpiry && (
+                      <span className="block text-xs text-amber-800 mt-1">
+                    Expires: {new Date(verificationExpiry).toLocaleString()}
+                  </span>
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button size="sm" variant="outline" className="border-amber-300 text-amber-900" onClick={handleResendVerification}>
+                    Send verification email again
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" className="text-amber-700" onClick={() => setHideVerificationBanner(true)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+    )
   }
 
   if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>
@@ -749,6 +825,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               )}
             </div>
           </div>
+
+          <div className="py-3 px-4">{renderVerificationBanner()}</div>
 
           <div className="flex-1 overflow-auto lg:overflow-hidden p-4 bg-background">
             <div className="flex flex-col lg:grid lg:grid-cols-[280px_1fr] gap-4 h-full">

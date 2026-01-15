@@ -1,94 +1,91 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useEffect } from "react"
 import Link from "next/link"
 
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 import { useTranslations } from "@/components/language-provider"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { LanguageToggle } from "@/components/language-toggle"
+import { ThemeToggle } from "@/components/theme-toggle"
+
+const TALLY_IFRAME_SRC =
+    "https://tally.so/embed/RGoVdv?alignLeft=1&hideTitle=1&transparentBackground=1&dynamicHeight=1"
+const TALLY_SCRIPT_SRC = "https://tally.so/widgets/embed.js"
 
 export default function ContactPage() {
   const { t } = useTranslations()
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [message, setMessage] = useState("")
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    // TODO: Wire up backend submission once API, spam protection, and email delivery are available.
-  }
+  useEffect(() => {
+    const loadTally = () => {
+      if (typeof window === "undefined") return
+      // @ts-expect-error Tally is injected by the script
+      if (typeof Tally !== "undefined") {
+        // @ts-expect-error
+        Tally.loadEmbeds()
+        return
+      }
+
+      const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${TALLY_SCRIPT_SRC}"]`)
+      if (existingScript) return
+
+      const script = document.createElement("script")
+      script.src = TALLY_SCRIPT_SRC
+      script.async = true
+      script.onload = () => {
+        // @ts-expect-error
+        if (typeof Tally !== "undefined") Tally.loadEmbeds()
+      }
+      script.onerror = () => {
+        console.warn("Failed to load Tally embed script")
+      }
+      document.head.appendChild(script)
+    }
+
+    loadTally()
+  }, [])
 
   return (
-    <div className="min-h-screen bg-background px-4 py-16">
-      <div className="container mx-auto max-w-2xl space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold">{t("contact.title")}</h1>
-          <p className="text-muted-foreground">{t("contact.subtitle")}</p>
+      <div className="min-h-screen bg-background px-4 py-16 relative">
+        {/* Corner toggles (no header) */}
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+          <LanguageToggle className="w-[150px]" />
+          <ThemeToggle />
         </div>
 
-        <div className="rounded-lg border bg-card p-6 space-y-4">
-          <div className="rounded-md bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">{t("contact.notice")}</p>
-            <p className="mt-1">
-              {t("contact.emailFallback")}{" "}
-              <Link href="mailto:support@plannie.de" className="text-primary underline underline-offset-4">
-                support@plannie.de
-              </Link>
-            </p>
+        <div className="container mx-auto max-w-2xl space-y-6">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold">{t("contact.title")}</h1>
+            <p className="text-muted-foreground">{t("contact.subtitle")}</p>
           </div>
 
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="name">
-                {t("contact.nameLabel")}
-              </label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("contact.namePlaceholder")} />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="email">
-                {t("contact.emailLabel")}
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder={t("contact.emailPlaceholder")}
+          <div className="rounded-lg border bg-card p-6 space-y-4">
+            <div className="space-y-3">
+              <iframe
+                  data-tally-src={TALLY_IFRAME_SRC}
+                  loading="lazy"
+                  width="100%"
+                  height="390"
+                  className="w-full rounded-md border"
+                  frameBorder="0"
+                  marginHeight={0}
+                  marginWidth={0}
+                  title="Contact"
               />
+              <PrivacyTermsNote />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground" htmlFor="message">
-                {t("contact.messageLabel")}
-              </label>
-              <Textarea
-                id="message"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder={t("contact.messagePlaceholder")}
-                rows={5}
-              />
-            </div>
+          </div>
 
-            <Button type="submit" className="w-full" variant="outline" disabled>
-              {t("contact.submitLabel")}
-            </Button>
-            <PrivacyTermsNote />
-          </form>
-        </div>
-
-        <div className="rounded-lg border bg-card p-6 space-y-3">
-          <p className="font-semibold">{t("contact.todoTitle")}</p>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-            <li>{t("contact.todoApi")}</li>
-            <li>{t("contact.todoSpam")}</li>
-            <li>{t("contact.todoRateLimit")}</li>
-            <li>{t("contact.todoEmail")}</li>
-            <li>{t("contact.todoStorage")}</li>
-          </ul>
+          <div className="rounded-lg border bg-card p-6 space-y-3">
+            <p className="font-semibold">{t("contact.todoTitle")}</p>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+              <li>{t("contact.todoApi")}</li>
+              <li>{t("contact.todoSpam")}</li>
+              <li>{t("contact.todoRateLimit")}</li>
+              <li>{t("contact.todoEmail")}</li>
+              <li>{t("contact.todoStorage")}</li>
+            </ul>
+          </div>
         </div>
       </div>
-    </div>
   )
 }
