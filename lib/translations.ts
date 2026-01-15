@@ -375,7 +375,7 @@ export const translations: Record<Language, TranslationTree> = {
   },
 }
 
-export function translate(language: Language, key: string): string | TranslationTree | undefined {
+export function translate(language: Language, key: string): string | undefined {
   const parts = key.split(".")
   let current: TranslationValue | undefined = translations[language]
   for (const part of parts) {
@@ -383,5 +383,5 @@ export function translate(language: Language, key: string): string | Translation
     current = current[part]
     if (current === undefined) return undefined
   }
-  return current
+  return typeof current === "string" ? current : undefined
 }

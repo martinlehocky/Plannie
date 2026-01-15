@@ -38,8 +38,23 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`font-sans antialiased`}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+(function() {
+  try {
+    var stored = localStorage.getItem("language");
+    var nav = navigator.language || (navigator.languages && navigator.languages[0]) || "";
+    var lang = stored === "de" ? "de" : (nav && nav.toLowerCase().startsWith("de") ? "de" : "en");
+    document.documentElement.lang = lang;
+  } catch (_) {
+    document.documentElement.lang = "en";
+  }
+})();`,
+          }}
+        />
         <LanguageProvider>
           {children}
           <Toaster />

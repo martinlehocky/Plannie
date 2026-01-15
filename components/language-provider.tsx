@@ -19,6 +19,10 @@ function applyTemplate(value: string, vars?: Record<string, string | number>) {
 function resolveTranslation(language: Language, key: string, fallbackLanguage: Language = "en") {
   const value = translate(language, key) ?? translate(fallbackLanguage, key)
   if (typeof value === "string") return value
+  if (process.env.NODE_ENV === "development") {
+    // eslint-disable-next-line no-console
+    console.warn(`[i18n] Missing translation for key "${key}" in "${language}"`)
+  }
   return ""
 }
 
@@ -32,10 +36,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       return
     }
     if (typeof navigator !== "undefined") {
-      const navLang = navigator.language || navigator.languages?.[0] || ""
-      if (navLang.toLowerCase().startsWith("de")) {
-        setLanguage("de")
-      }
+      const navLang = (navigator.language || navigator.languages?.[0] || "").toLowerCase()
+      const match = availableLanguages.find((lng) => navLang.startsWith(lng))
+      if (match) setLanguage(match)
     }
   }, [])
 
