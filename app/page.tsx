@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -36,8 +37,15 @@ export default function LandingPage() {
             <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b">
                 <div className="container mx-auto px-4 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                            <Calendar className="w-5 h-5 text-primary-foreground" />
+                        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center overflow-hidden">
+                            <Image
+                                src="/app-icon.png"
+                                alt={t("common.appName")}
+                                width={32}
+                                height={32}
+                                className="w-8 h-8"
+                                priority
+                            />
                         </div>
                         <span className="font-bold text-xl">{t("common.appName")}</span>
                     </div>
@@ -45,8 +53,8 @@ export default function LandingPage() {
                     <div className="flex items-center gap-3">
                         {isLoggedIn && (
                             <span className="text-sm text-muted-foreground hidden sm:inline">
-                {t("common.signedInAs", { name: username || t("common.guest") })}
-              </span>
+                                {t("common.signedInAs", { name: username || t("common.guest") })}
+                            </span>
                         )}
 
                         {isLoggedIn && (
