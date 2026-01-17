@@ -7,6 +7,7 @@ import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 import { useTranslations } from "@/components/language-provider"
 import { LanguageToggle } from "@/components/language-toggle"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { LEGAL_ENTITY } from "@/lib/legal"
 
 const TALLY_IFRAME_SRC =
     "https://tally.so/embed/RGoVdv?alignLeft=1&hideTitle=1&transparentBackground=1&dynamicHeight=1"
@@ -76,12 +77,12 @@ export default function ContactPage() {
           </div>
 
           <div className="rounded-lg border bg-card p-6 space-y-3">
-            <p className="font-semibold">Direct contact</p>
+            <p className="font-semibold">{t("contact.directContact")}</p>
             <div className="space-y-1 text-muted-foreground">
-              <p className="font-medium text-foreground">Martin Lehocky</p>
-              <p>Považská 3, Nové Mesto nad Váhom</p>
-              <Link href="mailto:martinlehocky@plannie.de" className="text-primary underline underline-offset-4">
-                martinlehocky@plannie.de
+              <p className="font-medium text-foreground">{LEGAL_ENTITY.name}</p>
+              <p>{LEGAL_ENTITY.address}</p>
+              <Link href={`mailto:${LEGAL_ENTITY.email}`} className="text-primary underline underline-offset-4">
+                {LEGAL_ENTITY.email}
               </Link>
             </div>
           </div>

@@ -2,6 +2,7 @@
 
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 import { useTranslations } from "@/components/language-provider"
+import { LEGAL_ENTITY } from "@/lib/legal"
 
 export default function TermsPage() {
   const { t } = useTranslations()
@@ -26,8 +27,8 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold">2. Services</h2>
             <p className="text-muted-foreground">
               We provide an online tool for scheduling events and coordinating availability. The service is provided
-              &quot;as is&quot; and &quot;as available.&quot; We do not guarantee 100% uptime or data persistence, though
-              we take regular backups.
+              &quot;as is&quot; and &quot;as available.&quot; We do not guarantee 100% uptime or data persistence. We
+              endeavor to take regular backups but cannot guarantee data recovery.
             </p>
           </div>
 
@@ -43,9 +44,10 @@ export default function TermsPage() {
           <div className="space-y-2">
             <h2 className="text-xl font-semibold">4. Liability</h2>
             <p className="text-muted-foreground">
-              To the fullest extent permitted by law, Martin Lehocky shall not be liable for any indirect, incidental, or
-              consequential damages arising from the use of this service (e.g., missed meetings due to technical errors
-              or misuse by others).
+              To the fullest extent permitted by law,{" "}
+              <span className="font-medium">{LEGAL_ENTITY.name}</span> shall not be liable for any indirect, incidental,
+              or consequential damages arising from the use of this service (e.g., missed meetings due to technical
+              errors or misuse by others).
             </p>
           </div>
 

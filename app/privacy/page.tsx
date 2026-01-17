@@ -2,6 +2,7 @@
 
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 import { useTranslations } from "@/components/language-provider"
+import { LEGAL_ENTITY } from "@/lib/legal"
 
 export default function PrivacyPage() {
   const { t } = useTranslations()
@@ -18,10 +19,10 @@ export default function PrivacyPage() {
           <div className="space-y-2">
             <h2 className="text-xl font-semibold">1. Responsible Party (Controller)</h2>
             <div className="text-muted-foreground">
-              <p className="font-medium">Martin Lehocky</p>
-              <p>Považská 3, Nové Mesto nad Váhom</p>
-              <a className="text-primary underline underline-offset-4" href="mailto:martinlehocky@plannie.de">
-                martinlehocky@plannie.de
+              <p className="font-medium">{LEGAL_ENTITY.name}</p>
+              <p>{LEGAL_ENTITY.address}</p>
+              <a className="text-primary underline underline-offset-4" href={`mailto:${LEGAL_ENTITY.email}`}>
+                {LEGAL_ENTITY.email}
               </a>
             </div>
           </div>
@@ -59,12 +60,31 @@ export default function PrivacyPage() {
               <li>
                 <span className="font-medium text-foreground">Brevo (formerly Sendinblue):</span> We use Brevo to send
                 transactional emails (verification codes, etc.). Your email address is transferred to Brevo for this
-                purpose. Brevo is GDPR compliant.
+                purpose. Brevo publishes its GDPR commitments in its{" "}
+                <a
+                  className="text-primary underline underline-offset-4"
+                  href="https://www.brevo.com/legal/privacypolicy/"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  privacy policy
+                </a>
+                .
               </li>
               <li>
                 <span className="font-medium text-foreground">Google reCAPTCHA:</span> We use Google reCAPTCHA
                 (v2/Enterprise) to check whether data entry is made by a human or an automated program. This analyzes
-                behavior (IP address, mouse movements) and sends this data to Google.
+                behavior (IP address, mouse movements) and sends this data to Google. Legal basis: legitimate interest in
+                fraud prevention (Art. 6(1)(f) GDPR). See{" "}
+                <a
+                  className="text-primary underline underline-offset-4"
+                  href="https://policies.google.com/privacy"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Google&apos;s Privacy Policy
+                </a>
+                . You may object to this processing, but reCAPTCHA is required to protect the service from abuse.
               </li>
             </ul>
           </div>
