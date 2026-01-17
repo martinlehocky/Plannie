@@ -16,32 +16,22 @@ export const metadata: Metadata = {
   generator: "v0.app",
   icons: {
     icon: [
-      {
-        url: "/icon-light-32x32.png",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: "/icon-dark-32x32.png",
-        media: "(prefers-color-scheme: dark)",
-      },
-      {
-        url: "/icon.svg",
-        type: "image/svg+xml",
-      },
+      { url: "/app-icon.png", sizes: "32x32", type: "image/png" },
+      { url: "/app-icon.png", sizes: "16x16", type: "image/png" },
     ],
-    apple: "/apple-icon.png",
+    apple: "/app-icon.png",
   },
 }
 
 export default function RootLayout({
-  children,
-}: Readonly<{
+                                     children,
+                                   }: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+      <html lang="en" suppressHydrationWarning>
       <body className={`font-sans antialiased`}>
-        <script
+      <script
           dangerouslySetInnerHTML={{
             __html: `
 (function() {
@@ -55,14 +45,14 @@ export default function RootLayout({
   }
 })();`,
           }}
-        />
-        <LanguageProvider>
-          {children}
-          <Footer />
-          <Toaster />
-          <Analytics />
-        </LanguageProvider>
+      />
+      <LanguageProvider>
+        {children}
+        <Footer />
+        <Toaster />
+        <Analytics />
+      </LanguageProvider>
       </body>
-    </html>
+      </html>
   )
 }
