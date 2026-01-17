@@ -176,13 +176,13 @@ const SlotCell = memo(function SlotCell({
             onTouchStart={onTouchStart}
         >
             {isDisabled && (
-                <div className="absolute inset-0 flex items-center justify-center">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="text-[10px] font-semibold text-muted-foreground">{t("availability.disabledLabel")}</span>
                 </div>
             )}
             {displayCount > 0 && !isDisabled && (
                 <div className={cn(
-                    "absolute top-1 right-1 px-1.5 py-[1px] rounded text-[9px] font-bold leading-none",
+                    "absolute top-1 right-1 px-1.5 py-[1px] rounded text-[9px] font-bold leading-none pointer-events-none",
                     shouldUsePurple || shouldUseHeat
                         ? "bg-black/40 text-white"
                         : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
@@ -192,7 +192,7 @@ const SlotCell = memo(function SlotCell({
             )}
             {isMyAvailability && !isDisabled && (
                 <div className={cn(
-                    "absolute left-1 bottom-1 px-1.5 py-[1px] rounded text-[9px] font-semibold leading-none",
+                    "absolute left-1 bottom-1 px-1.5 py-[1px] rounded text-[9px] font-semibold leading-none pointer-events-none",
                     shouldUsePurple || shouldUseHeat
                         ? "bg-black/40 text-white"
                         : "bg-purple-500 text-white"
@@ -295,6 +295,7 @@ export function AvailabilityGrid({
     const gridRef = useRef<HTMLDivElement>(null)
     const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
     const touchStartTimeRef = useRef<number | null>(null)
+    const lastTouchTimeRef = useRef<number>(0)
 
     const prevParticipantIdRef = useRef(currentParticipant.id)
     const isDirtyRef = useRef(false)
@@ -413,6 +414,11 @@ export function AvailabilityGrid({
 
     const handleMouseDown = useCallback(
         (e: React.MouseEvent, key: string, currentVal: boolean, isDisabled: boolean) => {
+            // If a touch event happened less than 1 second ago, ignore this mouse event
+            if (Date.now() - lastTouchTimeRef.current < 1000) {
+                return
+            }
+
             if (scrollGuard()) return
             e.preventDefault()
 
@@ -472,6 +478,8 @@ export function AvailabilityGrid({
 
     const handleTouchStart = useCallback(
         (e: React.TouchEvent, key: string, currentVal: boolean, isDisabled: boolean) => {
+            lastTouchTimeRef.current = Date.now()
+
             if (scrollGuard()) return
 
             const touch = e.touches[0]
