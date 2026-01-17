@@ -76,14 +76,14 @@ export default function ContactPage() {
           </div>
 
           <div className="rounded-lg border bg-card p-6 space-y-3">
-            <p className="font-semibold">{t("contact.todoTitle")}</p>
-            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-              <li>{t("contact.todoApi")}</li>
-              <li>{t("contact.todoSpam")}</li>
-              <li>{t("contact.todoRateLimit")}</li>
-              <li>{t("contact.todoEmail")}</li>
-              <li>{t("contact.todoStorage")}</li>
-            </ul>
+            <p className="font-semibold">Direct contact</p>
+            <div className="space-y-1 text-muted-foreground">
+              <p className="font-medium text-foreground">Martin Lehocky</p>
+              <p>Považská 3, Nové Mesto nad Váhom</p>
+              <Link href="mailto:martinlehocky@plannie.de" className="text-primary underline underline-offset-4">
+                martinlehocky@plannie.de
+              </Link>
+            </div>
           </div>
         </div>
       </div>

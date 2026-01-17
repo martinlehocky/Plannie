@@ -27,11 +27,10 @@ export default function ImprintPage() {
           </div>
           <div>
             <p className="text-sm uppercase tracking-wide text-muted-foreground">{t("legal.imprintContactLabel")}</p>
-            <Link href="mailto:support@plannie.de" className="text-primary underline underline-offset-4">
-              support@plannie.de
+            <Link href="mailto:martinlehocky@plannie.de" className="text-primary underline underline-offset-4">
+              martinlehocky@plannie.de
             </Link>
           </div>
-          <p className="text-sm text-muted-foreground">{t("legal.imprintTodo")}</p>
         </div>
 
         <PrivacyTermsNote className="text-left" />
