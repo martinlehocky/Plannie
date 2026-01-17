@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
-import { Clock, ArrowLeft } from "lucide-react"
+import { Clock } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useTranslations } from "@/components/language-provider"
 import type { DateRange } from "react-day-picker"
@@ -125,13 +125,6 @@ export default function Home() {
 
   return (
       <div className="min-h-screen bg-background flex flex-col md:justify-center relative">
-
-        <div className="absolute top-4 left-4 md:top-8 md:left-8 z-50">
-          <Button variant="ghost" size="sm" className="gap-2" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4" />
-            <span>{t("common.back")}</span>
-          </Button>
-        </div>
         <div className="w-full flex justify-end items-center gap-2 p-4 md:absolute md:top-8 md:right-8 md:p-0 z-50">
           {isLoggedIn ? (
               <div className="flex items-center gap-2">
@@ -169,7 +162,7 @@ export default function Home() {
           <div className="w-full max-w-4xl grid gap-8">
             <div className="text-center space-y-2">
               <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight lg:text-7xl">{t("create.heading")}</h1>
-              <p className="text-xl text-primary md:text-2xl">{t("create.subheading")}</p>
+              <p className="text-xl text-muted-foreground md:text-2xl">{t("create.subheading")}</p>
             </div>
 
             <Card className="border-2 shadow-lg">
