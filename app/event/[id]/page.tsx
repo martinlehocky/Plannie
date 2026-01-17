@@ -103,6 +103,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [renameValue, setRenameValue] = useState("")
   const [userTimezone, setUserTimezone] = useState("")
   const [inviteUsername, setInviteUsername] = useState("")
+  const [friends, setFriends] = useState<{ id: string; username: string }[]>([])
   const [sseConnected, setSseConnected] = useState(false)
   const [draftDirty, setDraftDirty] = useState(false)
   const [pendingDisabledSlots, setPendingDisabledSlots] = useState<string[]>([])
@@ -235,6 +236,19 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       }
     }
     loadProfile()
+
+    const fetchFriends = async () => {
+      try {
+        const res = await fetchWithAuth(`${API_BASE}/friends`, { method: "GET" })
+        if (res.ok) {
+          const data = await res.json()
+          setFriends(Array.isArray(data) ? data : [])
+        }
+      } catch (e) {
+        console.error("Failed to load friends", e)
+      }
+    }
+    fetchFriends()
   }, [router])
 
   useEffect(() => {
@@ -869,6 +883,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         handleRemoveParticipant={handleRemoveParticipant}
                         router={router}
                         onOpenBestTimes={() => setBestTimesOpen(true)}
+                        friends={friends}
                     />
                   </CollapsibleContent>
                 </Collapsible>
@@ -1033,6 +1048,7 @@ function SidebarContent({
                           handleRemoveParticipant,
                           router,
                           onOpenBestTimes,
+                          friends,
                         }: {
   eventData: EventData
   currentParticipant: Participant | null
@@ -1049,6 +1065,7 @@ function SidebarContent({
   handleRemoveParticipant: (id: string) => void
   router: ReturnType<typeof useRouter>
   onOpenBestTimes: () => void
+  friends: { id: string; username: string }[]
 }) {
   const { t } = useTranslations()
 
@@ -1171,7 +1188,7 @@ function SidebarContent({
                   <UserPlus className="h-4 w-4 shrink-0" /> {t("eventPage.invite")}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-3.5 pt-0">
+              <CardContent className="p-3.5 pt-0 space-y-2">
                 <div className="flex gap-1.5">
                   <Input
                       className="text-xs h-8"
@@ -1184,6 +1201,42 @@ function SidebarContent({
                     {t("eventPage.invite")}
                   </Button>
                 </div>
+                {friends.length > 0 && (
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold px-1">Invite from friends</p>
+                    {friends
+                      .filter((f) => !eventData.participants.some((p) => p.id === f.id))
+                      .map((friend) => (
+                        <div
+                          key={friend.id}
+                          className="flex items-center justify-between p-1.5 rounded-md hover:bg-muted/50 transition-colors group cursor-pointer"
+                          onClick={() => {
+                            setInviteUsername(friend.username)
+                            handleInvite()
+                          }}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <Avatar className="h-5 w-5 shrink-0">
+                              <AvatarFallback className="text-[10px]">{friend.username[0].toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs font-medium truncate">{friend.username}</span>
+                          </div>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setInviteUsername(friend.username)
+                              handleInvite()
+                            }}
+                          >
+                            <UserPlus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
         )}

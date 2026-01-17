@@ -61,7 +61,7 @@ const (
 	refreshTTLShort         = 24 * time.Hour
 	lockoutThreshold        = 5
 	lockoutWindow           = 15 * time.Minute
-	schemaVersion           = 3
+	schemaVersion           = 4
 	refreshCookieName       = "rt"
 	recaptchaActionRegister = "register"
 	verifyResendCooldown    = 15 * time.Minute
@@ -504,6 +504,36 @@ func migrate(ctx context.Context, d *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(user_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_email_tokens_user ON email_tokens(user_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_email_tokens_kind_expires ON email_tokens(kind, expires_at);`,
+		`CREATE TABLE IF NOT EXISTS friend_requests (
+			id TEXT PRIMARY KEY,
+			sender_id TEXT NOT NULL,
+			receiver_id TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL,
+			UNIQUE(sender_id, receiver_id),
+			FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+			FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS event_invites (
+			id TEXT PRIMARY KEY,
+			event_id TEXT NOT NULL,
+			inviter_id TEXT NOT NULL,
+			invitee_id TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			created_at TIMESTAMP NOT NULL,
+			updated_at TIMESTAMP NOT NULL,
+			UNIQUE(event_id, invitee_id),
+			FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+			FOREIGN KEY (inviter_id) REFERENCES users(id) ON DELETE CASCADE,
+			FOREIGN KEY (invitee_id) REFERENCES users(id) ON DELETE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_friend_requests_sender ON friend_requests(sender_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_friend_requests_receiver ON friend_requests(receiver_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_friend_requests_status ON friend_requests(status);`,
+		`CREATE INDEX IF NOT EXISTS idx_event_invites_event ON event_invites(event_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_event_invites_invitee ON event_invites(invitee_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_event_invites_status ON event_invites(status);`,
 	}
 	for _, s := range createStmts {
 		if _, err := tx.ExecContext(ctx, s); err != nil {
@@ -523,6 +553,12 @@ func migrate(ctx context.Context, d *sql.DB) error {
 				return err
 			}
 		}
+	}
+
+	// Migration for version 4: add friend_requests and event_invites tables
+	if current < 4 {
+		// Tables are created via CREATE TABLE IF NOT EXISTS above, but we ensure indexes exist
+		// No ALTER statements needed as these are new tables
 	}
 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_versions(version, applied_at) VALUES (?,?)`, schemaVersion, time.Now().UTC()); err != nil {
@@ -855,7 +891,9 @@ func main() {
 	authProtected.PUT("/events/:id", rateLimit(30, 30), updateEventHandler)
 	authProtected.DELETE("/events/:id", rateLimit(20, 20), deleteEventHandler)
 
-	authProtected.POST("/events/:id/invite", rateLimit(20, 20), inviteHandler)
+	authProtected.POST("/events/:id/invite", rateLimit(10, 10), inviteHandler)
+	authProtected.POST("/events/:id/invite/accept", rateLimit(10, 10), acceptEventInviteHandler)
+	authProtected.POST("/events/:id/invite/decline", rateLimit(10, 10), declineEventInviteHandler)
 	authProtected.POST("/events/:id/join", rateLimit(20, 20), joinHandler)
 	authProtected.POST("/events/:id/leave", rateLimit(20, 20), leaveHandler)
 
@@ -863,6 +901,14 @@ func main() {
 	authProtected.DELETE("/events/:id/draft", rateLimit(30, 30), deleteEventDraftHandler)
 
 	authProtected.GET("/my-events", rateLimit(30, 30), myEventsHandler)
+	authProtected.GET("/events/invites", rateLimit(30, 30), getEventInvitesHandler)
+
+	authProtected.POST("/friends/request", rateLimit(10, 10), sendFriendRequestHandler)
+	authProtected.GET("/friends", rateLimit(30, 30), getFriendsHandler)
+	authProtected.GET("/friends/requests", rateLimit(30, 30), getFriendRequestsHandler)
+	authProtected.POST("/friends/accept/:id", rateLimit(10, 10), acceptFriendRequestHandler)
+	authProtected.POST("/friends/decline/:id", rateLimit(10, 10), declineFriendRequestHandler)
+	authProtected.DELETE("/friends/:id", rateLimit(10, 10), removeFriendHandler)
 
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -2041,13 +2087,24 @@ func inviteHandler(c *gin.Context) {
 	}
 
 	var targetID string
-	err := db.QueryRowContext(ctx, `SELECT id FROM users WHERE username = ?`, body.Username).Scan(&targetID)
+	var emailVerified int
+	err := db.QueryRowContext(ctx, `SELECT id, email_verified FROM users WHERE username = ?`, body.Username).Scan(&targetID, &emailVerified)
 	if err == sql.ErrNoRows {
-		c.JSON(http.StatusOK, gin.H{"message": "Invite processed"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	} else if err != nil {
 		logIfTimeout(err, "invite: select user")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	if emailVerified == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User must verify their email first"})
+		return
+	}
+
+	if targetID == creatorID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot invite yourself"})
 		return
 	}
 
@@ -2058,18 +2115,27 @@ func inviteHandler(c *gin.Context) {
 		return
 	}
 
+	// Check if there's already a pending invite
+	var inviteExists int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event_invites WHERE event_id = ? AND invitee_id = ? AND status = 'pending'`, id, targetID).Scan(&inviteExists)
+	if inviteExists > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "Invite already sent"})
+		return
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
 		return
 	}
 	now := time.Now().UTC()
+	inviteID := uuid.NewString()
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO event_participants(id, event_id, user_id, availability, draft_availability, draft_disabled_slots, draft_updated_at, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,NULL,?,?)
-	`, uuid.NewString(), id, targetID, "{}", "{}", "[]", now, now); err != nil {
+		INSERT INTO event_invites(id, event_id, inviter_id, invitee_id, status, created_at, updated_at)
+		VALUES (?,?,?,?,'pending',?,?)
+	`, inviteID, id, creatorID, targetID, now, now); err != nil {
 		tx.Rollback()
-		logIfTimeout(err, "invite: insert participant")
+		logIfTimeout(err, "invite: insert invite")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
 		return
 	}
@@ -2078,8 +2144,7 @@ func inviteHandler(c *gin.Context) {
 		return
 	}
 
-	ssePublish(id, []byte(`{"type":"event_updated","id":"`+id+`"}`))
-	c.JSON(http.StatusOK, gin.H{"message": "Invite processed"})
+	c.JSON(http.StatusOK, gin.H{"message": "Invite sent"})
 }
 
 func joinHandler(c *gin.Context) {
@@ -2301,4 +2366,410 @@ func resetPasswordHandler(c *gin.Context) {
 		logIfTimeout(err, "resetPassword: revoke")
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Password updated"})
+}
+
+func sendFriendRequestHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	userID := ctxUserID(c)
+	var body struct {
+		Username string `json:"username"`
+	}
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	var targetID string
+	var emailVerified int
+	err := db.QueryRowContext(ctx, `SELECT id, email_verified FROM users WHERE username = ?`, body.Username).Scan(&targetID, &emailVerified)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	} else if err != nil {
+		logIfTimeout(err, "sendFriendRequest: select user")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	if emailVerified == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User must verify their email first"})
+		return
+	}
+
+	if targetID == userID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot send friend request to yourself"})
+		return
+	}
+
+	// Check if already friends or request exists
+	var exists int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM friend_requests
+		WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
+	`, userID, targetID, targetID, userID).Scan(&exists)
+	if err != nil {
+		logIfTimeout(err, "sendFriendRequest: check existing")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if exists > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "Friend request already exists"})
+		return
+	}
+
+	now := time.Now().UTC()
+	requestID := uuid.NewString()
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO friend_requests(id, sender_id, receiver_id, status, created_at, updated_at)
+		VALUES (?,?,?,'pending',?,?)
+	`, requestID, userID, targetID, now, now); err != nil {
+		logIfTimeout(err, "sendFriendRequest: insert")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Friend request sent"})
+}
+
+func getFriendsHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	userID := ctxUserID(c)
+	rows, err := db.QueryContext(ctx, `
+		SELECT u.id, u.username
+		FROM users u
+		INNER JOIN friend_requests fr ON (
+			(fr.sender_id = ? AND fr.receiver_id = u.id) OR
+			(fr.sender_id = u.id AND fr.receiver_id = ?)
+		)
+		WHERE fr.status = 'accepted'
+		ORDER BY u.username
+	`, userID, userID)
+	if err != nil {
+		logIfTimeout(err, "getFriends: query")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	defer rows.Close()
+
+	friends := []map[string]interface{}{}
+	for rows.Next() {
+		var id, username string
+		if err := rows.Scan(&id, &username); err != nil {
+			continue
+		}
+		friends = append(friends, map[string]interface{}{
+			"id":       id,
+			"username": username,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		logIfTimeout(err, "getFriends: rows err")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, friends)
+}
+
+func getFriendRequestsHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	userID := ctxUserID(c)
+	rows, err := db.QueryContext(ctx, `
+		SELECT fr.id, u.id, u.username, fr.created_at
+		FROM friend_requests fr
+		INNER JOIN users u ON u.id = fr.sender_id
+		WHERE fr.receiver_id = ? AND fr.status = 'pending'
+		ORDER BY fr.created_at DESC
+	`, userID)
+	if err != nil {
+		logIfTimeout(err, "getFriendRequests: query")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	defer rows.Close()
+
+	requests := []map[string]interface{}{}
+	for rows.Next() {
+		var reqID, senderID, username string
+		var createdAt time.Time
+		if err := rows.Scan(&reqID, &senderID, &username, &createdAt); err != nil {
+			continue
+		}
+		requests = append(requests, map[string]interface{}{
+			"id":        reqID,
+			"senderId":  senderID,
+			"username":  username,
+			"createdAt": createdAt,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		logIfTimeout(err, "getFriendRequests: rows err")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, requests)
+}
+
+func acceptFriendRequestHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	userID := ctxUserID(c)
+	requestID := c.Param("id")
+
+	var senderID string
+	err := db.QueryRowContext(ctx, `
+		SELECT sender_id FROM friend_requests
+		WHERE id = ? AND receiver_id = ? AND status = 'pending'
+	`, requestID, userID).Scan(&senderID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Friend request not found"})
+		return
+	} else if err != nil {
+		logIfTimeout(err, "acceptFriendRequest: select")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	now := time.Now().UTC()
+	if _, err := db.ExecContext(ctx, `
+		UPDATE friend_requests
+		SET status = 'accepted', updated_at = ?
+		WHERE id = ?
+	`, now, requestID); err != nil {
+		logIfTimeout(err, "acceptFriendRequest: update")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Friend request accepted"})
+}
+
+func declineFriendRequestHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	userID := ctxUserID(c)
+	requestID := c.Param("id")
+
+	var exists int
+	err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM friend_requests
+		WHERE id = ? AND receiver_id = ? AND status = 'pending'
+	`, requestID, userID).Scan(&exists)
+	if err != nil {
+		logIfTimeout(err, "declineFriendRequest: select")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	if exists == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Friend request not found"})
+		return
+	}
+
+	now := time.Now().UTC()
+	if _, err := db.ExecContext(ctx, `
+		UPDATE friend_requests
+		SET status = 'declined', updated_at = ?
+		WHERE id = ?
+	`, now, requestID); err != nil {
+		logIfTimeout(err, "declineFriendRequest: update")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Friend request declined"})
+}
+
+func removeFriendHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	userID := ctxUserID(c)
+	friendID := c.Param("id")
+
+	if friendID == userID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot remove yourself"})
+		return
+	}
+
+	// Delete both directions of the friendship
+	if _, err := db.ExecContext(ctx, `
+		DELETE FROM friend_requests
+		WHERE status = 'accepted' AND (
+			(sender_id = ? AND receiver_id = ?) OR
+			(sender_id = ? AND receiver_id = ?)
+		)
+	`, userID, friendID, friendID, userID); err != nil {
+		logIfTimeout(err, "removeFriend: delete")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Friend removed"})
+}
+
+func getEventInvitesHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	userID := ctxUserID(c)
+	rows, err := db.QueryContext(ctx, `
+		SELECT ei.id, ei.event_id, e.name, e.date_from, e.date_to, e.duration, e.timezone, e.disabled_slots,
+		       u.id as inviter_id, u.username as inviter_username, ei.created_at
+		FROM event_invites ei
+		INNER JOIN events e ON e.id = ei.event_id
+		INNER JOIN users u ON u.id = ei.inviter_id
+		WHERE ei.invitee_id = ? AND ei.status = 'pending'
+		ORDER BY ei.created_at DESC
+	`, userID)
+	if err != nil {
+		logIfTimeout(err, "getEventInvites: query")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	defer rows.Close()
+
+	invites := []map[string]interface{}{}
+	for rows.Next() {
+		var inviteID, eventID, name, dateFrom, dateTo, timezone, disabledSlots, inviterID, inviterUsername string
+		var duration float64
+		var createdAt time.Time
+		if err := rows.Scan(&inviteID, &eventID, &name, &dateFrom, &dateTo, &duration, &timezone, &disabledSlots, &inviterID, &inviterUsername, &createdAt); err != nil {
+			continue
+		}
+		disabled := []string{}
+		if disabledSlots != "" {
+			_ = json.Unmarshal([]byte(disabledSlots), &disabled)
+		}
+		invites = append(invites, map[string]interface{}{
+			"id":              inviteID,
+			"eventId":         eventID,
+			"name":            name,
+			"dateRange":       gin.H{"from": dateFrom, "to": dateTo},
+			"duration":         duration,
+			"timezone":         timezone,
+			"disabledSlots":   disabled,
+			"inviterId":        inviterID,
+			"inviterUsername":  inviterUsername,
+			"createdAt":        createdAt,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		logIfTimeout(err, "getEventInvites: rows err")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, invites)
+}
+
+func acceptEventInviteHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	eventID := c.Param("id")
+	userID := ctxUserID(c)
+
+	// Check if invite exists and is pending
+	var inviteID string
+	err := db.QueryRowContext(ctx, `
+		SELECT id FROM event_invites
+		WHERE event_id = ? AND invitee_id = ? AND status = 'pending'
+	`, eventID, userID).Scan(&inviteID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Invite not found"})
+		return
+	} else if err != nil {
+		logIfTimeout(err, "acceptEventInvite: select")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	// Check if already a participant
+	var exists int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM event_participants WHERE event_id = ? AND user_id = ?`, eventID, userID).Scan(&exists)
+	if exists > 0 {
+		// Already a participant, just mark invite as accepted
+		now := time.Now().UTC()
+		if _, err := db.ExecContext(ctx, `UPDATE event_invites SET status = 'accepted', updated_at = ? WHERE id = ?`, now, inviteID); err != nil {
+			logIfTimeout(err, "acceptEventInvite: update invite")
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Already a participant"})
+		return
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+	now := time.Now().UTC()
+
+	// Add as participant
+	availability := map[string]bool{}
+	availJSON, _ := json.Marshal(availability)
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO event_participants(id, event_id, user_id, availability, draft_availability, draft_disabled_slots, draft_updated_at, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,NULL,?,?)
+	`, uuid.NewString(), eventID, userID, string(availJSON), "{}", "[]", now, now); err != nil {
+		tx.Rollback()
+		logIfTimeout(err, "acceptEventInvite: insert participant")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	// Update invite status
+	if _, err := tx.ExecContext(ctx, `UPDATE event_invites SET status = 'accepted', updated_at = ? WHERE id = ?`, now, inviteID); err != nil {
+		tx.Rollback()
+		logIfTimeout(err, "acceptEventInvite: update invite")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	ssePublish(eventID, []byte(`{"type":"event_updated","id":"`+eventID+`"}`))
+	c.JSON(http.StatusOK, gin.H{"message": "Invite accepted"})
+}
+
+func declineEventInviteHandler(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), reqTimeout)
+	defer cancel()
+
+	eventID := c.Param("id")
+	userID := ctxUserID(c)
+
+	var inviteID string
+	err := db.QueryRowContext(ctx, `
+		SELECT id FROM event_invites
+		WHERE event_id = ? AND invitee_id = ? AND status = 'pending'
+	`, eventID, userID).Scan(&inviteID)
+	if err == sql.ErrNoRows {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Invite not found"})
+		return
+	} else if err != nil {
+		logIfTimeout(err, "declineEventInvite: select")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	now := time.Now().UTC()
+	if _, err := db.ExecContext(ctx, `UPDATE event_invites SET status = 'declined', updated_at = ? WHERE id = ?`, now, inviteID); err != nil {
+		logIfTimeout(err, "declineEventInvite: update")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Invite declined"})
 }

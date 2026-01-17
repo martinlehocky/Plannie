@@ -4,10 +4,13 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { format } from "date-fns"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
-import { LogOut, Trash2, Settings, Plus, ArrowLeft, Clock, AlertTriangle, X } from "lucide-react"
+import { LogOut, Trash2, Settings, Plus, ArrowLeft, Clock, AlertTriangle, X, Users, UserPlus, UserMinus, Mail, Check, XCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import {
     AlertDialog,
@@ -41,13 +44,46 @@ interface UserProfile {
     verificationExpiry?: string
 }
 
+interface Friend {
+    id: string
+    username: string
+}
+
+interface FriendRequest {
+    id: string
+    senderId: string
+    username: string
+    createdAt: string
+}
+
+interface EventInvite {
+    id: string
+    eventId: string
+    name: string
+    dateRange: {
+        from: string
+        to: string
+    }
+    duration: number
+    timezone: string
+    disabledSlots: string[]
+    inviterId: string
+    inviterUsername: string
+    createdAt: string
+}
+
 export default function Dashboard() {
     const [events, setEvents] = useState<Event[]>([])
+    const [friends, setFriends] = useState<Friend[]>([])
+    const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
+    const [eventInvites, setEventInvites] = useState<EventInvite[]>([])
     const [loading, setLoading] = useState(true)
     const [username, setUsername] = useState("")
     const [emailVerified, setEmailVerified] = useState(true)
     const [verificationExpiry, setVerificationExpiry] = useState<string | null>(null)
     const [hideVerificationBanner, setHideVerificationBanner] = useState(false)
+    const [friendUsername, setFriendUsername] = useState("")
+    const [activeTab, setActiveTab] = useState<"events" | "friends" | "invites">("events")
     const { t } = useTranslations()
     const router = useRouter()
     const { toast } = useToast()
@@ -104,8 +140,62 @@ export default function Dashboard() {
 
         fetchProfile()
         fetchEvents()
+        fetchFriends()
+        fetchFriendRequests()
+        fetchEventInvites()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
+
+    const fetchFriends = async () => {
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/friends`, { method: "GET" })
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
+            if (res.ok) {
+                const data = await res.json()
+                setFriends(Array.isArray(data) ? data : [])
+            }
+        } catch (error) {
+            console.error("Failed to load friends", error)
+        }
+    }
+
+    const fetchFriendRequests = async () => {
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/friends/requests`, { method: "GET" })
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
+            if (res.ok) {
+                const data = await res.json()
+                setFriendRequests(Array.isArray(data) ? data : [])
+            }
+        } catch (error) {
+            console.error("Failed to load friend requests", error)
+        }
+    }
+
+    const fetchEventInvites = async () => {
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/events/invites`, { method: "GET" })
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
+            if (res.ok) {
+                const data = await res.json()
+                setEventInvites(Array.isArray(data) ? data : [])
+            }
+        } catch (error) {
+            console.error("Failed to load event invites", error)
+        }
+    }
 
     const handleLogout = async () => {
         await logout()
@@ -177,6 +267,132 @@ export default function Dashboard() {
                 toast({ title: "Verification email sent", description: "Check your inbox for the new verification link." })
             } else {
                 toast({ title: "Error", description: data.error || "Could not resend verification email", variant: "destructive" })
+            }
+        } catch {
+            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+        }
+    }
+
+    const handleSendFriendRequest = async () => {
+        if (!friendUsername.trim()) return
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/friends/request`, {
+                method: "POST",
+                body: JSON.stringify({ username: friendUsername.trim() }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
+            if (res.ok) {
+                toast({ title: "Friend request sent", description: `Sent friend request to ${friendUsername}` })
+                setFriendUsername("")
+            } else {
+                toast({ title: "Error", description: data.error || "Failed to send friend request", variant: "destructive" })
+            }
+        } catch {
+            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+        }
+    }
+
+    const handleAcceptFriendRequest = async (requestId: string) => {
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/friends/accept/${requestId}`, { method: "POST" })
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
+            if (res.ok) {
+                toast({ title: "Friend request accepted" })
+                fetchFriendRequests()
+                fetchFriends()
+            } else {
+                const data = await res.json().catch(() => ({}))
+                toast({ title: "Error", description: data.error || "Failed to accept request", variant: "destructive" })
+            }
+        } catch {
+            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+        }
+    }
+
+    const handleDeclineFriendRequest = async (requestId: string) => {
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/friends/decline/${requestId}`, { method: "POST" })
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
+            if (res.ok) {
+                toast({ title: "Friend request declined" })
+                fetchFriendRequests()
+            } else {
+                const data = await res.json().catch(() => ({}))
+                toast({ title: "Error", description: data.error || "Failed to decline request", variant: "destructive" })
+            }
+        } catch {
+            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+        }
+    }
+
+    const handleRemoveFriend = async (friendId: string) => {
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/friends/${friendId}`, { method: "DELETE" })
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
+            if (res.ok) {
+                toast({ title: "Friend removed" })
+                fetchFriends()
+            } else {
+                const data = await res.json().catch(() => ({}))
+                toast({ title: "Error", description: data.error || "Failed to remove friend", variant: "destructive" })
+            }
+        } catch {
+            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+        }
+    }
+
+    const handleAcceptEventInvite = async (eventId: string) => {
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/events/${eventId}/invite/accept`, { method: "POST" })
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
+            if (res.ok) {
+                toast({ title: "Event invite accepted" })
+                fetchEventInvites()
+                fetchEvents()
+            } else {
+                const data = await res.json().catch(() => ({}))
+                toast({ title: "Error", description: data.error || "Failed to accept invite", variant: "destructive" })
+            }
+        } catch {
+            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+        }
+    }
+
+    const handleDeclineEventInvite = async (eventId: string) => {
+        try {
+            const res = await fetchWithAuth(`${API_BASE}/events/${eventId}/invite/decline`, { method: "POST" })
+            if (res.status === 401) {
+                clearTokens()
+                router.push("/login")
+                return
+            }
+            if (res.ok) {
+                toast({ title: "Event invite declined" })
+                fetchEventInvites()
+            } else {
+                const data = await res.json().catch(() => ({}))
+                toast({ title: "Error", description: data.error || "Failed to decline invite", variant: "destructive" })
             }
         } catch {
             toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
@@ -264,7 +480,7 @@ export default function Dashboard() {
                 {/* Main content */}
                 <div className="w-full max-w-4xl mx-auto space-y-6 p-4 md:p-8">
                     <div className="flex items-center justify-between">
-                        <h1 className="text-3xl font-bold">{t("dashboard.myEvents")}</h1>
+                        <h1 className="text-3xl font-bold">Dashboard</h1>
                         <Button className="gap-2" asChild>
                             <Link href="/create">
                                 <Plus className="h-4 w-4" />
@@ -274,7 +490,35 @@ export default function Dashboard() {
                         </Button>
                     </div>
 
-                    {events.length === 0 ? (
+                    {/* Tabs */}
+                    <div className="flex gap-2 border-b">
+                        <Button
+                            variant={activeTab === "events" ? "default" : "ghost"}
+                            onClick={() => setActiveTab("events")}
+                            className="rounded-b-none"
+                        >
+                            Events {events.length > 0 && <Badge variant="secondary" className="ml-2">{events.length}</Badge>}
+                        </Button>
+                        <Button
+                            variant={activeTab === "invites" ? "default" : "ghost"}
+                            onClick={() => setActiveTab("invites")}
+                            className="rounded-b-none"
+                        >
+                            Invites {eventInvites.length > 0 && <Badge variant="secondary" className="ml-2">{eventInvites.length}</Badge>}
+                        </Button>
+                        <Button
+                            variant={activeTab === "friends" ? "default" : "ghost"}
+                            onClick={() => setActiveTab("friends")}
+                            className="rounded-b-none"
+                        >
+                            Friends {friendRequests.length > 0 && <Badge variant="destructive" className="ml-2">{friendRequests.length}</Badge>}
+                        </Button>
+                    </div>
+
+                    {/* Events Tab */}
+                    {activeTab === "events" && (
+                        <>
+                            {events.length === 0 ? (
                         <div className="text-center py-12 text-muted-foreground">
                             <p>{t("dashboard.empty")}</p>
                             <Button variant="link" className="underline hover:text-primary" asChild>
@@ -366,6 +610,173 @@ export default function Dashboard() {
                                 </Card>
                             ))}
                         </div>
+                    )}
+                        </>
+                    )}
+
+                    {/* Invites Tab */}
+                    {activeTab === "invites" && (
+                        <>
+                            {eventInvites.length === 0 ? (
+                                <div className="text-center py-12 text-muted-foreground">
+                                    <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                                    <p>No pending event invites</p>
+                                </div>
+                            ) : (
+                                <div className="grid gap-4">
+                                    {eventInvites.map((invite) => (
+                                        <Card key={invite.id} className="hover:border-primary transition-colors">
+                                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                                <CardTitle className="text-xl">{invite.name}</CardTitle>
+                                                <div className="flex items-center gap-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleDeclineEventInvite(invite.eventId)}
+                                                        className="text-destructive hover:bg-destructive/10"
+                                                    >
+                                                        <XCircle className="h-4 w-4 mr-1" />
+                                                        Decline
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            handleAcceptEventInvite(invite.eventId)
+                                                            router.push(`/event/${invite.eventId}`)
+                                                        }}
+                                                    >
+                                                        <Check className="h-4 w-4 mr-1" />
+                                                        Accept
+                                                    </Button>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <p className="text-sm text-muted-foreground">
+                                                    Invited by <span className="font-medium">{invite.inviterUsername}</span>
+                                                </p>
+                                                {invite.dateRange && (
+                                                    <p className="text-sm text-muted-foreground flex items-center gap-3 mt-2">
+                                                        <span>
+                                                            {format(new Date(invite.dateRange.from), "MMM d")} - {format(new Date(invite.dateRange.to), "MMM d, yyyy")}
+                                                        </span>
+                                                        {invite.duration && (
+                                                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                                                <Clock className="h-4 w-4" />
+                                                                <span className="font-medium">{formatDurationText(invite.duration)}</span>
+                                                            </span>
+                                                        )}
+                                                    </p>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {/* Friends Tab */}
+                    {activeTab === "friends" && (
+                        <>
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <UserPlus className="h-5 w-5" />
+                                        Add Friend
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            placeholder="Enter username"
+                                            value={friendUsername}
+                                            onChange={(e) => setFriendUsername(e.target.value)}
+                                            onKeyDown={(e) => e.key === "Enter" && handleSendFriendRequest()}
+                                        />
+                                        <Button onClick={handleSendFriendRequest}>Send Request</Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {friendRequests.length > 0 && (
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2">
+                                            <Mail className="h-5 w-5" />
+                                            Friend Requests ({friendRequests.length})
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-2">
+                                        {friendRequests.map((request) => (
+                                            <div key={request.id} className="flex items-center justify-between p-3 border rounded-lg">
+                                                <div className="flex items-center gap-3">
+                                                    <Avatar className="h-8 w-8">
+                                                        <AvatarFallback>{request.username[0].toUpperCase()}</AvatarFallback>
+                                                    </Avatar>
+                                                    <div>
+                                                        <p className="font-medium">{request.username}</p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {format(new Date(request.createdAt), "MMM d, yyyy")}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => handleDeclineFriendRequest(request.id)}
+                                                    >
+                                                        <XCircle className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button size="sm" onClick={() => handleAcceptFriendRequest(request.id)}>
+                                                        <Check className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Users className="h-5 w-5" />
+                                        My Friends ({friends.length})
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    {friends.length === 0 ? (
+                                        <div className="text-center py-8 text-muted-foreground">
+                                            <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                                            <p>No friends yet</p>
+                                            <p className="text-sm mt-2">Send a friend request to get started!</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {friends.map((friend) => (
+                                                <div key={friend.id} className="flex items-center justify-between p-3 border rounded-lg">
+                                                    <div className="flex items-center gap-3">
+                                                        <Avatar className="h-8 w-8">
+                                                            <AvatarFallback>{friend.username[0].toUpperCase()}</AvatarFallback>
+                                                        </Avatar>
+                                                        <p className="font-medium">{friend.username}</p>
+                                                    </div>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => handleRemoveFriend(friend.id)}
+                                                        className="text-destructive hover:bg-destructive/10"
+                                                    >
+                                                        <UserMinus className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </>
                     )}
                 </div>
             </div>
