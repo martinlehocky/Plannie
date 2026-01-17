@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, Clock, Users, Share2, Sparkles, Zap } from "lucide-react"
+import { Calendar, Clock, Users, Share2, Sparkles, Zap, Menu, X } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { logout, getAccessToken, getStoredUsername } from "@/lib/api"
 import { useTranslations } from "@/components/language-provider"
@@ -16,6 +16,7 @@ export default function LandingPage() {
     const router = useRouter()
     const [isLoggedIn, setIsLoggedIn] = useState(false)
     const [username, setUsername] = useState("")
+    const [isMenuOpen, setIsMenuOpen] = useState(false)
     const { t } = useTranslations()
 
     useEffect(() => {
@@ -29,13 +30,14 @@ export default function LandingPage() {
         await logout()
         setIsLoggedIn(false)
         setUsername("")
+        setIsMenuOpen(false)
     }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
             {/* Header */}
             <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b">
-                <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+                <div className="container mx-auto px-4 h-16 flex items-center justify-between relative">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center overflow-hidden">
                             <Image
@@ -50,9 +52,10 @@ export default function LandingPage() {
                         <span className="font-bold text-xl">{t("common.appName")}</span>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    {/* Desktop actions */}
+                    <div className="hidden sm:flex items-center gap-3">
                         {isLoggedIn && (
-                            <span className="text-sm text-muted-foreground hidden sm:inline">
+                            <span className="text-sm text-muted-foreground">
                                 {t("common.signedInAs", { name: username || t("common.guest") })}
                             </span>
                         )}
@@ -86,6 +89,61 @@ export default function LandingPage() {
                         <LanguageToggle className="w-[150px]" />
                         <ThemeToggle />
                     </div>
+
+                    {/* Mobile toggle */}
+                    <div className="sm:hidden flex items-center gap-2">
+                        <ThemeToggle />
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className="rounded-lg"
+                            onClick={() => setIsMenuOpen((prev) => !prev)}
+                            aria-label="Toggle menu"
+                        >
+                            {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                        </Button>
+                    </div>
+
+                    {/* Mobile menu */}
+                    {isMenuOpen && (
+                        <div className="absolute top-16 inset-x-0 px-4 sm:hidden">
+                            <div className="rounded-xl border bg-background/95 backdrop-blur-lg shadow-lg p-4 space-y-3">
+                                {isLoggedIn && (
+                                    <p className="text-sm text-muted-foreground">
+                                        {t("common.signedInAs", { name: username || t("common.guest") })}
+                                    </p>
+                                )}
+
+                                {isLoggedIn && (
+                                    <Link href="/dashboard" onClick={() => setIsMenuOpen(false)}>
+                                        <Button variant="outline" className="w-full justify-center">
+                                            {t("common.myDashboard")}
+                                        </Button>
+                                    </Link>
+                                )}
+
+                                <Link href="/create" onClick={() => setIsMenuOpen(false)}>
+                                    <Button className="w-full justify-center">
+                                        {t("common.createEvent")}
+                                    </Button>
+                                </Link>
+
+                                {isLoggedIn ? (
+                                    <Button variant="ghost" className="w-full justify-center" onClick={handleSignOut}>
+                                        {t("common.signOut")}
+                                    </Button>
+                                ) : (
+                                    <Link href="/login" onClick={() => setIsMenuOpen(false)}>
+                                        <Button variant="ghost" className="w-full justify-center">
+                                            {t("common.signInRegister")}
+                                        </Button>
+                                    </Link>
+                                )}
+
+                                <LanguageToggle className="w-full" />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </header>
 

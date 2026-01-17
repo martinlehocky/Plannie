@@ -39,7 +39,7 @@ export const translations: Record<Language, TranslationTree> = {
           "Coordinate meetings effortlessly. Select your availability, share a link, and watch as the best times emerge through beautiful heatmap visualization.",
       primaryCta: "Create Free Event",
       secondaryCta: "Learn More",
-      heroNote: "No sign-up required • Free forever • Works on any device",
+      heroNote: "Free forever • Works on any device",
       whyTitle: "Why Choose Plannie?",
       whySubtitle: "Built for teams, clubs, friends, and anyone who needs to coordinate schedules without the hassle.",
       features: {
@@ -53,7 +53,7 @@ export const translations: Record<Language, TranslationTree> = {
         },
         sharing: {
           title: "Easy Sharing",
-          description: "Share a simple link with your group. No accounts needed, works on any device, anywhere.",
+          description: "Share a simple link with your group. Works on any device, anywhere.",
         },
         smartDates: {
           title: "Smart Dates",
@@ -360,7 +360,7 @@ export const translations: Record<Language, TranslationTree> = {
           "Plane Treffen mühelos. Wähle deine Verfügbarkeit, teile einen Link und sieh zu, wie die besten Zeiten über eine schöne Heatmap sichtbar werden.",
       primaryCta: "Kostenloses Event erstellen",
       secondaryCta: "Mehr erfahren",
-      heroNote: "Keine Anmeldung nötig • Für immer kostenlos • Funktioniert auf jedem Gerät",
+      heroNote: "Für immer kostenlos • Funktioniert auf jedem Gerät",
       whyTitle: "Warum Plannie?",
       whySubtitle:
           "Für Teams, Vereine, Freunde und alle, die Termine ohne Aufwand koordinieren möchten.",
@@ -375,7 +375,7 @@ export const translations: Record<Language, TranslationTree> = {
         },
         sharing: {
           title: "Einfach teilen",
-          description: "Teile einen einfachen Link mit deiner Gruppe. Keine Accounts nötig, funktioniert überall.",
+          description: "Teile einen einfachen Link mit deiner Gruppe. Funktioniert überall.",
         },
         smartDates: {
           title: "Intelligente Daten",
