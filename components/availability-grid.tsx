@@ -295,6 +295,7 @@ export function AvailabilityGrid({
     const gridRef = useRef<HTMLDivElement>(null)
     const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
     const touchStartTimeRef = useRef<number | null>(null)
+    const tappedSlotKeyRef = useRef<string | null>(null) // NEW: track tapped slot
 
     const prevParticipantIdRef = useRef(currentParticipant.id)
     const isDirtyRef = useRef(false)
@@ -470,6 +471,7 @@ export function AvailabilityGrid({
         setDisableDragTarget(null)
     }, [])
 
+    // --- UPDATED TOUCH HANDLERS FOR MOBILE TAP ---
     const handleTouchStart = useCallback(
         (e: React.TouchEvent, key: string, currentVal: boolean, isDisabled: boolean) => {
             if (scrollGuard()) return
@@ -478,6 +480,7 @@ export function AvailabilityGrid({
             if (touch) {
                 touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
                 touchStartTimeRef.current = Date.now()
+                tappedSlotKeyRef.current = key // Track which slot was tapped
             }
 
             // Prevent default scrolling behavior when not in scroll mode
@@ -497,13 +500,11 @@ export function AvailabilityGrid({
 
             if (isDisabled) return
 
-            const newValue = !currentVal
+            // Don't toggle here, wait for touchend to confirm it's a tap
             setIsPainting(true)
-            setPaintMode(newValue)
-            setAvailabilityChecked(key, newValue)
-            onSlotInteraction?.()
+            setPaintMode(!currentVal)
         },
-        [scrollGuard, scrollMode, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked, onSlotInteraction]
+        [scrollGuard, scrollMode, disableMode, isCreator, onToggleDisabled]
     )
 
     const handleTouchMove = useCallback(
@@ -511,6 +512,7 @@ export function AvailabilityGrid({
             if (scrollGuard()) {
                 touchStartPosRef.current = null
                 touchStartTimeRef.current = null
+                tappedSlotKeyRef.current = null
                 return
             }
 
@@ -532,6 +534,7 @@ export function AvailabilityGrid({
                 if (!isPainting && !disableDragActive && (deltaX > 5 || deltaY > 5)) {
                     touchStartPosRef.current = null
                     touchStartTimeRef.current = null
+                    tappedSlotKeyRef.current = null
                     return
                 }
             }
@@ -568,22 +571,28 @@ export function AvailabilityGrid({
     )
 
     const handleTouchEnd = useCallback(() => {
+        // If a tap (no move), toggle the cell
+        if (isPainting && tappedSlotKeyRef.current && paintMode !== null) {
+            setAvailabilityChecked(tappedSlotKeyRef.current, paintMode)
+            onSlotInteraction?.()
+        }
         setIsPainting(false)
         setPaintMode(null)
         setDisableDragActive(false)
         setDisableDragTarget(null)
         touchStartPosRef.current = null
         touchStartTimeRef.current = null
-    }, [])
+        tappedSlotKeyRef.current = null
+    }, [isPainting, paintMode, setAvailabilityChecked, onSlotInteraction])
 
     const handleTouchCancel = useCallback(() => {
-        // Reset state if touch is cancelled (e.g., interrupted by system)
         setIsPainting(false)
         setPaintMode(null)
         setDisableDragActive(false)
         setDisableDragTarget(null)
         touchStartPosRef.current = null
         touchStartTimeRef.current = null
+        tappedSlotKeyRef.current = null
     }, [])
 
     useEffect(() => {
