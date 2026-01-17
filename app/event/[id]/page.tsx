@@ -905,6 +905,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       handleRemoveParticipant={handleRemoveParticipant}
                       router={router}
                       onOpenBestTimes={() => setBestTimesOpen(true)}
+                      friends={friends}
                   />
                 </div>
               </div>
