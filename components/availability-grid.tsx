@@ -160,16 +160,17 @@ const SlotCell = memo(function SlotCell({
                 disableMode && isCreator && "ring-1 ring-inset ring-primary/60",
                 scrollMode && isMyAvailability && !isDisabled && "ring-2 ring-inset ring-purple-500/50"
             )}
-            style={
-                shouldUsePurple
+            style={{
+                ...(shouldUsePurple
                     ? {
                         background: "linear-gradient(145deg, #7c3aed, #8b5cf6, #a78bfa)",
                         boxShadow: "inset 0 1px 2px rgba(0,0,0,0.15)",
                     }
                     : shouldUseHeat
                         ? getHeatStyle()
-                        : undefined
-            }
+                        : {}),
+                touchAction: scrollMode ? "auto" : "none",
+            }}
             onMouseDown={onMouseDown}
             onMouseEnter={onMouseEnter}
             onTouchStart={onTouchStart}
@@ -292,6 +293,8 @@ export function AvailabilityGrid({
     const [disableDragActive, setDisableDragActive] = useState(false)
     const [disableDragTarget, setDisableDragTarget] = useState<boolean | null>(null)
     const gridRef = useRef<HTMLDivElement>(null)
+    const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
+    const touchStartTimeRef = useRef<number | null>(null)
 
     const prevParticipantIdRef = useRef(currentParticipant.id)
     const isDirtyRef = useRef(false)
@@ -471,6 +474,17 @@ export function AvailabilityGrid({
         (e: React.TouchEvent, key: string, currentVal: boolean, isDisabled: boolean) => {
             if (scrollGuard()) return
 
+            const touch = e.touches[0]
+            if (touch) {
+                touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+                touchStartTimeRef.current = Date.now()
+            }
+
+            // Prevent default scrolling behavior when not in scroll mode
+            if (!scrollMode) {
+                e.preventDefault()
+            }
+
             if (disableMode && isCreator) {
                 const target = !isDisabled
                 setDisableDragActive(true)
@@ -489,13 +503,39 @@ export function AvailabilityGrid({
             setAvailabilityChecked(key, newValue)
             onSlotInteraction?.()
         },
-        [scrollGuard, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked, onSlotInteraction]
+        [scrollGuard, scrollMode, disableMode, isCreator, onToggleDisabled, setAvailabilityChecked, onSlotInteraction]
     )
 
     const handleTouchMove = useCallback(
         (e: React.TouchEvent) => {
-            if (scrollGuard()) return
+            if (scrollGuard()) {
+                touchStartPosRef.current = null
+                touchStartTimeRef.current = null
+                return
+            }
+
+            // If we're painting, prevent default scrolling
+            if (isPainting || disableDragActive) {
+                e.preventDefault()
+            }
+
             const touch = e.touches[0]
+            if (!touch) return
+
+            // Check if this is a significant drag (more than 5px)
+            // to distinguish between intentional painting vs accidental touches
+            const startPos = touchStartPosRef.current
+            if (startPos) {
+                const deltaX = Math.abs(touch.clientX - startPos.x)
+                const deltaY = Math.abs(touch.clientY - startPos.y)
+                // If user hasn't started painting yet and this looks like scrolling, bail out
+                if (!isPainting && !disableDragActive && (deltaX > 5 || deltaY > 5)) {
+                    touchStartPosRef.current = null
+                    touchStartTimeRef.current = null
+                    return
+                }
+            }
+
             const element = document.elementFromPoint(touch.clientX, touch.clientY)
             const slotKey = element?.getAttribute("data-slot-key")
             if (!slotKey) return
@@ -532,16 +572,30 @@ export function AvailabilityGrid({
         setPaintMode(null)
         setDisableDragActive(false)
         setDisableDragTarget(null)
+        touchStartPosRef.current = null
+        touchStartTimeRef.current = null
+    }, [])
+
+    const handleTouchCancel = useCallback(() => {
+        // Reset state if touch is cancelled (e.g., interrupted by system)
+        setIsPainting(false)
+        setPaintMode(null)
+        setDisableDragActive(false)
+        setDisableDragTarget(null)
+        touchStartPosRef.current = null
+        touchStartTimeRef.current = null
     }, [])
 
     useEffect(() => {
         document.addEventListener("mouseup", handleMouseUp)
         document.addEventListener("touchend", handleTouchEnd)
+        document.addEventListener("touchcancel", handleTouchCancel)
         return () => {
             document.removeEventListener("mouseup", handleMouseUp)
             document.removeEventListener("touchend", handleTouchEnd)
+            document.removeEventListener("touchcancel", handleTouchCancel)
         }
-    }, [handleMouseUp, handleTouchEnd])
+    }, [handleMouseUp, handleTouchEnd, handleTouchCancel])
 
     const handleSave = () => {
         const current = availabilityRef.current
@@ -731,6 +785,7 @@ export function AvailabilityGrid({
                     style={{
                         userSelect: scrollMode ? "auto" : "none",
                         WebkitUserSelect: scrollMode ? "auto" : "none",
+                        touchAction: scrollMode ? "pan-x pan-y" : "none",
                     }}
                     onTouchMove={handleTouchMove}
                 >
