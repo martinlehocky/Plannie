@@ -10,7 +10,6 @@ import { Calendar, Clock, Users, Share2, Sparkles, Zap, Menu, X } from "lucide-r
 import { ThemeToggle } from "@/components/theme-toggle"
 import { logout, getAccessToken, getStoredUsername } from "@/lib/api"
 import { useTranslations } from "@/components/language-provider"
-import { LanguageToggle } from "@/components/language-toggle"
 
 export default function LandingPage() {
     const router = useRouter()
@@ -86,7 +85,6 @@ export default function LandingPage() {
                             </Link>
                         )}
 
-                        <LanguageToggle className="w-[150px]" />
                         <ThemeToggle />
                     </div>
 
@@ -139,8 +137,6 @@ export default function LandingPage() {
                                         </Button>
                                     </Link>
                                 )}
-
-                                <LanguageToggle className="w-full" />
                             </div>
                         </div>
                     )}

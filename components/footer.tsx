@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useTranslations } from "@/components/language-provider"
+import { LanguageToggle } from "@/components/language-toggle"
 
 export function Footer() {
   const { t } = useTranslations()
@@ -23,6 +24,7 @@ export function Footer() {
           <Link href="/contact" className="hover:text-foreground transition-colors">
             {t("common.contact")}
           </Link>
+          <LanguageToggle className="w-[150px]" />
         </div>
       </div>
     </footer>

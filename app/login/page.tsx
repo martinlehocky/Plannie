@@ -14,7 +14,6 @@ import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en"
 import { setTokens } from "@/lib/api"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useTranslations } from "@/components/language-provider"
-import { LanguageToggle } from "@/components/language-toggle"
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
@@ -216,7 +215,6 @@ export default function LoginPage() {
             </Link>
         </div>
             <div className="absolute top-4 right-4 flex gap-2">
-                <LanguageToggle className="w-[150px]" />
                 <ThemeToggle />
             </div>
 

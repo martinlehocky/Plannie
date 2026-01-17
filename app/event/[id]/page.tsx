@@ -26,7 +26,6 @@ import {
   BarChart3,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { LanguageToggle } from "@/components/language-toggle"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
@@ -785,7 +784,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <LanguageToggle className="w-[150px]" />
               <ThemeToggle />
               {draftDirty && (
                   <div className="flex items-center gap-2">

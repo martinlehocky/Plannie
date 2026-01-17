@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar"
 import { Clock } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { LanguageToggle } from "@/components/language-toggle"
 import { useTranslations } from "@/components/language-provider"
 import type { DateRange } from "react-day-picker"
 import { format } from "date-fns"
@@ -156,7 +155,6 @@ export default function Home() {
                 {t("common.signInRegister")}
               </Button>
           )}
-          <LanguageToggle className="w-[150px]" />
           <ThemeToggle />
         </div>
 

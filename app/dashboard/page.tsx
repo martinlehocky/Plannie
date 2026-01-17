@@ -6,7 +6,6 @@ import Link from "next/link"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { format } from "date-fns"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { LanguageToggle } from "@/components/language-toggle"
 import { Button } from "@/components/ui/button"
 import { LogOut, Trash2, Settings, Plus, ArrowLeft, Clock, AlertTriangle, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -255,7 +254,6 @@ export default function Dashboard() {
                         <LogOut className="h-4 w-4" />
                         <span className="hidden md:inline">{t("common.signOut")}</span>
                     </Button>
-                    <LanguageToggle className="w-[150px]" />
                     <ThemeToggle />
                 </div>
             </div>

@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
-
+import { ArrowLeft } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 import { useTranslations } from "@/components/language-provider"
-import { LanguageToggle } from "@/components/language-toggle"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LEGAL_ENTITY } from "@/lib/legal"
 
@@ -15,6 +16,7 @@ const TALLY_SCRIPT_SRC = "https://tally.so/widgets/embed.js"
 
 export default function ContactPage() {
   const { t } = useTranslations()
+  const router = useRouter()
 
   useEffect(() => {
     const loadTally = () => {
@@ -47,13 +49,16 @@ export default function ContactPage() {
 
   return (
       <div className="min-h-screen bg-background px-4 py-16 relative">
-        {/* Corner toggles (no header) */}
+        {/* Corner toggle (theme only, language is in footer) */}
         <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-          <LanguageToggle className="w-[150px]" />
           <ThemeToggle />
         </div>
 
         <div className="container mx-auto max-w-2xl space-y-6">
+          <Button variant="ghost" size="sm" className="gap-2 -ml-2 mb-2" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+            <span>{t("common.back")}</span>
+          </Button>
           <div className="space-y-2">
             <h1 className="text-3xl font-bold">{t("contact.title")}</h1>
             <p className="text-muted-foreground">{t("contact.subtitle")}</p>
