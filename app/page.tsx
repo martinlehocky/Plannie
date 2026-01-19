@@ -10,6 +10,25 @@ import { Calendar, Clock, Users, Share2, Sparkles, Zap, Menu, X } from "lucide-r
 import { ThemeToggle } from "@/components/theme-toggle"
 import { logout, getAccessToken, getStoredUsername, ensureAuth } from "@/lib/api"
 import { useTranslations } from "@/components/language-provider"
+import { useInView } from "@/hooks/use-in-view"
+import { cn } from "@/lib/utils"
+
+const FadeIn = ({ children, className, delay = 0 }: { children: React.ReactNode, className?: string, delay?: number }) => {
+    const { ref, isInView } = useInView({ threshold: 0.1 })
+    return (
+        <div
+            ref={ref}
+            className={cn(
+                "transition-all duration-700 ease-out transform opacity-0 translate-y-8",
+                isInView && "opacity-100 translate-y-0",
+                className
+            )}
+            style={{ transitionDelay: `${delay}ms` }}
+        >
+            {children}
+        </div>
+    )
+}
 
 export default function LandingPage() {
     const router = useRouter()
@@ -17,6 +36,12 @@ export default function LandingPage() {
     const [username, setUsername] = useState("")
     const [isMenuOpen, setIsMenuOpen] = useState(false)
     const { t } = useTranslations()
+
+    // Animation mount check
+    const [mounted, setMounted] = useState(false)
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     useEffect(() => {
         const init = async () => {
@@ -154,17 +179,19 @@ export default function LandingPage() {
                         <span className="text-sm font-medium">{t("landing.badge")}</span>
                     </div>
 
-                    <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-balance">
-                        {t("landing.title")}
-                        <br />
-                        <span className="text-primary">{t("landing.highlight")}</span>
-                    </h1>
+                    <div className={`transition-all duration-1000 ease-out transform ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
+                        <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-balance">
+                            {t("landing.title")}
+                            <br />
+                            <span className="text-primary">{t("landing.highlight")}</span>
+                        </h1>
+                    </div>
 
-                    <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-balance">
+                    <p className={`text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-balance transition-all duration-1000 delay-200 ease-out transform ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
                         {t("landing.description")}
                     </p>
 
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
+                    <div className={`flex flex-col sm:flex-row gap-4 justify-center items-center pt-4 transition-all duration-1000 delay-300 ease-out transform ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
                         <Link href="/create">
                             <Button size="lg" className="h-14 px-8 text-lg font-semibold">
                                 <Calendar className="w-5 h-5 mr-2" />
@@ -248,6 +275,68 @@ export default function LandingPage() {
                                 <CardDescription className="text-base">{t("landing.features.design.description")}</CardDescription>
                             </CardHeader>
                         </Card>
+                    </div>
+                </div>
+            </section>
+
+            {/* Use Cases Section */}
+            <section className="py-16 px-4 bg-muted/50 dark:bg-muted/10">
+                <div className="container mx-auto max-w-6xl">
+                    <FadeIn>
+                        <div className="text-center mb-12">
+                            <h2 className="text-3xl md:text-5xl font-bold mb-4">{t("landing.useCases.title")}</h2>
+                            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">{t("landing.useCases.subtitle")}</p>
+                        </div>
+                    </FadeIn>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <FadeIn delay={100}>
+                            <Card className="h-full border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
+                                <CardHeader>
+                                    <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center mb-4 text-blue-500">
+                                        <Users className="w-6 h-6" />
+                                    </div>
+                                    <CardTitle className="text-2xl">{t("landing.useCases.team.title")}</CardTitle>
+                                    <CardDescription className="text-base text-muted-foreground/80">{t("landing.useCases.team.description")}</CardDescription>
+                                </CardHeader>
+                            </Card>
+                        </FadeIn>
+
+                        <FadeIn delay={200}>
+                            <Card className="h-full border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
+                                <CardHeader>
+                                    <div className="w-12 h-12 rounded-xl bg-pink-500/10 flex items-center justify-center mb-4 text-pink-500">
+                                        <Sparkles className="w-6 h-6" />
+                                    </div>
+                                    <CardTitle className="text-2xl">{t("landing.useCases.social.title")}</CardTitle>
+                                    <CardDescription className="text-base text-muted-foreground/80">{t("landing.useCases.social.description")}</CardDescription>
+                                </CardHeader>
+                            </Card>
+                        </FadeIn>
+
+                        <FadeIn delay={300}>
+                            <Card className="h-full border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
+                                <CardHeader>
+                                    <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center mb-4 text-amber-500">
+                                        <Zap className="w-6 h-6" />
+                                    </div>
+                                    <CardTitle className="text-2xl">{t("landing.useCases.study.title")}</CardTitle>
+                                    <CardDescription className="text-base text-muted-foreground/80">{t("landing.useCases.study.description")}</CardDescription>
+                                </CardHeader>
+                            </Card>
+                        </FadeIn>
+
+                        <FadeIn delay={400}>
+                            <Card className="h-full border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
+                                <CardHeader>
+                                    <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mb-4 text-purple-500">
+                                        <Calendar className="w-6 h-6" />
+                                    </div>
+                                    <CardTitle className="text-2xl">{t("landing.useCases.clients.title")}</CardTitle>
+                                    <CardDescription className="text-base text-muted-foreground/80">{t("landing.useCases.clients.description")}</CardDescription>
+                                </CardHeader>
+                            </Card>
+                        </FadeIn>
                     </div>
                 </div>
             </section>
