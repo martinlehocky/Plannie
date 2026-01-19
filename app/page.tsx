@@ -36,9 +36,9 @@ export default function LandingPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+        <div className="min-h-screen bg-gradient-to-br from-background via-purple-900/10 to-primary/20 dark:from-background dark:via-purple-900/20 dark:to-primary/10">
             {/* Header */}
-            <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b">
+            <header className="fixed top-0 left-0 right-0 z-50 bg-background/60 backdrop-blur-xl border-b border-primary/5 supports-[backdrop-filter]:bg-background/20">
                 <div className="container mx-auto px-4 h-16 flex items-center justify-between relative">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center overflow-hidden">
@@ -189,7 +189,7 @@ export default function LandingPage() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                        <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                             <CardHeader>
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Zap className="w-6 h-6 text-primary" />
@@ -199,7 +199,7 @@ export default function LandingPage() {
                             </CardHeader>
                         </Card>
 
-                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                        <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                             <CardHeader>
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Users className="w-6 h-6 text-primary" />
@@ -209,7 +209,7 @@ export default function LandingPage() {
                             </CardHeader>
                         </Card>
 
-                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                        <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                             <CardHeader>
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Share2 className="w-6 h-6 text-primary" />
@@ -219,7 +219,7 @@ export default function LandingPage() {
                             </CardHeader>
                         </Card>
 
-                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                        <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                             <CardHeader>
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Calendar className="w-6 h-6 text-primary" />
@@ -229,7 +229,7 @@ export default function LandingPage() {
                             </CardHeader>
                         </Card>
 
-                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                        <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                             <CardHeader>
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Clock className="w-6 h-6 text-primary" />
@@ -239,7 +239,7 @@ export default function LandingPage() {
                             </CardHeader>
                         </Card>
 
-                        <Card className="border-2 hover:shadow-xl transition-all duration-300 hover:border-primary/50">
+                        <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                             <CardHeader>
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                     <Sparkles className="w-6 h-6 text-primary" />
@@ -307,7 +307,7 @@ export default function LandingPage() {
             {/* CTA Section */}
             <section className="py-20 px-4">
                 <div className="container mx-auto max-w-4xl text-center">
-                    <Card className="border-2 shadow-2xl bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+                    <Card className="border-0 shadow-2xl bg-gradient-to-br from-primary/10 to-primary/5 backdrop-blur-xl ring-1 ring-primary/20">
                         <CardContent className="pt-12 pb-12 space-y-6">
                             <h2 className="text-3xl md:text-5xl font-bold text-balance">{t("landing.ctaTitle")}</h2>
                             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">{t("landing.ctaDescription")}</p>
