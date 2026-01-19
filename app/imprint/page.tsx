@@ -29,10 +29,7 @@ export default function ImprintPage() {
             <p className="text-sm uppercase tracking-wide text-muted-foreground">{t("legal.imprintNameLabel")}</p>
             <p className="text-base font-medium">{LEGAL_ENTITY.name}</p>
           </div>
-          <div>
-            <p className="text-sm uppercase tracking-wide text-muted-foreground">{t("legal.imprintAddressLabel")}</p>
-            <p className="text-base font-medium">{LEGAL_ENTITY.address}</p>
-          </div>
+
           <div>
             <p className="text-sm uppercase tracking-wide text-muted-foreground">{t("legal.imprintContactLabel")}</p>
             <Link href={`mailto:${LEGAL_ENTITY.email}`} className="text-primary underline underline-offset-4">

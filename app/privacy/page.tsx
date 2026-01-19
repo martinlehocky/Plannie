@@ -28,7 +28,6 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold">1. Responsible Party (Controller)</h2>
             <div className="text-muted-foreground">
               <p className="font-medium">{LEGAL_ENTITY.name}</p>
-              <p>{LEGAL_ENTITY.address}</p>
               <a className="text-primary underline underline-offset-4" href={`mailto:${LEGAL_ENTITY.email}`}>
                 {LEGAL_ENTITY.email}
               </a>
