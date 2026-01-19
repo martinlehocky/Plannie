@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/toaster"
 import { LanguageProvider } from "@/components/language-provider"
 import { Footer } from "@/components/footer"
+import { GoogleAnalytics } from "@/components/google-analytics"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -24,14 +25,14 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({
-                                     children,
-                                   }: Readonly<{
+  children,
+}: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-      <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body className={`font-sans antialiased`}>
-      <script
+        <script
           dangerouslySetInnerHTML={{
             __html: `
 (function() {
@@ -45,14 +46,15 @@ export default function RootLayout({
   }
 })();`,
           }}
-      />
-      <LanguageProvider>
-        {children}
-        <Footer />
-        <Toaster />
-        <Analytics />
-      </LanguageProvider>
+        />
+        <LanguageProvider>
+          {children}
+          <Footer />
+          <Toaster />
+          <Analytics />
+          <GoogleAnalytics />
+        </LanguageProvider>
       </body>
-      </html>
+    </html>
   )
 }
