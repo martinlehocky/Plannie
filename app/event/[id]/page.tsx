@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { fetchWithAuth, clearTokens, getAccessToken, getStoredUsername } from "@/lib/api"
+import { fetchWithAuth, clearTokens, getAccessToken, getStoredUsername, ensureAuth } from "@/lib/api"
 import { useTranslations } from "@/components/language-provider"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
@@ -126,7 +126,16 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const sseRetryDelayRef = useRef(5000)
   const sseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const token = useMemo(() => getAccessToken() ?? null, [])
+  const [token, setToken] = useState<string | null>(null)
+
+  useEffect(() => {
+    const init = async () => {
+      await ensureAuth()
+      setToken(getAccessToken() ?? null)
+    }
+    init()
+  }, [])
+
   const tokenClaims = useMemo(() => decodeToken(token), [token])
   const userId = tokenClaims.uid || tokenClaims.sub || tokenClaims.userId || tokenClaims.id || null
   const usernameClaim = tokenClaims.uname || tokenClaims.username || tokenClaims.name || null
@@ -210,11 +219,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const timer = setInterval(() => fetchEventData(), 120000)
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, sseConnected, draftDirty])
+  }, [id, sseConnected, draftDirty, token])
 
   useEffect(() => {
-    const accessToken = getAccessToken()
-    if (!accessToken) {
+    if (!token) {
       setIsLoggedIn(false)
       return
     }
@@ -309,7 +317,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
     const updatedParticipant = { ...currentParticipant, availability: cleaned }
 
     const updatedParticipants = eventData.participants.map((p) =>
-        p.id === currentParticipant.id ? updatedParticipant : p
+      p.id === currentParticipant.id ? updatedParticipant : p
     )
 
     const previousEventData = eventData
@@ -364,7 +372,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const handleCancelDraft = async () => {
     setDraftDirty(false)
     setPendingDisabledSlots([])
-    await clearDraftOnServer().catch(() => {})
+    await clearDraftOnServer().catch(() => { })
     if (lastSavedEventRef.current) {
       setEventData(lastSavedEventRef.current)
       setCurrentParticipant(lastSavedParticipantRef.current)
@@ -589,8 +597,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       })
     })
     const sorted = Object.entries(allSlots)
-        .map(([slot, names]) => ({ slot, count: names.length, names }))
-        .sort((a, b) => b.count - a.count)
+      .map(([slot, names]) => ({ slot, count: names.length, names }))
+      .sort((a, b) => b.count - a.count)
     return typeof limit === "number" ? sorted.slice(0, limit) : sorted
   }
 
@@ -639,7 +647,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         const payload: any = { availability: draftAvailability }
         if (isCreator) {
           payload.disabledSlots =
-              pendingDisabledSlots.length > 0 ? pendingDisabledSlots : eventData?.disabledSlots || []
+            pendingDisabledSlots.length > 0 ? pendingDisabledSlots : eventData?.disabledSlots || []
         }
         await fetchWithAuth(`${API_BASE}/events/${id}/draft`, {
           method: "PUT",
@@ -665,7 +673,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const discardDraft = async () => {
-    await clearDraftOnServer().catch(() => {})
+    await clearDraftOnServer().catch(() => { })
     setPendingDraft(null)
     setDraftDirty(false)
     setPendingDisabledSlots([])
@@ -680,32 +688,32 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const renderVerificationBanner = () => {
     if (emailVerified || hideVerificationBanner) return null
     return (
-        <div className="mx-auto w-full max-w-7xl px-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 p-4 shadow-sm">
-            <div className="flex items-start gap-3 flex-1">
-              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-              <div className="space-y-1">
-                <p className="font-semibold">{t("eventPage.emailNotVerifiedTitle")}</p>
-                <p className="text-sm">
-                  {t("eventPage.emailNotVerifiedBody")}
-                  {verificationExpiry && (
-                      <span className="block text-xs text-amber-800 mt-1">
+      <div className="mx-auto w-full max-w-7xl px-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 p-4 shadow-sm">
+          <div className="flex items-start gap-3 flex-1">
+            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="font-semibold">{t("eventPage.emailNotVerifiedTitle")}</p>
+              <p className="text-sm">
+                {t("eventPage.emailNotVerifiedBody")}
+                {verificationExpiry && (
+                  <span className="block text-xs text-amber-800 mt-1">
                     {t("eventPage.expiresPrefix")} {new Date(verificationExpiry).toLocaleString()}
                   </span>
-                  )}
-                </p>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Button size="sm" variant="outline" className="border-amber-300 text-amber-900" onClick={handleResendVerification}>
-                    {t("eventPage.sendVerificationAgain")}
-                  </Button>
-                </div>
+                )}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button size="sm" variant="outline" className="border-amber-300 text-amber-900" onClick={handleResendVerification}>
+                  {t("eventPage.sendVerificationAgain")}
+                </Button>
               </div>
             </div>
-            <Button variant="ghost" size="icon" className="text-amber-700" onClick={() => setHideVerificationBanner(true)}>
-              <X className="h-4 w-4" />
-            </Button>
           </div>
+          <Button variant="ghost" size="icon" className="text-amber-700" onClick={() => setHideVerificationBanner(true)}>
+            <X className="h-4 w-4" />
+          </Button>
         </div>
+      </div>
     )
   }
 
@@ -719,338 +727,338 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const bestChartData = (allBestTimes.length ? allBestTimes : bestTimes).slice(0, 10)
 
   return (
-      <div className="min-h-screen bg-background flex flex-col lg:h-screen lg:overflow-hidden">
-        <div className="mx-auto w-full max-w-7xl flex flex-col flex-1 lg:h-full">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b bg-card/50 backdrop-blur-sm shrink-0 gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 group">
-                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">{eventData.name}</h1>
-                  {draftDirty && (
-                      <Badge variant="secondary" className="flex items-center gap-1 text-[11px]">
-                        <AlertTriangle className="h-3 w-3" />
-                        {t("eventPage.unsavedChanges")}
-                      </Badge>
-                  )}
-                  {isCreator && (
-                      <AlertDialog open={renameOpen} onOpenChange={setRenameOpen}>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                              title={t("eventPage.renameEvent")}
-                              onClick={() => setRenameValue(eventData.name)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="sm:max-w-md">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>{t("eventPage.renameEvent")}</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {t("eventPage.renameDescription")}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <div className="space-y-3 pt-2">
-                            <Input
-                                autoFocus
-                                value={renameValue}
-                                onChange={(e) => setRenameValue(e.target.value)}
-                                onKeyDown={(e) => e.key === "Enter" && handleRename()}
-                                placeholder={t("eventPage.eventNamePlaceholder")}
-                            />
-                          </div>
-                          <AlertDialogFooter className="mt-4">
-                            <AlertDialogCancel disabled={renameLoading}>{t("eventPage.cancel")}</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleRename} disabled={renameLoading}>
-                              {renameLoading ? t("eventPage.saving") : t("eventPage.save")}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 shrink-0" />
-                    <span className="font-medium">
-                    {format(new Date(eventData.dateRange.from), "MMM d")} -{" "}
-                      {format(new Date(eventData.dateRange.to), "MMM d")}
-                  </span>
-                  </div>
-
-                  {eventData.duration > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5 shrink-0" />
-                        <span className="font-medium">{formatDurationText(eventData.duration)}</span>
-                      </div>
-                  )}
-
-                  <div className="flex items-center gap-1.5">
-                    <Globe className="h-3.5 w-3.5 shrink-0" />
-                    <span className="capitalize truncate max-w-[140px] font-medium">
-                    {userTimezone.replace(/_/g, " ")}
-                  </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <ThemeToggle />
-              {draftDirty && (
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" className="h-9 text-xs" onClick={handleCancelDraft}>
-                      <RefreshCw className="h-4 w-4 mr-1" />
-                      {t("eventPage.revertUnsaved")}
-                    </Button>
-                  </div>
-              )}
-              <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => router.push("/dashboard")}
-                  className="text-xs px-3 h-9 font-medium"
-              >
-                <span className="hidden sm:inline">{t("eventPage.dashboard")}</span>
-                <span className="sm:hidden">{t("eventPage.home")}</span>
-              </Button>
-              {isParticipant && !isCreator && (
-                  <Button size="sm" variant="destructive" onClick={handleLeave} className="text-xs px-3 h-9 font-medium">
-                    {t("eventPage.leave")}
-                  </Button>
-              )}
-              <Button size="sm" variant="outline" onClick={handleShare} className="px-3 h-9 bg-transparent">
-                <Share2 className="h-4 w-4" />
-              </Button>
-              {isCreator && (
-                  <AlertDialog>
+    <div className="min-h-screen bg-background flex flex-col lg:h-screen lg:overflow-hidden">
+      <div className="mx-auto w-full max-w-7xl flex flex-col flex-1 lg:h-full">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b bg-card/50 backdrop-blur-sm shrink-0 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 group">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">{eventData.name}</h1>
+                {draftDirty && (
+                  <Badge variant="secondary" className="flex items-center gap-1 text-[11px]">
+                    <AlertTriangle className="h-3 w-3" />
+                    {t("eventPage.unsavedChanges")}
+                  </Badge>
+                )}
+                {isCreator && (
+                  <AlertDialog open={renameOpen} onOpenChange={setRenameOpen}>
                     <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="destructive" className="px-3 h-9">
-                        <Trash2 className="h-4 w-4" />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title={t("eventPage.renameEvent")}
+                        onClick={() => setRenameValue(eventData.name)}
+                      >
+                        <Pencil className="h-4 w-4" />
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent className="mx-4 max-w-sm">
+                    <AlertDialogContent className="sm:max-w-md">
                       <AlertDialogHeader>
-                        <AlertDialogTitle>{t("eventPage.deleteEventTitle")}</AlertDialogTitle>
-                        <AlertDialogDescription>{t("eventPage.deleteEventDescription")}</AlertDialogDescription>
+                        <AlertDialogTitle>{t("eventPage.renameEvent")}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {t("eventPage.renameDescription")}
+                        </AlertDialogDescription>
                       </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>{t("eventPage.cancel")}</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete}>{t("eventPage.delete")}</AlertDialogAction>
+                      <div className="space-y-3 pt-2">
+                        <Input
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleRename()}
+                          placeholder={t("eventPage.eventNamePlaceholder")}
+                        />
+                      </div>
+                      <AlertDialogFooter className="mt-4">
+                        <AlertDialogCancel disabled={renameLoading}>{t("eventPage.cancel")}</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleRename} disabled={renameLoading}>
+                          {renameLoading ? t("eventPage.saving") : t("eventPage.save")}
+                        </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-              )}
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mt-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 shrink-0" />
+                  <span className="font-medium">
+                    {format(new Date(eventData.dateRange.from), "MMM d")} -{" "}
+                    {format(new Date(eventData.dateRange.to), "MMM d")}
+                  </span>
+                </div>
+
+                {eventData.duration > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-medium">{formatDurationText(eventData.duration)}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1.5">
+                  <Globe className="h-3.5 w-3.5 shrink-0" />
+                  <span className="capitalize truncate max-w-[140px] font-medium">
+                    {userTimezone.replace(/_/g, " ")}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="py-3 px-4">{renderVerificationBanner()}</div>
-
-          <div className="flex-1 overflow-auto lg:overflow-hidden p-4 bg-background">
-            <div className="flex flex-col lg:grid lg:grid-cols-[280px_1fr] gap-4 h-full">
-              <div className="lg:overflow-y-auto lg:h-full">
-                <Collapsible open={sidebarOpen} onOpenChange={setSidebarOpen} className="lg:hidden">
-                  <CollapsibleTrigger asChild>
-                    <Button variant="outline" className="w-full justify-between mb-3 h-10 font-medium bg-transparent">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        <span>{t("eventPage.participantsCount", { count: eventData.participants.length })}</span>
-                        {bestTimes.length > 0 && (
-                            <Badge variant="secondary" className="text-[10px] font-semibold">
-                              {t("eventPage.best")} {bestTimes[0].count}/{eventData.participants.length}
-                            </Badge>
-                        )}
-                      </div>
-                      {sidebarOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-3 mb-3">
-                    <SidebarContent
-                        eventData={eventData}
-                        currentParticipant={currentParticipant}
-                        isLoggedIn={isLoggedIn}
-                        isParticipant={isParticipant}
-                        isCreator={isCreator}
-                        bestTimes={bestTimes}
-                        allBestTimes={allBestTimes}
-                        formatTimeInTz={formatTimeInTz}
-                        inviteUsername={inviteUsername}
-                        setInviteUsername={setInviteUsername}
-                        handleInvite={handleInvite}
-                        handleJoin={handleJoin}
-                        handleRemoveParticipant={handleRemoveParticipant}
-                        router={router}
-                        onOpenBestTimes={() => setBestTimesOpen(true)}
-                        friends={friends}
-                    />
-                  </CollapsibleContent>
-                </Collapsible>
-
-                <div className="hidden lg:block space-y-3">
-                  <SidebarContent
-                      eventData={eventData}
-                      currentParticipant={currentParticipant}
-                      isLoggedIn={isLoggedIn}
-                      isParticipant={isParticipant}
-                      isCreator={isCreator}
-                      bestTimes={bestTimes}
-                      allBestTimes={allBestTimes}
-                      formatTimeInTz={formatTimeInTz}
-                      inviteUsername={inviteUsername}
-                      setInviteUsername={setInviteUsername}
-                      handleInvite={handleInvite}
-                      handleJoin={handleJoin}
-                      handleRemoveParticipant={handleRemoveParticipant}
-                      router={router}
-                      onOpenBestTimes={() => setBestTimesOpen(true)}
-                      friends={friends}
-                  />
-                </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ThemeToggle />
+            {draftDirty && (
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" className="h-9 text-xs" onClick={handleCancelDraft}>
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  {t("eventPage.revertUnsaved")}
+                </Button>
               </div>
-
-              <Card className="overflow-hidden flex flex-col shadow-sm min-h-[400px] lg:min-h-0 border-border/50">
-                <CardContent className="p-4 flex-1 overflow-auto min-h-0">
-                  {isLoggedIn && currentParticipant ? (
-                      <AvailabilityGrid
-                          key={gridKey}
-                          dateRange={{
-                            from: new Date(eventData.dateRange.from),
-                            to: new Date(eventData.dateRange.to),
-                          }}
-                          duration={eventData.duration ?? 30}
-                          currentParticipant={currentParticipant}
-                          allParticipants={eventData.participants}
-                          onSave={handleSaveAvailability}
-                          timezone={userTimezone}
-                          disabledSlots={disabledSlotsForGrid}
-                          isCreator={isCreator}
-                          disableMode={disableMode}
-                          onToggleDisabled={handleToggleDisabled}
-                          onToggleDisableMode={() => setDisableMode((v) => !v)}
-                          onResetDisabled={handleResetDisabled}
-                          resetDisabledLoading={resetDisabledLoading}
-                          hideDisabledSlots={!isCreator}
-                          onSlotInteraction={() => {
-                            if (isLoggedIn) setDraftDirty(true)
-                          }}
-                          onAvailabilityChange={(avail) => {
-                            setDraftAvailability(avail)
-                          }}
-                      />
-                  ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                        <LogIn className="h-12 w-12 text-muted-foreground mb-4" />
-                        <h3 className="text-lg font-semibold">{t("eventPage.signInTitle")}</h3>
-                        <p className="text-sm text-muted-foreground mt-2 mb-4">
-                          {t("eventPage.signInSubtitle")}
-                        </p>
-                        <Button size="sm" onClick={() => router.push("/login")}>
-                          {t("eventPage.signInNow")}
-                        </Button>
-                      </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => router.push("/dashboard")}
+              className="text-xs px-3 h-9 font-medium"
+            >
+              <span className="hidden sm:inline">{t("eventPage.dashboard")}</span>
+              <span className="sm:hidden">{t("eventPage.home")}</span>
+            </Button>
+            {isParticipant && !isCreator && (
+              <Button size="sm" variant="destructive" onClick={handleLeave} className="text-xs px-3 h-9 font-medium">
+                {t("eventPage.leave")}
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={handleShare} className="px-3 h-9 bg-transparent">
+              <Share2 className="h-4 w-4" />
+            </Button>
+            {isCreator && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="destructive" className="px-3 h-9">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="mx-4 max-w-sm">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{t("eventPage.deleteEventTitle")}</AlertDialogTitle>
+                    <AlertDialogDescription>{t("eventPage.deleteEventDescription")}</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{t("eventPage.cancel")}</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete}>{t("eventPage.delete")}</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         </div>
 
-        <AlertDialog open={!!pendingDraft} onOpenChange={(open) => !open && setPendingDraft(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("eventPage.resumeDraftTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("eventPage.resumeDraftDescription")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={discardDraft}>{t("eventPage.discard")}</AlertDialogCancel>
-              <AlertDialogAction onClick={resumeDraft}>{t("eventPage.resume")}</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <div className="py-3 px-4">{renderVerificationBanner()}</div>
 
-        <Dialog open={bestTimesOpen} onOpenChange={setBestTimesOpen}>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5" />
-                {t("eventPage.bestTimesChartTitle")}
-              </DialogTitle>
-              <DialogDescription>{t("eventPage.bestTimesChartDescription")}</DialogDescription>
-            </DialogHeader>
+        <div className="flex-1 overflow-auto lg:overflow-hidden p-4 bg-background">
+          <div className="flex flex-col lg:grid lg:grid-cols-[280px_1fr] gap-4 h-full">
+            <div className="lg:overflow-y-auto lg:h-full">
+              <Collapsible open={sidebarOpen} onOpenChange={setSidebarOpen} className="lg:hidden">
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between mb-3 h-10 font-medium bg-transparent">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      <span>{t("eventPage.participantsCount", { count: eventData.participants.length })}</span>
+                      {bestTimes.length > 0 && (
+                        <Badge variant="secondary" className="text-[10px] font-semibold">
+                          {t("eventPage.best")} {bestTimes[0].count}/{eventData.participants.length}
+                        </Badge>
+                      )}
+                    </div>
+                    {sidebarOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 mb-3">
+                  <SidebarContent
+                    eventData={eventData}
+                    currentParticipant={currentParticipant}
+                    isLoggedIn={isLoggedIn}
+                    isParticipant={isParticipant}
+                    isCreator={isCreator}
+                    bestTimes={bestTimes}
+                    allBestTimes={allBestTimes}
+                    formatTimeInTz={formatTimeInTz}
+                    inviteUsername={inviteUsername}
+                    setInviteUsername={setInviteUsername}
+                    handleInvite={handleInvite}
+                    handleJoin={handleJoin}
+                    handleRemoveParticipant={handleRemoveParticipant}
+                    router={router}
+                    onOpenBestTimes={() => setBestTimesOpen(true)}
+                    friends={friends}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
 
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                {bestChartData.slice(0, 3).map((slot) => (
-                    <Badge key={slot.slot} variant="secondary" className="text-xs py-1 px-2">
-                      {formatTimeInTz(slot.slot)} — {slot.count}/{totalParticipants}
-                    </Badge>
-                ))}
+              <div className="hidden lg:block space-y-3">
+                <SidebarContent
+                  eventData={eventData}
+                  currentParticipant={currentParticipant}
+                  isLoggedIn={isLoggedIn}
+                  isParticipant={isParticipant}
+                  isCreator={isCreator}
+                  bestTimes={bestTimes}
+                  allBestTimes={allBestTimes}
+                  formatTimeInTz={formatTimeInTz}
+                  inviteUsername={inviteUsername}
+                  setInviteUsername={setInviteUsername}
+                  handleInvite={handleInvite}
+                  handleJoin={handleJoin}
+                  handleRemoveParticipant={handleRemoveParticipant}
+                  router={router}
+                  onOpenBestTimes={() => setBestTimesOpen(true)}
+                  friends={friends}
+                />
               </div>
+            </div>
 
-              <div className="space-y-2">
-                {bestChartData.map((slot) => {
-                  const pct = Math.max(4, (slot.count / totalParticipants) * 100)
-                  return (
-                      <div key={slot.slot} className="flex items-center gap-3">
-                        <div className="w-40 text-sm font-medium truncate">{formatTimeInTz(slot.slot)}</div>
-                        <div className="flex-1 h-8 rounded-md border border-border/60 bg-muted/60 overflow-hidden">
-                          <div
-                              className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-xs font-semibold flex items-center px-2"
-                              style={{ width: `${pct}%` }}
-                          >
-                            {slot.count}/{totalParticipants}
-                          </div>
-                        </div>
+            <Card className="overflow-hidden flex flex-col shadow-sm min-h-[400px] lg:min-h-0 border-border/50">
+              <CardContent className="p-4 flex-1 overflow-auto min-h-0">
+                {isLoggedIn && currentParticipant ? (
+                  <AvailabilityGrid
+                    key={gridKey}
+                    dateRange={{
+                      from: new Date(eventData.dateRange.from),
+                      to: new Date(eventData.dateRange.to),
+                    }}
+                    duration={eventData.duration ?? 30}
+                    currentParticipant={currentParticipant}
+                    allParticipants={eventData.participants}
+                    onSave={handleSaveAvailability}
+                    timezone={userTimezone}
+                    disabledSlots={disabledSlotsForGrid}
+                    isCreator={isCreator}
+                    disableMode={disableMode}
+                    onToggleDisabled={handleToggleDisabled}
+                    onToggleDisableMode={() => setDisableMode((v) => !v)}
+                    onResetDisabled={handleResetDisabled}
+                    resetDisabledLoading={resetDisabledLoading}
+                    hideDisabledSlots={!isCreator}
+                    onSlotInteraction={() => {
+                      if (isLoggedIn) setDraftDirty(true)
+                    }}
+                    onAvailabilityChange={(avail) => {
+                      setDraftAvailability(avail)
+                    }}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                    <LogIn className="h-12 w-12 text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold">{t("eventPage.signInTitle")}</h3>
+                    <p className="text-sm text-muted-foreground mt-2 mb-4">
+                      {t("eventPage.signInSubtitle")}
+                    </p>
+                    <Button size="sm" onClick={() => router.push("/login")}>
+                      {t("eventPage.signInNow")}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      <AlertDialog open={!!pendingDraft} onOpenChange={(open) => !open && setPendingDraft(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("eventPage.resumeDraftTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("eventPage.resumeDraftDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={discardDraft}>{t("eventPage.discard")}</AlertDialogCancel>
+            <AlertDialogAction onClick={resumeDraft}>{t("eventPage.resume")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={bestTimesOpen} onOpenChange={setBestTimesOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              {t("eventPage.bestTimesChartTitle")}
+            </DialogTitle>
+            <DialogDescription>{t("eventPage.bestTimesChartDescription")}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {bestChartData.slice(0, 3).map((slot) => (
+                <Badge key={slot.slot} variant="secondary" className="text-xs py-1 px-2">
+                  {formatTimeInTz(slot.slot)} — {slot.count}/{totalParticipants}
+                </Badge>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              {bestChartData.map((slot) => {
+                const pct = Math.max(4, (slot.count / totalParticipants) * 100)
+                return (
+                  <div key={slot.slot} className="flex items-center gap-3">
+                    <div className="w-40 text-sm font-medium truncate">{formatTimeInTz(slot.slot)}</div>
+                    <div className="flex-1 h-8 rounded-md border border-border/60 bg-muted/60 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-xs font-semibold flex items-center px-2"
+                        style={{ width: `${pct}%` }}
+                      >
+                        {slot.count}/{totalParticipants}
                       </div>
-                  )
-                })}
-              </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
 
-              <div className="text-xs text-muted-foreground flex items-center gap-3">
+            <div className="text-xs text-muted-foreground flex items-center gap-3">
               <span className="inline-flex items-center gap-1">
                 <span className="inline-block h-3 w-3 rounded-sm bg-gradient-to-r from-blue-500 to-indigo-500" />
                 {t("eventPage.legendMost")}
               </span>
-                <span className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1">
                 <span className="inline-block h-3 w-3 rounded-sm bg-muted" />
-                  {t("eventPage.legendLeast")}
+                {t("eventPage.legendLeast")}
               </span>
-              </div>
             </div>
+          </div>
 
-            <DialogFooter className="mt-4">
-              <Button variant="outline" onClick={() => setBestTimesOpen(false)}>
-                {t("eventPage.close")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setBestTimesOpen(false)}>
+              {t("eventPage.close")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   )
 }
 
 function SidebarContent({
-                          eventData,
-                          currentParticipant,
-                          isLoggedIn,
-                          isParticipant,
-                          isCreator,
-                          bestTimes,
-                          allBestTimes,
-                          formatTimeInTz,
-                          inviteUsername,
-                          setInviteUsername,
-                          handleInvite,
-                          handleJoin,
-                          handleRemoveParticipant,
-                          router,
-                          onOpenBestTimes,
-                          friends,
-                        }: {
+  eventData,
+  currentParticipant,
+  isLoggedIn,
+  isParticipant,
+  isCreator,
+  bestTimes,
+  allBestTimes,
+  formatTimeInTz,
+  inviteUsername,
+  setInviteUsername,
+  handleInvite,
+  handleJoin,
+  handleRemoveParticipant,
+  router,
+  onOpenBestTimes,
+  friends,
+}: {
   eventData: EventData
   currentParticipant: Participant | null
   isLoggedIn: boolean
@@ -1071,176 +1079,176 @@ function SidebarContent({
   const { t } = useTranslations()
 
   return (
-      <>
-        {isLoggedIn && currentParticipant && (
-            <Card className="shadow-sm border-border/50">
-              <CardContent className="p-3.5">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10 shrink-0 border-2 border-primary/20">
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
-                      {currentParticipant.name[0].toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{t("eventPage.you")}</div>
-                    <div className="text-sm font-semibold truncate">{currentParticipant.name}</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-        )}
+    <>
+      {isLoggedIn && currentParticipant && (
+        <Card className="shadow-sm border-border/50">
+          <CardContent className="p-3.5">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-10 w-10 shrink-0 border-2 border-primary/20">
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
+                  {currentParticipant.name[0].toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{t("eventPage.you")}</div>
+                <div className="text-sm font-semibold truncate">{currentParticipant.name}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
+      <Card className="shadow-sm border-border/50">
+        <CardHeader className="p-3.5 pb-2">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <Trophy className="h-4 w-4 text-yellow-500 shrink-0" /> {t("eventPage.bestTimes")}
+          </CardTitle>
+          <div className="flex gap-2 mt-2">
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onOpenBestTimes}>
+              <BarChart3 className="h-3.5 w-3.5 mr-1" />
+              {t("eventPage.viewBestTimes")}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-3.5 pt-0 space-y-2.5">
+          {bestTimes.length > 0 ? (
+            bestTimes.map((time, i) => (
+              <div
+                key={i}
+                className="rounded-lg border bg-card p-2.5 space-y-1.5 shadow-sm hover:shadow transition-shadow"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-success truncate">{formatTimeInTz(time.slot)}</div>
+                  <Badge variant="secondary" className="shrink-0 text-[10px] h-5 px-2 font-semibold">
+                    {time.count}/{eventData.participants.length}
+                  </Badge>
+                </div>
+                <div className="text-[10px] text-muted-foreground line-clamp-1">{time.names.join(", ")}</div>
+              </div>
+            ))
+          ) : (
+            <div className="text-xs text-muted-foreground text-center py-4">{t("eventPage.noOverlaps")}</div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-sm border-border/50">
+        <CardHeader className="p-3.5 pb-2">
+          <CardTitle className="flex items-center justify-between text-base font-semibold">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 shrink-0" /> {t("eventPage.participantsTitle")}
+            </div>
+            <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold">
+              {eventData.participants.length}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-3.5 pt-0 space-y-1.5">
+          <div className="space-y-1 max-h-40 overflow-y-auto">
+            {eventData.participants.map((p) => {
+              const canRemove = isCreator && p.id !== eventData.creatorId
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2 p-1.5 rounded-md hover:bg-muted/50 transition-colors group"
+                >
+                  <Avatar className="h-6 w-6 shrink-0">
+                    <AvatarFallback className="text-[10px] font-semibold">{p.name[0].toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-xs font-medium truncate flex-1">{p.name}</span>
+                  {p.id === eventData.creatorId && (
+                    <Badge variant="secondary" className="text-[10px] h-5 px-2">
+                      {t("eventPage.host")}
+                    </Badge>
+                  )}
+                  {canRemove && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => handleRemoveParticipant(p.id)}
+                      title={t("eventPage.removeParticipant")}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {!isLoggedIn && (
+            <Button className="w/full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
+              <LogIn className="h-3 w-3 mr-1.5" />
+              {t("eventPage.signInRegister")}
+            </Button>
+          )}
+          {isLoggedIn && !isParticipant && (
+            <Button className="w-full mt-1.5" size="sm" onClick={handleJoin}>
+              {t("eventPage.joinEvent")}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {isCreator && (
         <Card className="shadow-sm border-border/50">
           <CardHeader className="p-3.5 pb-2">
             <CardTitle className="flex items-center gap-2 text-base font-semibold">
-              <Trophy className="h-4 w-4 text-yellow-500 shrink-0" /> {t("eventPage.bestTimes")}
+              <UserPlus className="h-4 w-4 shrink-0" /> {t("eventPage.invite")}
             </CardTitle>
-            <div className="flex gap-2 mt-2">
-              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onOpenBestTimes}>
-                <BarChart3 className="h-3.5 w-3.5 mr-1" />
-                {t("eventPage.viewBestTimes")}
+          </CardHeader>
+          <CardContent className="p-3.5 pt-0 space-y-2">
+            <div className="flex gap-1.5">
+              <Input
+                className="text-xs h-8"
+                placeholder={t("eventPage.usernamePlaceholder")}
+                value={inviteUsername}
+                onChange={(e) => setInviteUsername(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleInvite()}
+              />
+              <Button size="sm" onClick={handleInvite} className="shrink-0 h-8 px-3 text-xs">
+                {t("eventPage.invite")}
               </Button>
             </div>
-          </CardHeader>
-          <CardContent className="p-3.5 pt-0 space-y-2.5">
-            {bestTimes.length > 0 ? (
-                bestTimes.map((time, i) => (
+            {friends.length > 0 && (
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold px-1">Invite from friends</p>
+                {friends
+                  .filter((f) => !eventData.participants.some((p) => p.id === f.id))
+                  .map((friend) => (
                     <div
-                        key={i}
-                        className="rounded-lg border bg-card p-2.5 space-y-1.5 shadow-sm hover:shadow transition-shadow"
+                      key={friend.id}
+                      className="flex items-center justify-between p-1.5 rounded-md hover:bg-muted/50 transition-colors group cursor-pointer"
+                      onClick={() => {
+                        setInviteUsername(friend.username)
+                        handleInvite()
+                      }}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-xs font-semibold text-success truncate">{formatTimeInTz(time.slot)}</div>
-                        <Badge variant="secondary" className="shrink-0 text-[10px] h-5 px-2 font-semibold">
-                          {time.count}/{eventData.participants.length}
-                        </Badge>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Avatar className="h-5 w-5 shrink-0">
+                          <AvatarFallback className="text-[10px]">{friend.username[0].toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs font-medium truncate">{friend.username}</span>
                       </div>
-                      <div className="text-[10px] text-muted-foreground line-clamp-1">{time.names.join(", ")}</div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setInviteUsername(friend.username)
+                          handleInvite()
+                        }}
+                      >
+                        <UserPlus className="h-3 w-3" />
+                      </Button>
                     </div>
-                ))
-            ) : (
-                <div className="text-xs text-muted-foreground text-center py-4">{t("eventPage.noOverlaps")}</div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-border/50">
-          <CardHeader className="p-3.5 pb-2">
-            <CardTitle className="flex items-center justify-between text-base font-semibold">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 shrink-0" /> {t("eventPage.participantsTitle")}
+                  ))}
               </div>
-              <Badge variant="outline" className="text-[10px] h-5 px-2 font-semibold">
-                {eventData.participants.length}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3.5 pt-0 space-y-1.5">
-            <div className="space-y-1 max-h-40 overflow-y-auto">
-              {eventData.participants.map((p) => {
-                const canRemove = isCreator && p.id !== eventData.creatorId
-                return (
-                    <div
-                        key={p.id}
-                        className="flex items-center gap-2 p-1.5 rounded-md hover:bg-muted/50 transition-colors group"
-                    >
-                      <Avatar className="h-6 w-6 shrink-0">
-                        <AvatarFallback className="text-[10px] font-semibold">{p.name[0].toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                      <span className="text-xs font-medium truncate flex-1">{p.name}</span>
-                      {p.id === eventData.creatorId && (
-                          <Badge variant="secondary" className="text-[10px] h-5 px-2">
-                            {t("eventPage.host")}
-                          </Badge>
-                      )}
-                      {canRemove && (
-                          <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={() => handleRemoveParticipant(p.id)}
-                              title={t("eventPage.removeParticipant")}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                      )}
-                    </div>
-                )
-              })}
-            </div>
-            {!isLoggedIn && (
-                <Button className="w/full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
-                  <LogIn className="h-3 w-3 mr-1.5" />
-                  {t("eventPage.signInRegister")}
-                </Button>
-            )}
-            {isLoggedIn && !isParticipant && (
-                <Button className="w-full mt-1.5" size="sm" onClick={handleJoin}>
-                  {t("eventPage.joinEvent")}
-                </Button>
             )}
           </CardContent>
         </Card>
-
-        {isCreator && (
-            <Card className="shadow-sm border-border/50">
-              <CardHeader className="p-3.5 pb-2">
-                <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                  <UserPlus className="h-4 w-4 shrink-0" /> {t("eventPage.invite")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3.5 pt-0 space-y-2">
-                <div className="flex gap-1.5">
-                  <Input
-                      className="text-xs h-8"
-                      placeholder={t("eventPage.usernamePlaceholder")}
-                      value={inviteUsername}
-                      onChange={(e) => setInviteUsername(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleInvite()}
-                  />
-                  <Button size="sm" onClick={handleInvite} className="shrink-0 h-8 px-3 text-xs">
-                    {t("eventPage.invite")}
-                  </Button>
-                </div>
-                {friends.length > 0 && (
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold px-1">Invite from friends</p>
-                    {friends
-                      .filter((f) => !eventData.participants.some((p) => p.id === f.id))
-                      .map((friend) => (
-                        <div
-                          key={friend.id}
-                          className="flex items-center justify-between p-1.5 rounded-md hover:bg-muted/50 transition-colors group cursor-pointer"
-                          onClick={() => {
-                            setInviteUsername(friend.username)
-                            handleInvite()
-                          }}
-                        >
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <Avatar className="h-5 w-5 shrink-0">
-                              <AvatarFallback className="text-[10px]">{friend.username[0].toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                            <span className="text-xs font-medium truncate">{friend.username}</span>
-                          </div>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setInviteUsername(friend.username)
-                              handleInvite()
-                            }}
-                          >
-                            <UserPlus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-        )}
-      </>
+      )}
+    </>
   )
 }

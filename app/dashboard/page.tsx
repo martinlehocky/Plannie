@@ -23,7 +23,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { fetchWithAuth, clearTokens, logout, getAccessToken, getStoredUsername } from "@/lib/api"
+import { fetchWithAuth, clearTokens, logout, getAccessToken, getStoredUsername, ensureAuth } from "@/lib/api"
 import { useTranslations } from "@/components/language-provider"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
@@ -89,15 +89,6 @@ export default function Dashboard() {
     const { toast } = useToast()
 
     useEffect(() => {
-        const token = getAccessToken()
-        const storedUsername = getStoredUsername() || ""
-        setUsername(storedUsername)
-
-        if (!token) {
-            router.push("/login")
-            return
-        }
-
         const fetchProfile = async () => {
             try {
                 const res = await fetchWithAuth(`${API_BASE}/users/me`, { method: "GET" })
@@ -138,11 +129,75 @@ export default function Dashboard() {
             }
         }
 
-        fetchProfile()
-        fetchEvents()
-        fetchFriends()
-        fetchFriendRequests()
-        fetchEventInvites()
+        const fetchFriends = async () => {
+            try {
+                const res = await fetchWithAuth(`${API_BASE}/friends`, { method: "GET" })
+                if (res.status === 401) {
+                    clearTokens()
+                    router.push("/login")
+                    return
+                }
+                if (res.ok) {
+                    const data = await res.json()
+                    setFriends(Array.isArray(data) ? data : [])
+                }
+            } catch (error) {
+                console.error("Failed to load friends", error)
+            }
+        }
+
+        const fetchFriendRequests = async () => {
+            try {
+                const res = await fetchWithAuth(`${API_BASE}/friends/requests`, { method: "GET" })
+                if (res.status === 401) {
+                    clearTokens()
+                    router.push("/login")
+                    return
+                }
+                if (res.ok) {
+                    const data = await res.json()
+                    setFriendRequests(Array.isArray(data) ? data : [])
+                }
+            } catch (error) {
+                console.error("Failed to load friend requests", error)
+            }
+        }
+
+        const fetchEventInvites = async () => {
+            try {
+                const res = await fetchWithAuth(`${API_BASE}/events/invites`, { method: "GET" })
+                if (res.status === 401) {
+                    clearTokens()
+                    router.push("/login")
+                    return
+                }
+                if (res.ok) {
+                    const data = await res.json()
+                    setEventInvites(Array.isArray(data) ? data : [])
+                }
+            } catch (error) {
+                console.error("Failed to load event invites", error)
+            }
+        }
+
+        const init = async () => {
+            const hasAuth = await ensureAuth()
+            if (!hasAuth) {
+                router.push("/login")
+                return
+            }
+
+            const storedUsername = getStoredUsername() || ""
+            setUsername(storedUsername)
+
+            fetchProfile()
+            fetchEvents()
+            fetchFriends()
+            fetchFriendRequests()
+            fetchEventInvites()
+        }
+
+        init()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
@@ -456,9 +511,9 @@ export default function Dashboard() {
                 </Button>
 
                 <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground hidden sm:inline">
-            {t("common.signedInAs", { name: username || t("common.guest") })}
-          </span>
+                    <span className="text-sm text-muted-foreground hidden sm:inline">
+                        {t("common.signedInAs", { name: username || t("common.guest") })}
+                    </span>
 
                     <Link href="/settings">
                         <Button variant="ghost" size="sm">
@@ -519,98 +574,98 @@ export default function Dashboard() {
                     {activeTab === "events" && (
                         <>
                             {events.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                            <p>{t("dashboard.empty")}</p>
-                            <Button variant="link" className="underline hover:text-primary" asChild>
-                                <Link href="/create">{t("dashboard.emptyCta")}</Link>
-                            </Button>
-                        </div>
-                    ) : (
-                        <div className="grid gap-4">
-                            {events.map((event) => (
-                                <Card
-                                    key={event.id}
-                                    className="cursor-pointer hover:border-primary transition-colors"
-                                    onClick={() => router.push(`/event/${event.id}`)} // singular route
-                                >
-                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                        <CardTitle className="text-xl">{event.name}</CardTitle>
+                                <div className="text-center py-12 text-muted-foreground">
+                                    <p>{t("dashboard.empty")}</p>
+                                    <Button variant="link" className="underline hover:text-primary" asChild>
+                                        <Link href="/create">{t("dashboard.emptyCta")}</Link>
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="grid gap-4">
+                                    {events.map((event) => (
+                                        <Card
+                                            key={event.id}
+                                            className="cursor-pointer hover:border-primary transition-colors"
+                                            onClick={() => router.push(`/event/${event.id}`)} // singular route
+                                        >
+                                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                                <CardTitle className="text-xl">{event.name}</CardTitle>
 
-                                        <div className="flex items-center gap-2">
-                                            {/* If user is NOT the owner, show a Leave button */}
-                                            {!event.isOwner && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="text-destructive hover:bg-destructive/10"
-                                                    onClick={(e) => handleLeaveEvent(e, event.id)}
-                                                    title={t("dashboard.leaveTitle")}
-                                                >
-                                                    <LogOut className="h-4 w-4" />
-                                                </Button>
-                                            )}
-
-                                            {/* If user is the owner, show delete dialog as before */}
-                                            {event.isOwner && (
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
+                                                <div className="flex items-center gap-2">
+                                                    {/* If user is NOT the owner, show a Leave button */}
+                                                    {!event.isOwner && (
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="text-destructive hover:bg-destructive/10"
+                                                            onClick={(e) => handleLeaveEvent(e, event.id)}
+                                                            title={t("dashboard.leaveTitle")}
                                                         >
-                                                            <Trash2 className="h-4 w-4" />
+                                                            <LogOut className="h-4 w-4" />
                                                         </Button>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>{t("dashboard.deleteConfirmTitle")}</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                {t("dashboard.deleteConfirmDescription", { name: event.name })}
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>{t("dashboard.cancel")}</AlertDialogCancel>
-                                                            <AlertDialogAction
-                                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                                onClick={(e) => handleDelete(e, event.id)}
-                                                            >
-                                                                {t("dashboard.delete")}
-                                                            </AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
-                                            )}
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {event.dateRange && (
-                                            <p className="text-sm text-muted-foreground flex items-center gap-3">
-                                                <span>
-                                                    {format(new Date(event.dateRange.from), "MMM d")} - {format(new Date(event.dateRange.to), "MMM d, yyyy")}
-                                                </span>
+                                                    )}
 
-                                                {event.duration && (
-                                                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                                    {/* If user is the owner, show delete dialog as before */}
+                                                    {event.isOwner && (
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>{t("dashboard.deleteConfirmTitle")}</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        {t("dashboard.deleteConfirmDescription", { name: event.name })}
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel>{t("dashboard.cancel")}</AlertDialogCancel>
+                                                                    <AlertDialogAction
+                                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                        onClick={(e) => handleDelete(e, event.id)}
+                                                                    >
+                                                                        {t("dashboard.delete")}
+                                                                    </AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    )}
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent>
+                                                {event.dateRange && (
+                                                    <p className="text-sm text-muted-foreground flex items-center gap-3">
+                                                        <span>
+                                                            {format(new Date(event.dateRange.from), "MMM d")} - {format(new Date(event.dateRange.to), "MMM d, yyyy")}
+                                                        </span>
+
+                                                        {event.duration && (
+                                                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                                                <Clock className="h-4 w-4" />
+                                                                <span className="font-medium">{formatDurationText(event.duration)}</span>
+                                                            </span>
+                                                        )}
+                                                    </p>
+                                                )}
+
+                                                {!event.dateRange && event.duration && (
+                                                    <p className="text-sm text-muted-foreground inline-flex items-center gap-2">
                                                         <Clock className="h-4 w-4" />
                                                         <span className="font-medium">{formatDurationText(event.duration)}</span>
-                                                    </span>
+                                                    </p>
                                                 )}
-                                            </p>
-                                        )}
-
-                                        {!event.dateRange && event.duration && (
-                                            <p className="text-sm text-muted-foreground inline-flex items-center gap-2">
-                                                <Clock className="h-4 w-4" />
-                                                <span className="font-medium">{formatDurationText(event.duration)}</span>
-                                            </p>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                    )}
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
                         </>
                     )}
 

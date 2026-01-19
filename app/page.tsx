@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar, Clock, Users, Share2, Sparkles, Zap, Menu, X } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { logout, getAccessToken, getStoredUsername } from "@/lib/api"
+import { logout, getAccessToken, getStoredUsername, ensureAuth } from "@/lib/api"
 import { useTranslations } from "@/components/language-provider"
 
 export default function LandingPage() {
@@ -19,10 +19,13 @@ export default function LandingPage() {
     const { t } = useTranslations()
 
     useEffect(() => {
-        const token = getAccessToken()
-        const storedUsername = getStoredUsername() || ""
-        setIsLoggedIn(!!token)
-        setUsername(storedUsername)
+        const init = async () => {
+            const hasAuth = await ensureAuth()
+            setIsLoggedIn(hasAuth)
+            const storedUsername = getStoredUsername() || ""
+            setUsername(storedUsername)
+        }
+        init()
     }, [])
 
     const handleSignOut = async () => {

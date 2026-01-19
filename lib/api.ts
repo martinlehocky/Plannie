@@ -38,7 +38,7 @@ export const getStoredUsername = () =>
         : undefined
 
 // Refresh flow using HttpOnly refresh cookie
-const refreshAccessToken = async () => {
+export const refreshAccessToken = async () => {
     const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/refresh`,
         {
@@ -70,6 +70,17 @@ const refreshAccessToken = async () => {
         return data.token as string
     }
     throw new Error("invalid refresh response")
+}
+
+export const ensureAuth = async () => {
+    const token = getAccessToken()
+    if (token) return true
+    try {
+        await refreshAccessToken()
+        return true
+    } catch {
+        return false
+    }
 }
 
 // fetchWithAuth: retries once after refresh on 401; on refresh failure returns a 401 response

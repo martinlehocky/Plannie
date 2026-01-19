@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { zxcvbn, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
 import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en"
-import { fetchWithAuth, clearTokens, getAccessToken, getStoredUsername } from "@/lib/api"
+import { fetchWithAuth, clearTokens, getAccessToken, getStoredUsername, ensureAuth } from "@/lib/api"
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
@@ -55,12 +55,15 @@ export default function SettingsPage() {
     const [passwordsMatch, setPasswordsMatch] = useState(true)
 
     useEffect(() => {
-        const token = getAccessToken()
-        if (!token) {
-            router.replace("/login")
-            return
+        const init = async () => {
+            const hasAuth = await ensureAuth()
+            if (!hasAuth) {
+                router.replace("/login")
+                return
+            }
+            setUsername(getStoredUsername() || "")
         }
-        setUsername(getStoredUsername() || "")
+        init()
         const systemTz = Intl.DateTimeFormat().resolvedOptions().timeZone
         const savedTz = localStorage.getItem("preferredTimezone")
         setPreferredTimezone(savedTz || systemTz)
