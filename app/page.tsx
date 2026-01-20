@@ -218,9 +218,9 @@ export default function LandingPage() {
             {/* Features Section */}
             <section id="features" className="py-16 px-4">
                 <div className="container mx-auto max-w-6xl">
-                    <div className="text-center mb-12">
+                    <div className="text-left mb-12">
                         <h2 className="text-3xl md:text-5xl font-bold mb-4">{t("landing.whyTitle")}</h2>
-                        <p className="text-muted-foreground text-lg max-w-2xl mx-auto">{t("landing.whySubtitle")}</p>
+                        <p className="text-muted-foreground text-lg max-w-2xl">{t("landing.whySubtitle")}</p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -300,7 +300,7 @@ export default function LandingPage() {
                     {/* Gradient overlays for smooth fade effect */}
                     <div className="absolute left-0 top-0 bottom-0 w-24 md:w-40 bg-gradient-to-r from-muted/50 dark:from-muted/10 to-transparent z-10 pointer-events-none" />
                     <div className="absolute right-0 top-0 bottom-0 w-24 md:w-40 bg-gradient-to-l from-muted/50 dark:from-muted/10 to-transparent z-10 pointer-events-none" />
-                    
+
                     <FadeIn delay={100}>
                         <div className="flex animate-marquee hover:[animation-play-state:paused]">
                             {/* First set of cards */}
@@ -314,7 +314,7 @@ export default function LandingPage() {
                                 { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), color: "f43f5e", image: "Community" },
                                 { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), color: "8b5cf6", image: "Workshops" },
                             ].map((useCase, index) => (
-                                <div key={index} className="flex-shrink-0 w-[280px] md:w-[320px] mx-3">
+                                <div key={index} className="flex-shrink-0 w-[320px] md:w-[400px] mx-3">
                                     <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
                                         <Image
                                             src={`https://placehold.co/600x400/${useCase.color}/FFF?text=${useCase.image}`}
@@ -346,7 +346,7 @@ export default function LandingPage() {
                                 { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), color: "f43f5e", image: "Community" },
                                 { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), color: "8b5cf6", image: "Workshops" },
                             ].map((useCase, index) => (
-                                <div key={`dup-${index}`} className="flex-shrink-0 w-[280px] md:w-[320px] mx-3">
+                                <div key={`dup-${index}`} className="flex-shrink-0 w-[320px] md:w-[400px] mx-3">
                                     <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
                                         <Image
                                             src={`https://placehold.co/600x400/${useCase.color}/FFF?text=${useCase.image}`}
@@ -375,7 +375,7 @@ export default function LandingPage() {
             {/* How It Works */}
             <section className="py-16 px-4 bg-muted/30">
                 <div className="container mx-auto max-w-4xl">
-                    <div className="text-center mb-12">
+                    <div className="text-left mb-12">
                         <h2 className="text-3xl md:text-5xl font-bold mb-4">{t("landing.howTitle")}</h2>
                         <p className="text-muted-foreground text-lg">{t("landing.howSubtitle")}</p>
                     </div>
