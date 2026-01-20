@@ -8,31 +8,64 @@ import { Footer } from "@/components/footer"
 import { GoogleAnalytics } from "@/components/google-analytics"
 import "./globals.css"
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+})
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+})
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://plannie.de'),
+
   title: "Plannie - Find the Perfect Time",
-  description: "Modern group scheduling made simple",
+  description: "Effortlessly organize your daily tasks, schedule group events, and boost productivity. Plannie is the modern, simple calendar planner for everyone.",
   generator: "v0.app",
+  applicationName: "Plannie",
+  keywords: [
+    "calendar planner",
+    "daily schedule",
+    "time management",
+    "group scheduling",
+    "meeting finder",
+    "productivity app",
+    "online agenda",
+    "event organizer",
+    "team calendar",
+    "personal planner",
+    "time blocking",
+    "schedule maker",
+    "availability tracker"
+  ],
   icons: {
     icon: [
-      { url: "/app-icon.png", sizes: "32x32", type: "image/png" },
-      { url: "/app-icon.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon.ico" },
     ],
-    apple: "/app-icon.png",
+    apple: [
+      { url: "/favicon.ico" },
+    ],
+  },
+  openGraph: {
+    title: "Plannie - Find the Perfect Time",
+    description: "Modern group scheduling and daily planning made simple.",
+    siteName: "Plannie",
+    type: "website",
+    images: [{ url: "/favicon.ico" }],
   },
 }
 
 export default function RootLayout({
-  children,
-}: Readonly<{
+                                     children,
+                                   }: Readonly<{
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`font-sans antialiased`}>
-        <script
+      <html lang="en" suppressHydrationWarning>
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
+      <script
           dangerouslySetInnerHTML={{
             __html: `
 (function() {
@@ -46,15 +79,15 @@ export default function RootLayout({
   }
 })();`,
           }}
-        />
-        <LanguageProvider>
-          {children}
-          <Footer />
-          <Toaster />
-          <Analytics />
-          <GoogleAnalytics />
-        </LanguageProvider>
+      />
+      <LanguageProvider>
+        {children}
+        <Footer />
+        <Toaster />
+        <Analytics />
+        <GoogleAnalytics />
+      </LanguageProvider>
       </body>
-    </html>
+      </html>
   )
 }
