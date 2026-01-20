@@ -12,6 +12,14 @@ import { logout, getAccessToken, getStoredUsername, ensureAuth } from "@/lib/api
 import { useTranslations } from "@/components/language-provider"
 import { useInView } from "@/hooks/use-in-view"
 import { cn } from "@/lib/utils"
+import {
+    Carousel,
+    CarouselContent,
+    CarouselItem,
+    CarouselNext,
+    CarouselPrevious,
+} from "@/components/ui/carousel"
+import Autoplay from "embla-carousel-autoplay"
 
 const FadeIn = ({ children, className, delay = 0 }: { children: React.ReactNode, className?: string, delay?: number }) => {
     const { ref, isInView } = useInView({ threshold: 0.1 })
@@ -289,53 +297,110 @@ export default function LandingPage() {
                         </div>
                     </FadeIn>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="w-full max-w-5xl mx-auto px-4 md:px-0">
                         <FadeIn delay={100}>
-                            <Card className="h-full border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
-                                <CardHeader>
-                                    <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center mb-4 text-blue-500">
-                                        <Users className="w-6 h-6" />
-                                    </div>
-                                    <CardTitle className="text-2xl">{t("landing.useCases.team.title")}</CardTitle>
-                                    <CardDescription className="text-base text-muted-foreground/80">{t("landing.useCases.team.description")}</CardDescription>
-                                </CardHeader>
-                            </Card>
-                        </FadeIn>
+                            <Carousel
+                                opts={{
+                                    align: "start",
+                                    loop: true,
+                                }}
+                                plugins={[
+                                    Autoplay({
+                                        delay: 2000,
+                                    }) as any,
+                                ]}
+                                className="w-full"
+                            >
+                                <CarouselContent className="-ml-4">
+                                    <CarouselItem className="pl-4 md:basis-1/2 lg:basis-1/3 h-full">
+                                        <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
+                                            <Image
+                                                src="https://placehold.co/600x400/2563eb/FFF?text=Team"
+                                                alt={t("landing.useCases.team.title")}
+                                                fill
+                                                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
+                                            <div className="absolute bottom-4 left-4 right-4">
+                                                <div className="flex items-center gap-2 mb-2 text-white/90">
+                                                    <Users className="w-5 h-5" />
+                                                    <h3 className="text-xl font-bold">{t("landing.useCases.team.title")}</h3>
+                                                </div>
+                                                <p className="text-sm text-white/70 line-clamp-2">
+                                                    {t("landing.useCases.team.description")}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </CarouselItem>
 
-                        <FadeIn delay={200}>
-                            <Card className="h-full border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
-                                <CardHeader>
-                                    <div className="w-12 h-12 rounded-xl bg-pink-500/10 flex items-center justify-center mb-4 text-pink-500">
-                                        <Sparkles className="w-6 h-6" />
-                                    </div>
-                                    <CardTitle className="text-2xl">{t("landing.useCases.social.title")}</CardTitle>
-                                    <CardDescription className="text-base text-muted-foreground/80">{t("landing.useCases.social.description")}</CardDescription>
-                                </CardHeader>
-                            </Card>
-                        </FadeIn>
+                                    <CarouselItem className="pl-4 md:basis-1/2 lg:basis-1/3 h-full">
+                                        <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
+                                            <Image
+                                                src="https://placehold.co/600x400/ec4899/FFF?text=Social"
+                                                alt={t("landing.useCases.social.title")}
+                                                fill
+                                                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
+                                            <div className="absolute bottom-4 left-4 right-4">
+                                                <div className="flex items-center gap-2 mb-2 text-white/90">
+                                                    <Sparkles className="w-5 h-5" />
+                                                    <h3 className="text-xl font-bold">{t("landing.useCases.social.title")}</h3>
+                                                </div>
+                                                <p className="text-sm text-white/70 line-clamp-2">
+                                                    {t("landing.useCases.social.description")}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </CarouselItem>
 
-                        <FadeIn delay={300}>
-                            <Card className="h-full border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
-                                <CardHeader>
-                                    <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center mb-4 text-amber-500">
-                                        <Zap className="w-6 h-6" />
-                                    </div>
-                                    <CardTitle className="text-2xl">{t("landing.useCases.study.title")}</CardTitle>
-                                    <CardDescription className="text-base text-muted-foreground/80">{t("landing.useCases.study.description")}</CardDescription>
-                                </CardHeader>
-                            </Card>
-                        </FadeIn>
+                                    <CarouselItem className="pl-4 md:basis-1/2 lg:basis-1/3 h-full">
+                                        <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
+                                            <Image
+                                                src="https://placehold.co/600x400/f59e0b/FFF?text=Study"
+                                                alt={t("landing.useCases.study.title")}
+                                                fill
+                                                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
+                                            <div className="absolute bottom-4 left-4 right-4">
+                                                <div className="flex items-center gap-2 mb-2 text-white/90">
+                                                    <Zap className="w-5 h-5" />
+                                                    <h3 className="text-xl font-bold">{t("landing.useCases.study.title")}</h3>
+                                                </div>
+                                                <p className="text-sm text-white/70 line-clamp-2">
+                                                    {t("landing.useCases.study.description")}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </CarouselItem>
 
-                        <FadeIn delay={400}>
-                            <Card className="h-full border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
-                                <CardHeader>
-                                    <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center mb-4 text-purple-500">
-                                        <Calendar className="w-6 h-6" />
-                                    </div>
-                                    <CardTitle className="text-2xl">{t("landing.useCases.clients.title")}</CardTitle>
-                                    <CardDescription className="text-base text-muted-foreground/80">{t("landing.useCases.clients.description")}</CardDescription>
-                                </CardHeader>
-                            </Card>
+                                    <CarouselItem className="pl-4 md:basis-1/2 lg:basis-1/3 h-full">
+                                        <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
+                                            <Image
+                                                src="https://placehold.co/600x400/a855f7/FFF?text=Clients"
+                                                alt={t("landing.useCases.clients.title")}
+                                                fill
+                                                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
+                                            <div className="absolute bottom-4 left-4 right-4">
+                                                <div className="flex items-center gap-2 mb-2 text-white/90">
+                                                    <Calendar className="w-5 h-5" />
+                                                    <h3 className="text-xl font-bold">{t("landing.useCases.clients.title")}</h3>
+                                                </div>
+                                                <p className="text-sm text-white/70 line-clamp-2">
+                                                    {t("landing.useCases.clients.description")}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </CarouselItem>
+                                </CarouselContent>
+                                <div className="hidden md:block">
+                                    <CarouselPrevious />
+                                    <CarouselNext />
+                                </div>
+                            </Carousel>
                         </FadeIn>
                     </div>
                 </div>
