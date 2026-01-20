@@ -37,7 +37,7 @@ export const translations: Record<Language, TranslationTree> = {
       title: "Find the Perfect Time",
       highlight: "Everyone Can Meet",
       description:
-          "Coordinate meetings effortlessly. Select your availability, share a link, and watch as the best times emerge through beautiful heatmap visualization.",
+        "Coordinate meetings effortlessly. Select your availability, share a link, and watch as the best times emerge through beautiful heatmap visualization.",
       primaryCta: "Create Free Event",
       secondaryCta: "Learn More",
       heroNote: "Free forever • Works on any device",
@@ -93,6 +93,42 @@ export const translations: Record<Language, TranslationTree> = {
       ctaDescription: "Join thousands of teams coordinating schedules with Plannie. No credit card required.",
       ctaButton: "Create Your First Event",
       footer: "Made with ❤️ for better scheduling",
+      useCases: {
+        title: "Use Cases",
+        subtitle: "See how teams around the world use Plannie",
+        team: {
+          title: "Team Meetings",
+          description: "Coordinate standups, sprints, and team syncs with ease.",
+        },
+        social: {
+          title: "Social Events",
+          description: "Plan parties, dinners, and gatherings with friends.",
+        },
+        study: {
+          title: "Study Groups",
+          description: "Find the perfect time for group study sessions.",
+        },
+        clients: {
+          title: "Client Meetings",
+          description: "Schedule calls and meetings with clients across time zones.",
+        },
+        fitness: {
+          title: "Fitness Classes",
+          description: "Organize workout sessions, yoga classes, and group fitness.",
+        },
+        remote: {
+          title: "Remote Teams",
+          description: "Sync distributed teams across multiple time zones effortlessly.",
+        },
+        community: {
+          title: "Community Events",
+          description: "Plan meetups, workshops, and community gatherings.",
+        },
+        workshops: {
+          title: "Workshops",
+          description: "Coordinate training sessions and educational workshops.",
+        },
+      },
     },
     create: {
       heading: "Find the Perfect Time",
@@ -359,13 +395,13 @@ export const translations: Record<Language, TranslationTree> = {
       title: "Finde die perfekte Zeit",
       highlight: "damit alle können",
       description:
-          "Plane Treffen mühelos. Wähle deine Verfügbarkeit, teile einen Link und sieh zu, wie die besten Zeiten über eine schöne Heatmap sichtbar werden.",
+        "Plane Treffen mühelos. Wähle deine Verfügbarkeit, teile einen Link und sieh zu, wie die besten Zeiten über eine schöne Heatmap sichtbar werden.",
       primaryCta: "Kostenloses Event erstellen",
       secondaryCta: "Mehr erfahren",
       heroNote: "Für immer kostenlos • Funktioniert auf jedem Gerät",
       whyTitle: "Warum Plannie?",
       whySubtitle:
-          "Für Teams, Vereine, Freunde und alle, die Termine ohne Aufwand koordinieren möchten.",
+        "Für Teams, Vereine, Freunde und alle, die Termine ohne Aufwand koordinieren möchten.",
       features: {
         lightning: {
           title: "Blitzschnell",
@@ -402,7 +438,7 @@ export const translations: Record<Language, TranslationTree> = {
         share: {
           title: "Link teilen",
           description:
-              "Kopiere den Event-Link und teile ihn per E-Mail, Slack, WhatsApp oder einer anderen App.",
+            "Kopiere den Event-Link und teile ihn per E-Mail, Slack, WhatsApp oder einer anderen App.",
         },
         select: {
           title: "Verfügbarkeit wählen",
@@ -417,6 +453,42 @@ export const translations: Record<Language, TranslationTree> = {
       ctaDescription: "Schließe dich tausenden Teams an, die mit Plannie Termine koordinieren. Keine Kreditkarte nötig.",
       ctaButton: "Erstes Event erstellen",
       footer: "Mit ❤️ gemacht für bessere Planung",
+      useCases: {
+        title: "Anwendungsfälle",
+        subtitle: "Entdecke, wie Teams weltweit Plannie nutzen",
+        team: {
+          title: "Team-Meetings",
+          description: "Koordiniere Standups, Sprints und Team-Syncs mühelos.",
+        },
+        social: {
+          title: "Soziale Events",
+          description: "Plane Partys, Abendessen und Treffen mit Freunden.",
+        },
+        study: {
+          title: "Lerngruppen",
+          description: "Finde die perfekte Zeit für Lerngruppen.",
+        },
+        clients: {
+          title: "Kunden-Meetings",
+          description: "Plane Anrufe und Meetings mit Kunden über Zeitzonen hinweg.",
+        },
+        fitness: {
+          title: "Fitness-Kurse",
+          description: "Organisiere Workouts, Yoga-Kurse und Gruppenfitness.",
+        },
+        remote: {
+          title: "Remote-Teams",
+          description: "Synchronisiere verteilte Teams über mehrere Zeitzonen mühelos.",
+        },
+        community: {
+          title: "Community-Events",
+          description: "Plane Meetups, Workshops und Gemeinschaftstreffen.",
+        },
+        workshops: {
+          title: "Workshops",
+          description: "Koordiniere Trainings und Bildungsworkshops.",
+        },
+      },
     },
     create: {
       heading: "Finde die perfekte Zeit",

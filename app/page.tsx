@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, Clock, Users, Share2, Sparkles, Zap, Menu, X } from "lucide-react"
+import { Calendar, Clock, Users, Share2, Sparkles, Zap, Menu, X, Dumbbell, Globe, Heart, BookOpen } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { logout, getAccessToken, getStoredUsername, ensureAuth } from "@/lib/api"
 import { useTranslations } from "@/components/language-provider"
@@ -288,121 +288,87 @@ export default function LandingPage() {
             </section>
 
             {/* Use Cases Section */}
-            <section className="py-16 px-4 bg-muted/50 dark:bg-muted/10">
-                <div className="container mx-auto max-w-6xl">
+            <section className="py-16 bg-muted/50 dark:bg-muted/10 overflow-hidden">
+                <div className="container mx-auto max-w-6xl px-4 mb-8">
                     <FadeIn>
-                        <div className="text-center mb-12">
-                            <h2 className="text-3xl md:text-5xl font-bold mb-4">{t("landing.useCases.title")}</h2>
-                            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">{t("landing.useCases.subtitle")}</p>
+                        <h2 className="text-3xl md:text-5xl font-bold text-left">{t("landing.useCases.title")}</h2>
+                    </FadeIn>
+                </div>
+
+                {/* Marquee Container */}
+                <div className="relative w-full">
+                    {/* Gradient overlays for smooth fade effect */}
+                    <div className="absolute left-0 top-0 bottom-0 w-24 md:w-40 bg-gradient-to-r from-muted/50 dark:from-muted/10 to-transparent z-10 pointer-events-none" />
+                    <div className="absolute right-0 top-0 bottom-0 w-24 md:w-40 bg-gradient-to-l from-muted/50 dark:from-muted/10 to-transparent z-10 pointer-events-none" />
+                    
+                    <FadeIn delay={100}>
+                        <div className="flex animate-marquee hover:[animation-play-state:paused]">
+                            {/* First set of cards */}
+                            {[
+                                { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), color: "2563eb", image: "Team" },
+                                { icon: Sparkles, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), color: "ec4899", image: "Social" },
+                                { icon: Zap, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), color: "f59e0b", image: "Study" },
+                                { icon: Calendar, title: t("landing.useCases.clients.title"), description: t("landing.useCases.clients.description"), color: "a855f7", image: "Clients" },
+                                { icon: Dumbbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), color: "10b981", image: "Fitness" },
+                                { icon: Globe, title: t("landing.useCases.remote.title"), description: t("landing.useCases.remote.description"), color: "06b6d4", image: "Remote" },
+                                { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), color: "f43f5e", image: "Community" },
+                                { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), color: "8b5cf6", image: "Workshops" },
+                            ].map((useCase, index) => (
+                                <div key={index} className="flex-shrink-0 w-[280px] md:w-[320px] mx-3">
+                                    <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
+                                        <Image
+                                            src={`https://placehold.co/600x400/${useCase.color}/FFF?text=${useCase.image}`}
+                                            alt={useCase.title}
+                                            fill
+                                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                        />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
+                                        <div className="absolute bottom-4 left-4 right-4">
+                                            <div className="flex items-center gap-2 mb-2 text-white/90">
+                                                <useCase.icon className="w-5 h-5" />
+                                                <h3 className="text-lg font-bold">{useCase.title}</h3>
+                                            </div>
+                                            <p className="text-sm text-white/70 line-clamp-2">
+                                                {useCase.description}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            {/* Duplicate set for seamless loop */}
+                            {[
+                                { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), color: "2563eb", image: "Team" },
+                                { icon: Sparkles, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), color: "ec4899", image: "Social" },
+                                { icon: Zap, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), color: "f59e0b", image: "Study" },
+                                { icon: Calendar, title: t("landing.useCases.clients.title"), description: t("landing.useCases.clients.description"), color: "a855f7", image: "Clients" },
+                                { icon: Dumbbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), color: "10b981", image: "Fitness" },
+                                { icon: Globe, title: t("landing.useCases.remote.title"), description: t("landing.useCases.remote.description"), color: "06b6d4", image: "Remote" },
+                                { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), color: "f43f5e", image: "Community" },
+                                { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), color: "8b5cf6", image: "Workshops" },
+                            ].map((useCase, index) => (
+                                <div key={`dup-${index}`} className="flex-shrink-0 w-[280px] md:w-[320px] mx-3">
+                                    <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
+                                        <Image
+                                            src={`https://placehold.co/600x400/${useCase.color}/FFF?text=${useCase.image}`}
+                                            alt={useCase.title}
+                                            fill
+                                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                        />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
+                                        <div className="absolute bottom-4 left-4 right-4">
+                                            <div className="flex items-center gap-2 mb-2 text-white/90">
+                                                <useCase.icon className="w-5 h-5" />
+                                                <h3 className="text-lg font-bold">{useCase.title}</h3>
+                                            </div>
+                                            <p className="text-sm text-white/70 line-clamp-2">
+                                                {useCase.description}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </FadeIn>
-
-                    <div className="w-full max-w-5xl mx-auto px-4 md:px-0">
-                        <FadeIn delay={100}>
-                            <Carousel
-                                opts={{
-                                    align: "start",
-                                    loop: true,
-                                }}
-                                plugins={[
-                                    Autoplay({
-                                        delay: 2000,
-                                    }),
-                                ]}
-                                className="w-full"
-                            >
-                                <CarouselContent className="-ml-4">
-                                    <CarouselItem className="pl-4 md:basis-1/2 lg:basis-1/3 h-full">
-                                        <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
-                                            <Image
-                                                src="https://placehold.co/600x400/2563eb/FFF?text=Team"
-                                                alt={t("landing.useCases.team.title")}
-                                                fill
-                                                className="object-cover transition-transform duration-500 group-hover:scale-105"
-                                            />
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
-                                            <div className="absolute bottom-4 left-4 right-4">
-                                                <div className="flex items-center gap-2 mb-2 text-white/90">
-                                                    <Users className="w-5 h-5" />
-                                                    <h3 className="text-xl font-bold">{t("landing.useCases.team.title")}</h3>
-                                                </div>
-                                                <p className="text-sm text-white/70 line-clamp-2">
-                                                    {t("landing.useCases.team.description")}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </CarouselItem>
-
-                                    <CarouselItem className="pl-4 md:basis-1/2 lg:basis-1/3 h-full">
-                                        <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
-                                            <Image
-                                                src="https://placehold.co/600x400/ec4899/FFF?text=Social"
-                                                alt={t("landing.useCases.social.title")}
-                                                fill
-                                                className="object-cover transition-transform duration-500 group-hover:scale-105"
-                                            />
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
-                                            <div className="absolute bottom-4 left-4 right-4">
-                                                <div className="flex items-center gap-2 mb-2 text-white/90">
-                                                    <Sparkles className="w-5 h-5" />
-                                                    <h3 className="text-xl font-bold">{t("landing.useCases.social.title")}</h3>
-                                                </div>
-                                                <p className="text-sm text-white/70 line-clamp-2">
-                                                    {t("landing.useCases.social.description")}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </CarouselItem>
-
-                                    <CarouselItem className="pl-4 md:basis-1/2 lg:basis-1/3 h-full">
-                                        <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
-                                            <Image
-                                                src="https://placehold.co/600x400/f59e0b/FFF?text=Study"
-                                                alt={t("landing.useCases.study.title")}
-                                                fill
-                                                className="object-cover transition-transform duration-500 group-hover:scale-105"
-                                            />
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
-                                            <div className="absolute bottom-4 left-4 right-4">
-                                                <div className="flex items-center gap-2 mb-2 text-white/90">
-                                                    <Zap className="w-5 h-5" />
-                                                    <h3 className="text-xl font-bold">{t("landing.useCases.study.title")}</h3>
-                                                </div>
-                                                <p className="text-sm text-white/70 line-clamp-2">
-                                                    {t("landing.useCases.study.description")}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </CarouselItem>
-
-                                    <CarouselItem className="pl-4 md:basis-1/2 lg:basis-1/3 h-full">
-                                        <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
-                                            <Image
-                                                src="https://placehold.co/600x400/a855f7/FFF?text=Clients"
-                                                alt={t("landing.useCases.clients.title")}
-                                                fill
-                                                className="object-cover transition-transform duration-500 group-hover:scale-105"
-                                            />
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80" />
-                                            <div className="absolute bottom-4 left-4 right-4">
-                                                <div className="flex items-center gap-2 mb-2 text-white/90">
-                                                    <Calendar className="w-5 h-5" />
-                                                    <h3 className="text-xl font-bold">{t("landing.useCases.clients.title")}</h3>
-                                                </div>
-                                                <p className="text-sm text-white/70 line-clamp-2">
-                                                    {t("landing.useCases.clients.description")}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </CarouselItem>
-                                </CarouselContent>
-                                <div className="hidden md:block">
-                                    <CarouselPrevious />
-                                    <CarouselNext />
-                                </div>
-                            </Carousel>
-                        </FadeIn>
-                    </div>
                 </div>
             </section>
 
