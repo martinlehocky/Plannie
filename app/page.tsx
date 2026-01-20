@@ -307,7 +307,7 @@ export default function LandingPage() {
                                 plugins={[
                                     Autoplay({
                                         delay: 2000,
-                                    }) as any,
+                                    }),
                                 ]}
                                 className="w-full"
                             >
