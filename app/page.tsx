@@ -81,8 +81,8 @@ export default function LandingPage() {
         <div className="min-h-screen bg-gradient-to-br from-background via-purple-900/10 to-primary/20 dark:from-background dark:via-purple-900/20 dark:to-primary/10">
             {/* Header */}
             <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled
-                    ? 'bg-background/60 backdrop-blur-xl border-b border-primary/5 supports-[backdrop-filter]:bg-background/20'
-                    : 'bg-transparent border-b border-transparent'
+                ? 'bg-background/60 backdrop-blur-xl border-b border-primary/5 supports-[backdrop-filter]:bg-background/20'
+                : 'bg-transparent border-b border-transparent'
                 }`}>
                 <div className="container mx-auto px-4 h-16 flex items-center justify-between relative">
                     <div className="flex items-center gap-2">
@@ -317,19 +317,19 @@ export default function LandingPage() {
                         <div className="flex animate-marquee hover:[animation-play-state:paused]">
                             {/* First set of cards */}
                             {[
-                                { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), color: "2563eb", image: "Team" },
-                                { icon: Sparkles, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), color: "ec4899", image: "Social" },
-                                { icon: Zap, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), color: "f59e0b", image: "Study" },
-                                { icon: Calendar, title: t("landing.useCases.clients.title"), description: t("landing.useCases.clients.description"), color: "a855f7", image: "Clients" },
-                                { icon: Dumbbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), color: "10b981", image: "Fitness" },
-                                { icon: Globe, title: t("landing.useCases.remote.title"), description: t("landing.useCases.remote.description"), color: "06b6d4", image: "Remote" },
-                                { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), color: "f43f5e", image: "Community" },
-                                { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), color: "8b5cf6", image: "Workshops" },
+                                { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), image: "/images/use-cases/team.jpg" },
+                                { icon: Sparkles, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), image: "/images/use-cases/social.jpg" },
+                                { icon: Zap, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), image: "/images/use-cases/study.jpg" },
+                                { icon: Calendar, title: t("landing.useCases.clients.title"), description: t("landing.useCases.clients.description"), image: "/images/use-cases/clients.jpg" },
+                                { icon: Dumbbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), image: "/images/use-cases/fitness.jpg" },
+                                { icon: Globe, title: t("landing.useCases.remote.title"), description: t("landing.useCases.remote.description"), image: "/images/use-cases/remote.jpg" },
+                                { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), image: "/images/use-cases/community.jpg" },
+                                { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), image: "/images/use-cases/workshops.jpg" },
                             ].map((useCase, index) => (
                                 <div key={index} className="flex-shrink-0 w-[320px] md:w-[400px] mx-3">
                                     <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
                                         <Image
-                                            src={`https://placehold.co/600x400/${useCase.color}/FFF?text=${useCase.image}`}
+                                            src={useCase.image}
                                             alt={useCase.title}
                                             fill
                                             className="object-cover transition-transform duration-500 group-hover:scale-105"
@@ -349,19 +349,19 @@ export default function LandingPage() {
                             ))}
                             {/* Duplicate set for seamless loop */}
                             {[
-                                { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), color: "2563eb", image: "Team" },
-                                { icon: Sparkles, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), color: "ec4899", image: "Social" },
-                                { icon: Zap, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), color: "f59e0b", image: "Study" },
-                                { icon: Calendar, title: t("landing.useCases.clients.title"), description: t("landing.useCases.clients.description"), color: "a855f7", image: "Clients" },
-                                { icon: Dumbbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), color: "10b981", image: "Fitness" },
-                                { icon: Globe, title: t("landing.useCases.remote.title"), description: t("landing.useCases.remote.description"), color: "06b6d4", image: "Remote" },
-                                { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), color: "f43f5e", image: "Community" },
-                                { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), color: "8b5cf6", image: "Workshops" },
+                                { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), image: "/images/use-cases/team.jpg" },
+                                { icon: Sparkles, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), image: "/images/use-cases/social.jpg" },
+                                { icon: Zap, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), image: "/images/use-cases/study.jpg" },
+                                { icon: Calendar, title: t("landing.useCases.clients.title"), description: t("landing.useCases.clients.description"), image: "/images/use-cases/clients.jpg" },
+                                { icon: Dumbbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), image: "/images/use-cases/fitness.jpg" },
+                                { icon: Globe, title: t("landing.useCases.remote.title"), description: t("landing.useCases.remote.description"), image: "/images/use-cases/remote.jpg" },
+                                { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), image: "/images/use-cases/community.jpg" },
+                                { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), image: "/images/use-cases/workshops.jpg" },
                             ].map((useCase, index) => (
                                 <div key={`dup-${index}`} className="flex-shrink-0 w-[320px] md:w-[400px] mx-3">
                                     <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
                                         <Image
-                                            src={`https://placehold.co/600x400/${useCase.color}/FFF?text=${useCase.image}`}
+                                            src={useCase.image}
                                             alt={useCase.title}
                                             fill
                                             className="object-cover transition-transform duration-500 group-hover:scale-105"
