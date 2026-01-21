@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, Clock, Users, Share2, Sparkles, Zap, Menu, X, Dumbbell, Globe, Heart, BookOpen } from "lucide-react"
+import { Calendar, Clock, Users, ShareNetwork, Sparkle, Lightning, List, X, Barbell, Globe, Heart, BookOpen, List as Menu } from "phosphor-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { logout, getAccessToken, getStoredUsername, ensureAuth } from "@/lib/api"
 import { useTranslations } from "@/components/language-provider"
@@ -194,11 +194,7 @@ export default function LandingPage() {
             {/* Hero Section */}
             <section className="pt-32 pb-16 px-4">
                 <div className="container mx-auto max-w-6xl text-center space-y-8">
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary border border-primary/20">
-                        <Sparkles className="w-4 h-4" />
-                        <span className="text-sm font-medium">{t("landing.badge")}</span>
-                    </div>
-
+                    {/* Removed badge/tag here */}
                     <div className={`transition-all duration-1000 ease-out transform ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
                         <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-balance">
                             {t("landing.title")}
@@ -239,7 +235,7 @@ export default function LandingPage() {
                         <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                             <CardHeader>
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                                    <Zap className="w-6 h-6 text-primary" />
+                                    <Lightning className="w-6 h-6 text-primary" />
                                 </div>
                                 <CardTitle className="text-xl">{t("landing.features.lightning.title")}</CardTitle>
                                 <CardDescription className="text-base">{t("landing.features.lightning.description")}</CardDescription>
@@ -259,7 +255,7 @@ export default function LandingPage() {
                         <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                             <CardHeader>
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                                    <Share2 className="w-6 h-6 text-primary" />
+                                    <ShareNetwork className="w-6 h-6 text-primary" />
                                 </div>
                                 <CardTitle className="text-xl">{t("landing.features.sharing.title")}</CardTitle>
                                 <CardDescription className="text-base">{t("landing.features.sharing.description")}</CardDescription>
@@ -289,7 +285,7 @@ export default function LandingPage() {
                         <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                             <CardHeader>
                                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                                    <Sparkles className="w-6 h-6 text-primary" />
+                                    <Sparkle className="w-6 h-6 text-primary" />
                                 </div>
                                 <CardTitle className="text-xl">{t("landing.features.design.title")}</CardTitle>
                                 <CardDescription className="text-base">{t("landing.features.design.description")}</CardDescription>
@@ -318,16 +314,16 @@ export default function LandingPage() {
                             {/* First set of cards */}
                             {[
                                 { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), image: "/images/use-cases/team.jpg" },
-                                { icon: Sparkles, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), image: "/images/use-cases/social.jpg" },
-                                { icon: Zap, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), image: "/images/use-cases/study.jpg" },
+                                { icon: Sparkle, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), image: "/images/use-cases/social.jpg" },
+                                { icon: Lightning, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), image: "/images/use-cases/study.jpg" },
                                 { icon: Calendar, title: t("landing.useCases.clients.title"), description: t("landing.useCases.clients.description"), image: "/images/use-cases/clients.jpg" },
-                                { icon: Dumbbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), image: "/images/use-cases/fitness.jpg" },
+                                { icon: Barbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), image: "/images/use-cases/fitness.jpg" },
                                 { icon: Globe, title: t("landing.useCases.remote.title"), description: t("landing.useCases.remote.description"), image: "/images/use-cases/remote.jpg" },
                                 { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), image: "/images/use-cases/community.jpg" },
                                 { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), image: "/images/use-cases/workshops.jpg" },
                             ].map((useCase, index) => (
                                 <div key={index} className="flex-shrink-0 w-[320px] md:w-[400px] mx-3">
-                                    <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
+                                    <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted min-h-[320px] md:min-h-[400px]">
                                         <Image
                                             src={useCase.image}
                                             alt={useCase.title}
@@ -350,16 +346,16 @@ export default function LandingPage() {
                             {/* Duplicate set for seamless loop */}
                             {[
                                 { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), image: "/images/use-cases/team.jpg" },
-                                { icon: Sparkles, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), image: "/images/use-cases/social.jpg" },
-                                { icon: Zap, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), image: "/images/use-cases/study.jpg" },
+                                { icon: Sparkle, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), image: "/images/use-cases/social.jpg" },
+                                { icon: Lightning, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), image: "/images/use-cases/study.jpg" },
                                 { icon: Calendar, title: t("landing.useCases.clients.title"), description: t("landing.useCases.clients.description"), image: "/images/use-cases/clients.jpg" },
-                                { icon: Dumbbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), image: "/images/use-cases/fitness.jpg" },
+                                { icon: Barbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), image: "/images/use-cases/fitness.jpg" },
                                 { icon: Globe, title: t("landing.useCases.remote.title"), description: t("landing.useCases.remote.description"), image: "/images/use-cases/remote.jpg" },
                                 { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), image: "/images/use-cases/community.jpg" },
                                 { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), image: "/images/use-cases/workshops.jpg" },
                             ].map((useCase, index) => (
                                 <div key={`dup-${index}`} className="flex-shrink-0 w-[320px] md:w-[400px] mx-3">
-                                    <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted">
+                                    <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted min-h-[320px] md:min-h-[400px]">
                                         <Image
                                             src={useCase.image}
                                             alt={useCase.title}

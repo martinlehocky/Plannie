@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
-import { ArrowLeft, Save, ShieldCheck, Globe, Trash2 } from "lucide-react"
+import { ArrowLeft, FloppyDisk, ShieldCheck, Globe, Trash } from "phosphor-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { zxcvbn, zxcvbnOptions } from "@zxcvbn-ts/core"
 import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
@@ -344,7 +344,7 @@ export default function SettingsPage() {
                     </div>
 
                     <Button className="w-full gap-2 mt-4" onClick={handleSave} disabled={loading}>
-                        <Save className="h-4 w-4" />
+                        <FloppyDisk className="h-4 w-4" />
                         {loading ? "Saving..." : "Save Changes"}
                     </Button>
 
@@ -353,7 +353,8 @@ export default function SettingsPage() {
                     {/* Danger Zone */}
                     <div className="space-y-3">
                         <h3 className="text-sm font-medium text-destructive flex items-center gap-2">
-                            <Trash2 className="h-4 w-4" /> Danger zone
+                            <Trash className="h-4 w-4" />
+                            Danger zone
                         </h3>
                         <p className="text-[12px] text-muted-foreground">
                             Permanently delete your account and all associated data. This action cannot be undone.
@@ -374,7 +375,7 @@ export default function SettingsPage() {
                             onClick={handleDelete}
                             disabled={deleteLoading}
                         >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash className="h-4 w-4" />
                             {deleteLoading ? "Deleting..." : "Delete my account"}
                         </Button>
                     </div>

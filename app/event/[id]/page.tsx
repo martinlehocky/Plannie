@@ -8,23 +8,23 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { AvailabilityGrid } from "@/components/availability-grid"
 import {
-  Share2,
+  ShareNetwork,
   Users,
   Calendar,
   Trophy,
-  LogIn,
-  Trash2,
+  SignIn,
+  Trash,
   UserPlus,
   Globe,
-  ChevronDown,
-  ChevronUp,
+  CaretDown,
+  CaretUp,
   Pencil,
-  RefreshCw,
-  AlertTriangle,
+  ArrowClockwise,
+  Warning,
   X,
   Clock,
-  BarChart3,
-} from "lucide-react"
+  ChartBar,
+} from "phosphor-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
@@ -691,7 +691,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       <div className="mx-auto w-full max-w-7xl px-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 p-4 shadow-sm">
           <div className="flex items-start gap-3 flex-1">
-            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+            <Warning className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
             <div className="space-y-1">
               <p className="font-semibold">{t("eventPage.emailNotVerifiedTitle")}</p>
               <p className="text-sm">
@@ -736,7 +736,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">{eventData.name}</h1>
                 {draftDirty && (
                   <Badge variant="secondary" className="flex items-center gap-1 text-[11px]">
-                    <AlertTriangle className="h-3 w-3" />
+                    <Warning className="h-3 w-3" />
                     {t("eventPage.unsavedChanges")}
                   </Badge>
                 )}
@@ -810,7 +810,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             {draftDirty && (
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" className="h-9 text-xs" onClick={handleCancelDraft}>
-                  <RefreshCw className="h-4 w-4 mr-1" />
+                  <ArrowClockwise className="h-4 w-4 mr-1" />
                   {t("eventPage.revertUnsaved")}
                 </Button>
               </div>
@@ -830,13 +830,13 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               </Button>
             )}
             <Button size="sm" variant="outline" onClick={handleShare} className="px-3 h-9 bg-transparent">
-              <Share2 className="h-4 w-4" />
+              <ShareNetwork className="h-4 w-4" />
             </Button>
             {isCreator && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button size="sm" variant="destructive" className="px-3 h-9">
-                    <Trash2 className="h-4 w-4" />
+                    <Trash className="h-4 w-4" />
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="mx-4 max-w-sm">
@@ -871,7 +871,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                         </Badge>
                       )}
                     </div>
-                    {sidebarOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    {sidebarOpen ? <CaretUp className="h-4 w-4" /> : <CaretDown className="h-4 w-4" />}
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-3 mb-3">
@@ -949,7 +949,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                    <LogIn className="h-12 w-12 text-muted-foreground mb-4" />
+                    <SignIn className="h-12 w-12 text-muted-foreground mb-4" />
                     <h3 className="text-lg font-semibold">{t("eventPage.signInTitle")}</h3>
                     <p className="text-sm text-muted-foreground mt-2 mb-4">
                       {t("eventPage.signInSubtitle")}
@@ -984,7 +984,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
+              <ChartBar className="h-5 w-5" />
               {t("eventPage.bestTimesChartTitle")}
             </DialogTitle>
             <DialogDescription>{t("eventPage.bestTimesChartDescription")}</DialogDescription>
@@ -1105,7 +1105,7 @@ function SidebarContent({
           </CardTitle>
           <div className="flex gap-2 mt-2">
             <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onOpenBestTimes}>
-              <BarChart3 className="h-3.5 w-3.5 mr-1" />
+              <ChartBar className="h-3.5 w-3.5 mr-1" />
               {t("eventPage.viewBestTimes")}
             </Button>
           </div>
@@ -1178,7 +1178,7 @@ function SidebarContent({
           </div>
           {!isLoggedIn && (
             <Button className="w/full mt-1.5 bg-transparent" size="sm" variant="outline" onClick={() => router.push("/login")}>
-              <LogIn className="h-3 w-3 mr-1.5" />
+              <SignIn className="h-3 w-3 mr-1.5" />
               {t("eventPage.signInRegister")}
             </Button>
           )}

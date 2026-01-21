@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { format } from "date-fns"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
-import { LogOut, Trash2, Settings, Plus, ArrowLeft, Clock, AlertTriangle, X, Users, UserPlus, UserMinus, Mail, Check, XCircle } from "lucide-react"
+import { SignOut, Trash, Gear, Plus, ArrowLeft, Clock, Warning, X, Users, UserPlus, UserMinus, Envelope, Check, XCircle } from "phosphor-react"
 import { useToast } from "@/hooks/use-toast"
 import {
     AlertDialog,
@@ -23,7 +23,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { fetchWithAuth, clearTokens, logout, getAccessToken, getStoredUsername, ensureAuth } from "@/lib/api"
+import { fetchWithAuth, clearTokens, logout, ensureAuth } from "@/lib/api"
 import { useTranslations } from "@/components/language-provider"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
@@ -187,7 +187,7 @@ export default function Dashboard() {
                 return
             }
 
-            const storedUsername = getStoredUsername() || ""
+            const storedUsername = typeof window !== "undefined" && window.localStorage ? (window.localStorage.getItem("username") || "") : ""
             setUsername(storedUsername)
 
             fetchProfile()
@@ -424,7 +424,6 @@ export default function Dashboard() {
             if (res.ok) {
                 toast({ title: "Event invite accepted" })
                 fetchEventInvites()
-                fetchEvents()
             } else {
                 const data = await res.json().catch(() => ({}))
                 toast({ title: "Error", description: data.error || "Failed to accept invite", variant: "destructive" })
@@ -470,7 +469,7 @@ export default function Dashboard() {
             <div className="w-full max-w-4xl mx-auto px-4 md:px-8">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 p-4 shadow-sm">
                     <div className="flex items-start gap-3 flex-1">
-                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                        <Warning className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
                         <div className="space-y-1">
                             <p className="font-semibold">Email not verified</p>
                             <p className="text-sm">
@@ -517,12 +516,12 @@ export default function Dashboard() {
 
                     <Link href="/settings">
                         <Button variant="ghost" size="sm">
-                            <Settings className="h-4 w-4" />
+                            <Gear className="h-4 w-4" />
                         </Button>
                     </Link>
 
                     <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
-                        <LogOut className="h-4 w-4" />
+                        <SignOut className="h-4 w-4" />
                         <span className="hidden md:inline">{t("common.signOut")}</span>
                     </Button>
                     <ThemeToggle />
@@ -601,7 +600,7 @@ export default function Dashboard() {
                                                             onClick={(e) => handleLeaveEvent(e, event.id)}
                                                             title={t("dashboard.leaveTitle")}
                                                         >
-                                                            <LogOut className="h-4 w-4" />
+                                                            <SignOut className="h-4 w-4" />
                                                         </Button>
                                                     )}
 
@@ -615,7 +614,7 @@ export default function Dashboard() {
                                                                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                                                                     onClick={(e) => e.stopPropagation()}
                                                                 >
-                                                                    <Trash2 className="h-4 w-4" />
+                                                                    <Trash className="h-4 w-4" />
                                                                 </Button>
                                                             </AlertDialogTrigger>
                                                             <AlertDialogContent onClick={(e) => e.stopPropagation()}>
@@ -674,7 +673,7 @@ export default function Dashboard() {
                         <>
                             {eventInvites.length === 0 ? (
                                 <div className="text-center py-12 text-muted-foreground">
-                                    <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                                    <Envelope className="h-12 w-12 mx-auto mb-4 opacity-50" />
                                     <p>No pending event invites</p>
                                 </div>
                             ) : (
@@ -757,7 +756,7 @@ export default function Dashboard() {
                                 <Card>
                                     <CardHeader>
                                         <CardTitle className="flex items-center gap-2">
-                                            <Mail className="h-5 w-5" />
+                                            <Envelope className="h-5 w-5" />
                                             Friend Requests ({friendRequests.length})
                                         </CardTitle>
                                     </CardHeader>
@@ -838,3 +837,4 @@ export default function Dashboard() {
         </div>
     )
 }
+

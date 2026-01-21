@@ -1,6 +1,6 @@
 "use client"
 
-import { Globe } from "lucide-react"
+import { Globe } from "phosphor-react"
 import {
     Select,
     SelectContent,

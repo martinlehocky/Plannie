@@ -1,6 +1,6 @@
 "use client"
 
-import { Moon, Sun } from "lucide-react"
+import { Moon, Sun } from "phosphor-react"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 

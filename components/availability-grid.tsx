@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { format, eachDayOfInterval, startOfDay, isBefore, isAfter } from "date-fns"
 import { cn } from "@/lib/utils"
-import { Users, Ban, ChevronLeft, ChevronRight } from "lucide-react"
+import { Users, Prohibit, CaretLeft, CaretRight } from "phosphor-react"
 import { useTranslations } from "@/components/language-provider"
 
 /* helpers unchanged */
@@ -659,7 +659,7 @@ export function AvailabilityGrid({
                             className="rounded-full p-1"
                             aria-label={t("availability.prevDay")}
                         >
-                            <ChevronLeft className="h-4 w-4" />
+                            <CaretLeft className="h-4 w-4" />
                         </Button>
                         <div className="text-sm font-medium">
                             {expandedDates && expandedDates.length > 0
@@ -674,7 +674,7 @@ export function AvailabilityGrid({
                             className="rounded-full p-1"
                             aria-label={t("availability.nextDay")}
                         >
-                            <ChevronRight className="h-4 w-4" />
+                            <CaretRight className="h-4 w-4" />
                         </Button>
                     </div>
 
@@ -697,7 +697,7 @@ export function AvailabilityGrid({
                                 onClick={onToggleDisableMode}
                                 className={cn("rounded-full text-xs gap-1.5", disableMode && "border-primary/70")}
                             >
-                                <Ban className="h-3.5 w-3.5" />
+                                <Prohibit className="h-3.5 w-3.5" />
                                 {disableMode ? t("availability.exitDisable") : t("availability.disableTimes")}
                             </Button>
                         )}
@@ -747,7 +747,7 @@ export function AvailabilityGrid({
                                 className={cn("rounded-full text-xs px-2 py-1", disableMode && "border-primary/70")}
                                 aria-label={disableMode ? t("availability.exitDisable") : t("availability.disableTimes")}
                             >
-                                <Ban className="h-3 w-3" />
+                                <Prohibit className="h-3 w-3" />
                             </Button>
                         )}
                         <Button
