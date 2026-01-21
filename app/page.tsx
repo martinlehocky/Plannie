@@ -322,8 +322,8 @@ export default function LandingPage() {
                                 { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), image: "/images/use-cases/community.jpg" },
                                 { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), image: "/images/use-cases/workshops.jpg" },
                             ].map((useCase, index) => (
-                                <div key={index} className="flex-shrink-0 w-[320px] md:w-[400px] mx-6">
-                                    <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted min-h-[320px] md:min-h-[400px]">
+                                <div key={index} className="shrink-0 w-[240px] md:w-[300px] mx-6">
+                                    <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted min-h-[240px] md:min-h-[300px]">
                                         <Image
                                             src={useCase.image}
                                             alt={useCase.title}
@@ -354,8 +354,8 @@ export default function LandingPage() {
                                 { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), image: "/images/use-cases/community.jpg" },
                                 { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), image: "/images/use-cases/workshops.jpg" },
                             ].map((useCase, index) => (
-                                <div key={`dup-${index}`} className="flex-shrink-0 w-[320px] md:w-[400px] mx-6">
-                                    <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted min-h-[320px] md:min-h-[400px]">
+                                <div key={`dup-${index}`} className="shrink-0 w-[240px] md:w-[300px] mx-6">
+                                    <div className="group relative aspect-video overflow-hidden rounded-xl bg-muted min-h-[240px] md:min-h-[300px]">
                                         <Image
                                             src={useCase.image}
                                             alt={useCase.title}
