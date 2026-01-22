@@ -13,7 +13,17 @@ import { cn } from "@/lib/utils"
 import { ThemeToggle } from "@/components/theme-toggle"
 import Aurora from "@/components/Aurora.jsx"
 
-const FadeIn = ({ children, className, delay = 0, isAlwaysInView = false }: { children: React.ReactNode, className?: string, delay?: number, isAlwaysInView?: boolean }) => {
+const FadeIn = ({
+                    children,
+                    className,
+                    delay = 0,
+                    isAlwaysInView = false,
+                }: {
+    children: React.ReactNode
+    className?: string
+    delay?: number
+    isAlwaysInView?: boolean
+}) => {
     const { ref, isInView } = useInView({ threshold: 0.1 })
     const show = isAlwaysInView || isInView
     return (
@@ -48,8 +58,8 @@ export default function LandingPage() {
             setScrolled(window.scrollY > 20)
         }
 
-        window.addEventListener('scroll', handleScroll)
-        return () => window.removeEventListener('scroll', handleScroll)
+        window.addEventListener("scroll", handleScroll)
+        return () => window.removeEventListener("scroll", handleScroll)
     }, [])
 
     useEffect(() => {
@@ -71,12 +81,15 @@ export default function LandingPage() {
 
     return (
         <main className="relative w-full min-h-screen bg-background">
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-6 sm:gap-0">
                 {/* Header */}
-                <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled
-                    ? 'bg-background/60 backdrop-blur-xl border-b border-primary/5 supports-backdrop-filter:bg-background/20'
-                    : 'bg-transparent border-b border-transparent'
-                    }`}>
+                <header
+                    className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+                        scrolled
+                            ? "bg-background/60 backdrop-blur-xl border-b border-primary/5 supports-backdrop-filter:bg-background/20"
+                            : "bg-transparent border-b border-transparent"
+                    }`}
+                >
                     <div className="container mx-auto px-4 h-16 flex items-center justify-between relative">
                         <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center overflow-hidden">
@@ -96,8 +109,8 @@ export default function LandingPage() {
                         <div className="hidden sm:flex items-center gap-3">
                             {isLoggedIn && (
                                 <span className="text-sm text-muted-foreground">
-                                    {t("common.signedInAs", { name: username || t("common.guest") })}
-                                </span>
+                  {t("common.signedInAs", { name: username || t("common.guest") })}
+                </span>
                             )}
 
                             {isLoggedIn && (
@@ -162,9 +175,7 @@ export default function LandingPage() {
                                     )}
 
                                     <Link href="/create" onClick={() => setIsMenuOpen(false)}>
-                                        <Button className="w-full justify-center">
-                                            {t("common.createEvent")}
-                                        </Button>
+                                        <Button className="w-full justify-center">{t("common.createEvent")}</Button>
                                     </Link>
 
                                     {isLoggedIn ? (
@@ -185,20 +196,22 @@ export default function LandingPage() {
                 </header>
 
                 {/* Hero Section */}
-                <section
-                    className="min-h-screen sticky top-0 z-10 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300 overflow-hidden"
-                    style={{ marginTop: 0 }}
-                >
+                <section className="min-h-screen-safe relative sm:sticky sm:top-0 z-10 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300 overflow-hidden">
                     {/* Aurora background - covers the entire card */}
                     <div className="absolute inset-0 w-full h-full flex items-center justify-center pointer-events-none z-0">
                         <div className="w-full h-full max-w-none max-h-none">
-                            <Aurora colorStops={["#5227FF","#ff40ff","#5227FF"]} amplitude={1} blend={0.5} />
+                            <Aurora colorStops={["#5227FF", "#ff40ff", "#5227FF"]} amplitude={1} blend={0.5} />
                         </div>
                     </div>
+
                     {/* Hero content */}
-                    <div className="flex flex-col justify-center items-center min-h-screen pt-24 pb-16 px-4 relative z-10">
+                    <div className="flex flex-col justify-center items-center min-h-screen-safe pt-24 pb-16 px-4 relative z-10">
                         <div className="w-full max-w-6xl text-center space-y-8 flex flex-col justify-center items-center flex-1">
-                            <div className={`transition-all duration-1000 ease-out transform ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
+                            <div
+                                className={`transition-all duration-1000 ease-out transform ${
+                                    mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+                                }`}
+                            >
                                 <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-balance">
                                     {t("landing.title")}
                                     <br />
@@ -206,11 +219,19 @@ export default function LandingPage() {
                                 </h1>
                             </div>
 
-                            <p className={`text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-balance transition-all duration-1000 delay-200 ease-out transform ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
+                            <p
+                                className={`text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto text-balance transition-all duration-1000 delay-200 ease-out transform ${
+                                    mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+                                }`}
+                            >
                                 {t("landing.description")}
                             </p>
 
-                            <div className={`flex flex-col sm:flex-row gap-4 justify-center items-center pt-4 transition-all duration-1000 delay-300 ease-out transform ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"}`}>
+                            <div
+                                className={`flex flex-col sm:flex-row gap-4 justify-center items-center pt-4 transition-all duration-1000 delay-300 ease-out transform ${
+                                    mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+                                }`}
+                            >
                                 <Link href="/create">
                                     <Button size="lg" className="h-14 px-8 text-lg font-semibold">
                                         <Calendar className="w-5 h-5 mr-2" />
@@ -230,8 +251,7 @@ export default function LandingPage() {
                 {/* Features Section */}
                 <section
                     id="features-section"
-                    className="min-h-screen sticky top-4 z-20 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300"
-                    style={{ marginTop: '-3rem' }}
+                    className="min-h-screen-safe relative sm:sticky sm:top-4 z-20 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300 mt-0 sm:-mt-12"
                 >
                     <div className="py-16 px-4">
                         <div className="container mx-auto max-w-6xl">
@@ -250,6 +270,7 @@ export default function LandingPage() {
                                         <CardDescription className="text-base">{t("landing.features.lightning.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
+
                                 <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                                     <CardHeader>
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
@@ -259,6 +280,7 @@ export default function LandingPage() {
                                         <CardDescription className="text-base">{t("landing.features.heatmap.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
+
                                 <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                                     <CardHeader>
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
@@ -268,6 +290,7 @@ export default function LandingPage() {
                                         <CardDescription className="text-base">{t("landing.features.sharing.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
+
                                 <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                                     <CardHeader>
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
@@ -277,6 +300,7 @@ export default function LandingPage() {
                                         <CardDescription className="text-base">{t("landing.features.smartDates.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
+
                                 <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                                     <CardHeader>
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
@@ -286,6 +310,7 @@ export default function LandingPage() {
                                         <CardDescription className="text-base">{t("landing.features.timezones.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
+
                                 <Card className="border-0 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all duration-300 shadow-xl ring-1 ring-white/10 hover:ring-primary/50">
                                     <CardHeader>
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
@@ -301,10 +326,7 @@ export default function LandingPage() {
                 </section>
 
                 {/* Use Cases Section */}
-                <section
-                    className="min-h-screen sticky top-8 z-30 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300"
-                    style={{ marginTop: '-3rem' }}
-                >
+                <section className="min-h-screen-safe relative sm:sticky sm:top-8 z-30 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300 mt-0 sm:-mt-12">
                     <div className="py-16 bg-muted/50 dark:bg-muted/10 overflow-hidden">
                         <div className="container mx-auto max-w-6xl px-4 mb-8">
                             <FadeIn isAlwaysInView>
@@ -319,7 +341,7 @@ export default function LandingPage() {
                             <div className="absolute right-0 top-0 bottom-0 w-24 md:w-40 bg-linear-to-l from-muted/50 dark:from-muted/10 to-transparent z-10 pointer-events-none" />
 
                             <FadeIn delay={100} isAlwaysInView>
-                                <div className="flex animate-marquee hover:paused">
+                                <div className="flex animate-marquee">
                                     {/* First set of cards */}
                                     {[
                                         { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), image: "/images/use-cases/team.jpg" },
@@ -333,25 +355,19 @@ export default function LandingPage() {
                                     ].map((useCase, index) => (
                                         <div key={index} className="shrink-0 w-60 md:w-80 mx-4">
                                             <div className="group relative aspect-4/5 overflow-hidden rounded-2xl bg-muted min-h-80 md:min-h-105 flex flex-col justify-end shadow-lg border border-border transition-all duration-300">
-                                                <Image
-                                                    src={useCase.image}
-                                                    alt={useCase.title}
-                                                    fill
-                                                    className="object-cover transition-transform duration-500 group-hover:scale-105"
-                                                />
+                                                <Image src={useCase.image} alt={useCase.title} fill className="object-cover transition-transform duration-500 group-hover:scale-105" />
                                                 <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent opacity-80" />
                                                 <div className="absolute bottom-4 left-4 right-4">
                                                     <div className="flex items-center gap-2 mb-2 text-white/90">
                                                         <useCase.icon className="w-5 h-5" />
                                                         <h3 className="text-lg font-bold">{useCase.title}</h3>
                                                     </div>
-                                                    <p className="text-sm text-white/70 line-clamp-2">
-                                                        {useCase.description}
-                                                    </p>
+                                                    <p className="text-sm text-white/70 line-clamp-2">{useCase.description}</p>
                                                 </div>
                                             </div>
                                         </div>
                                     ))}
+
                                     {/* Duplicate set for seamless loop */}
                                     {[
                                         { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), image: "/images/use-cases/team.jpg" },
@@ -365,21 +381,14 @@ export default function LandingPage() {
                                     ].map((useCase, index) => (
                                         <div key={`dup-${index}`} className="shrink-0 w-60 md:w-80 mx-4">
                                             <div className="group relative aspect-4/5 overflow-hidden rounded-2xl bg-muted min-h-80 md:min-h-105 flex flex-col justify-end shadow-lg border border-border transition-all duration-300">
-                                                <Image
-                                                    src={useCase.image}
-                                                    alt={useCase.title}
-                                                    fill
-                                                    className="object-cover transition-transform duration-500 group-hover:scale-105"
-                                                />
+                                                <Image src={useCase.image} alt={useCase.title} fill className="object-cover transition-transform duration-500 group-hover:scale-105" />
                                                 <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent opacity-80" />
                                                 <div className="absolute bottom-4 left-4 right-4">
                                                     <div className="flex items-center gap-2 mb-2 text-white/90">
                                                         <useCase.icon className="w-5 h-5" />
                                                         <h3 className="text-lg font-bold">{useCase.title}</h3>
                                                     </div>
-                                                    <p className="text-sm text-white/70 line-clamp-2">
-                                                        {useCase.description}
-                                                    </p>
+                                                    <p className="text-sm text-white/70 line-clamp-2">{useCase.description}</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -390,12 +399,9 @@ export default function LandingPage() {
                     </div>
                 </section>
 
-                {/* How It Works Section as a stacking card */}
-                <section
-                    className="min-h-screen sticky top-12 z-40 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300"
-                    style={{ marginTop: '-3rem' }}
-                >
-                    <div className="py-16 px-4 flex flex-col justify-center items-center min-h-screen">
+                {/* How It Works Section */}
+                <section className="min-h-screen-safe relative sm:sticky sm:top-12 z-40 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300 mt-0 sm:-mt-12">
+                    <div className="py-16 px-4 flex flex-col justify-center items-center min-h-screen-safe">
                         <div className="container mx-auto max-w-4xl">
                             <div className="text-left mb-12">
                                 <h2 className="text-3xl md:text-5xl font-bold mb-4">{t("landing.howTitle")}</h2>
@@ -410,10 +416,10 @@ export default function LandingPage() {
                                             </div>
                                             <div>
                                                 <h3 className="text-xl font-semibold mb-2">
-                                                    {t(`landing.steps.${['create','share','select','pick'][idx]}.title`)}
+                                                    {t(`landing.steps.${["create", "share", "select", "pick"][idx]}.title`)}
                                                 </h3>
                                                 <p className="text-muted-foreground">
-                                                    {t(`landing.steps.${['create','share','select','pick'][idx]}.description`)}
+                                                    {t(`landing.steps.${["create", "share", "select", "pick"][idx]}.description`)}
                                                 </p>
                                             </div>
                                         </div>
@@ -424,12 +430,9 @@ export default function LandingPage() {
                     </div>
                 </section>
 
-                {/* CTA Section as a stacking card */}
-                <section
-                    className="min-h-screen sticky top-16 z-50 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300 flex items-center justify-center"
-                    style={{ marginTop: '-3rem' }}
-                >
-                    <div className="container mx-auto max-w-4xl text-center flex flex-col justify-center items-center min-h-screen">
+                {/* CTA Section */}
+                <section className="min-h-screen-safe relative sm:sticky sm:top-16 z-50 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300 flex items-center justify-center mt-0 sm:-mt-12">
+                    <div className="container mx-auto max-w-4xl text-center flex flex-col justify-center items-center min-h-screen-safe">
                         <Card className="border-0 shadow-2xl bg-linear-to-br from-primary/10 to-primary/5 backdrop-blur-xl ring-1 ring-primary/20">
                             <CardContent className="pt-12 pb-12 space-y-6">
                                 <h2 className="text-3xl md:text-5xl font-bold text-balance">{t("landing.ctaTitle")}</h2>
@@ -444,7 +447,6 @@ export default function LandingPage() {
                         </Card>
                     </div>
                 </section>
-
             </div>
         </main>
     )
