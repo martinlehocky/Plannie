@@ -58,9 +58,24 @@ export default function RootLayout({
                                    }: Readonly<{
   children: React.ReactNode
 }>) {
+  // Define the JSON-LD schema for the Site Name
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Plannie",
+    "url": "https://plannie.de"
+  }
+
   return (
       <html lang="en" suppressHydrationWarning>
       <body className={`${manrope.variable} font-sans antialiased`}>
+      {/* JSON-LD Script for Google Site Name */}
+      <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
+      {/* Language preference script */}
       <script
           dangerouslySetInnerHTML={{
             __html: `

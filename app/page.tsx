@@ -329,40 +329,95 @@ export default function LandingPage() {
                 <section className="min-h-screen-safe relative sm:sticky sm:top-8 z-30 bg-background rounded-t-3xl shadow-xl border border-border transition-all duration-300 mt-0 sm:-mt-12">
                     <div className="py-16 bg-muted/50 dark:bg-muted/10 overflow-hidden">
                         <div className="container mx-auto max-w-6xl px-4 mb-8">
-                            <FadeIn isAlwaysInView>
-                                <h2 className="text-3xl md:text-5xl font-bold text-left">{t("landing.useCases.title")}</h2>
+                            <FadeIn>
+                                <h2 className="text-3xl md:text-5xl font-bold text-left">
+                                    {t("landing.useCases.title")}
+                                </h2>
                             </FadeIn>
                         </div>
 
                         {/* Marquee Container */}
                         <div className="relative w-full">
-                            {/* Gradient overlays for smooth fade effect */}
-                            <div className="absolute left-0 top-0 bottom-0 w-24 md:w-40 bg-linear-to-r from-muted/50 dark:from-muted/10 to-transparent z-10 pointer-events-none" />
-                            <div className="absolute right-0 top-0 bottom-0 w-24 md:w-40 bg-linear-to-l from-muted/50 dark:from-muted/10 to-transparent z-10 pointer-events-none" />
+                            {/* Gradient overlays */}
+                            <div className="absolute left-0 top-0 bottom-0 w-24 md:w-40 bg-[linear-gradient(to_right,hsl(var(--muted)/0.5),transparent)] dark:bg-[linear-gradient(to_right,hsl(var(--muted)/0.1),transparent)] z-10 pointer-events-none" />
+                            <div className="absolute right-0 top-0 bottom-0 w-24 md:w-40 bg-[linear-gradient(to_left,hsl(var(--muted)/0.5),transparent)] dark:bg-[linear-gradient(to_left,hsl(var(--muted)/0.1),transparent)] z-10 pointer-events-none" />
 
-                            <FadeIn delay={100} isAlwaysInView>
+                            <FadeIn delay={100}>
                                 <div className="flex animate-marquee">
                                     {/* First set of cards */}
                                     {[
-                                        { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), image: "/images/use-cases/team.jpg" },
-                                        { icon: Sparkle, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), image: "/images/use-cases/social.jpg" },
-                                        { icon: Lightning, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), image: "/images/use-cases/study.jpg" },
-                                        { icon: Calendar, title: t("landing.useCases.clients.title"), description: t("landing.useCases.clients.description"), image: "/images/use-cases/clients.jpg" },
-                                        { icon: Barbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), image: "/images/use-cases/fitness.jpg" },
-                                        { icon: Globe, title: t("landing.useCases.remote.title"), description: t("landing.useCases.remote.description"), image: "/images/use-cases/remote.jpg" },
-                                        { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), image: "/images/use-cases/community.jpg" },
-                                        { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), image: "/images/use-cases/workshops.jpg" },
+                                        {
+                                            icon: Users,
+                                            title: t("landing.useCases.team.title"),
+                                            description: t("landing.useCases.team.description"),
+                                            image: "/images/use-cases/team.jpg",
+                                        },
+                                        {
+                                            icon: Sparkle,
+                                            title: t("landing.useCases.social.title"),
+                                            description: t("landing.useCases.social.description"),
+                                            image: "/images/use-cases/social.jpg",
+                                        },
+                                        {
+                                            icon: Lightning,
+                                            title: t("landing.useCases.study.title"),
+                                            description: t("landing.useCases.study.description"),
+                                            image: "/images/use-cases/study.jpg",
+                                        },
+                                        {
+                                            icon: Calendar,
+                                            title: t("landing.useCases.clients.title"),
+                                            description: t("landing.useCases.clients.description"),
+                                            image: "/images/use-cases/clients.jpg",
+                                        },
+                                        {
+                                            icon: Barbell,
+                                            title: t("landing.useCases.fitness.title"),
+                                            description: t("landing.useCases.fitness.description"),
+                                            image: "/images/use-cases/fitness.jpg",
+                                        },
+                                        {
+                                            icon: Globe,
+                                            title: t("landing.useCases.remote.title"),
+                                            description: t("landing.useCases.remote.description"),
+                                            image: "/images/use-cases/remote.jpg",
+                                        },
+                                        {
+                                            icon: Heart,
+                                            title: t("landing.useCases.community.title"),
+                                            description: t("landing.useCases.community.description"),
+                                            image: "/images/use-cases/community.jpg",
+                                        },
+                                        {
+                                            icon: BookOpen,
+                                            title: t("landing.useCases.workshops.title"),
+                                            description: t("landing.useCases.workshops.description"),
+                                            image: "/images/use-cases/workshops.jpg",
+                                        },
                                     ].map((useCase, index) => (
-                                        <div key={index} className="shrink-0 w-60 md:w-80 mx-4">
-                                            <div className="group relative aspect-4/5 overflow-hidden rounded-2xl bg-muted min-h-80 md:min-h-105 flex flex-col justify-end shadow-lg border border-border transition-all duration-300">
-                                                <Image src={useCase.image} alt={useCase.title} fill className="object-cover transition-transform duration-500 group-hover:scale-105" />
-                                                <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent opacity-80" />
+                                        <div
+                                            key={index}
+                                            className="shrink-0 w-60 md:w-80 mx-4"
+                                        >
+                                            <div className="group relative aspect-[4/5] overflow-hidden rounded-2xl bg-muted min-h-80 md:min-h-105 flex flex-col justify-end shadow-lg border border-border transition-all duration-300">
+                                                <Image
+                                                    src={useCase.image}
+                                                    alt={useCase.title}
+                                                    width={320}
+                                                    height={400}
+                                                    className="object-cover transition-transform duration-500 group-hover:scale-105 will-change-transform"
+                                                    loading="lazy"
+                                                    quality={75}
+                                                />
+                                                <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.8),rgba(0,0,0,0.2),transparent)] opacity-80" />
                                                 <div className="absolute bottom-4 left-4 right-4">
                                                     <div className="flex items-center gap-2 mb-2 text-white/90">
                                                         <useCase.icon className="w-5 h-5" />
                                                         <h3 className="text-lg font-bold">{useCase.title}</h3>
                                                     </div>
-                                                    <p className="text-sm text-white/70 line-clamp-2">{useCase.description}</p>
+                                                    <p className="text-sm text-white/70 line-clamp-2">
+                                                        {useCase.description}
+                                                    </p>
                                                 </div>
                                             </div>
                                         </div>
@@ -370,25 +425,78 @@ export default function LandingPage() {
 
                                     {/* Duplicate set for seamless loop */}
                                     {[
-                                        { icon: Users, title: t("landing.useCases.team.title"), description: t("landing.useCases.team.description"), image: "/images/use-cases/team.jpg" },
-                                        { icon: Sparkle, title: t("landing.useCases.social.title"), description: t("landing.useCases.social.description"), image: "/images/use-cases/social.jpg" },
-                                        { icon: Lightning, title: t("landing.useCases.study.title"), description: t("landing.useCases.study.description"), image: "/images/use-cases/study.jpg" },
-                                        { icon: Calendar, title: t("landing.useCases.clients.title"), description: t("landing.useCases.clients.description"), image: "/images/use-cases/clients.jpg" },
-                                        { icon: Barbell, title: t("landing.useCases.fitness.title"), description: t("landing.useCases.fitness.description"), image: "/images/use-cases/fitness.jpg" },
-                                        { icon: Globe, title: t("landing.useCases.remote.title"), description: t("landing.useCases.remote.description"), image: "/images/use-cases/remote.jpg" },
-                                        { icon: Heart, title: t("landing.useCases.community.title"), description: t("landing.useCases.community.description"), image: "/images/use-cases/community.jpg" },
-                                        { icon: BookOpen, title: t("landing.useCases.workshops.title"), description: t("landing.useCases.workshops.description"), image: "/images/use-cases/workshops.jpg" },
+                                        {
+                                            icon: Users,
+                                            title: t("landing.useCases.team.title"),
+                                            description: t("landing.useCases.team.description"),
+                                            image: "/images/use-cases/team.jpg",
+                                        },
+                                        {
+                                            icon: Sparkle,
+                                            title: t("landing.useCases.social.title"),
+                                            description: t("landing.useCases.social.description"),
+                                            image: "/images/use-cases/social.jpg",
+                                        },
+                                        {
+                                            icon: Lightning,
+                                            title: t("landing.useCases.study.title"),
+                                            description: t("landing.useCases.study.description"),
+                                            image: "/images/use-cases/study.jpg",
+                                        },
+                                        {
+                                            icon: Calendar,
+                                            title: t("landing.useCases.clients.title"),
+                                            description: t("landing.useCases.clients.description"),
+                                            image: "/images/use-cases/clients.jpg",
+                                        },
+                                        {
+                                            icon: Barbell,
+                                            title: t("landing.useCases.fitness.title"),
+                                            description: t("landing.useCases.fitness.description"),
+                                            image: "/images/use-cases/fitness.jpg",
+                                        },
+                                        {
+                                            icon: Globe,
+                                            title: t("landing.useCases.remote.title"),
+                                            description: t("landing.useCases.remote.description"),
+                                            image: "/images/use-cases/remote.jpg",
+                                        },
+                                        {
+                                            icon: Heart,
+                                            title: t("landing.useCases.community.title"),
+                                            description: t("landing.useCases.community.description"),
+                                            image: "/images/use-cases/community.jpg",
+                                        },
+                                        {
+                                            icon: BookOpen,
+                                            title: t("landing.useCases.workshops.title"),
+                                            description: t("landing.useCases.workshops.description"),
+                                            image: "/images/use-cases/workshops.jpg",
+                                        },
                                     ].map((useCase, index) => (
-                                        <div key={`dup-${index}`} className="shrink-0 w-60 md:w-80 mx-4">
-                                            <div className="group relative aspect-4/5 overflow-hidden rounded-2xl bg-muted min-h-80 md:min-h-105 flex flex-col justify-end shadow-lg border border-border transition-all duration-300">
-                                                <Image src={useCase.image} alt={useCase.title} fill className="object-cover transition-transform duration-500 group-hover:scale-105" />
-                                                <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent opacity-80" />
+                                        <div
+                                            key={`dup-${index}`}
+                                            className="shrink-0 w-60 md:w-80 mx-4"
+                                        >
+                                            <div className="group relative aspect-[4/5] overflow-hidden rounded-2xl bg-muted min-h-80 md:min-h-105 flex flex-col justify-end shadow-lg border border-border transition-all duration-300">
+                                                <Image
+                                                    src={useCase.image}
+                                                    alt={useCase.title}
+                                                    width={320}
+                                                    height={400}
+                                                    className="object-cover transition-transform duration-500 group-hover:scale-105 will-change-transform"
+                                                    loading="lazy"
+                                                    quality={75}
+                                                />
+                                                <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.8),rgba(0,0,0,0.2),transparent)] opacity-80" />
                                                 <div className="absolute bottom-4 left-4 right-4">
                                                     <div className="flex items-center gap-2 mb-2 text-white/90">
                                                         <useCase.icon className="w-5 h-5" />
                                                         <h3 className="text-lg font-bold">{useCase.title}</h3>
                                                     </div>
-                                                    <p className="text-sm text-white/70 line-clamp-2">{useCase.description}</p>
+                                                    <p className="text-sm text-white/70 line-clamp-2">
+                                                        {useCase.description}
+                                                    </p>
                                                 </div>
                                             </div>
                                         </div>

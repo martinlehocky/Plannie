@@ -1,4 +1,5 @@
 @import "tailwindcss";
+
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -121,36 +122,38 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
-}
 
-/* Marquee animation for Use Cases section */
-@keyframes marquee {
-  0% {
-    transform: translateX(0);
+  /* Optimized marquee animation with GPU acceleration */
+  @keyframes marquee {
+    0% {
+      transform: translate3d(0, 0, 0);
+    }
+    100% {
+      transform: translate3d(-50%, 0, 0);
+    }
   }
-  100% {
-    transform: translateX(-50%);
+
+  .animate-marquee {
+    animation: marquee 40s linear infinite;
+    will-change: transform;
   }
-}
 
-.animate-marquee {
-  animation: marquee 40s linear infinite;
-}
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
 
-/* Make the Tailwind intent (hover pausing) actually work */
-.animate-marquee:hover {
-  animation-play-state: paused;
-}
-
-/* Mobile-friendly full-height helper (avoids some 100vh/iOS address-bar issues) */
-.min-h-screen-safe {
-  min-height: 100svh;
-}
-@supports (height: 100dvh) {
+  /* Mobile-friendly full-height helper */
   .min-h-screen-safe {
-    min-height: 100dvh;
+    min-height: 100svh;
+  }
+
+  @supports (height: 100dvh) {
+    .min-h-screen-safe {
+      min-height: 100dvh;
+    }
   }
 }
