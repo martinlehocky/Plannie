@@ -399,13 +399,13 @@ export default function LandingPage() {
                                             key={index}
                                             className="shrink-0 w-60 md:w-80 mx-4"
                                         >
-                                            <div className="group relative aspect-[4/5] overflow-hidden rounded-2xl bg-muted min-h-80 md:min-h-105 flex flex-col justify-end shadow-lg border border-border transition-all duration-300">
+                                            <div className="group relative aspect-4/5 overflow-hidden rounded-2xl bg-muted min-h-80 md:min-h-105 flex flex-col justify-end shadow-lg border border-border transition-all duration-300">
                                                 <Image
                                                     src={useCase.image}
                                                     alt={useCase.title}
-                                                    width={320}
-                                                    height={400}
-                                                    className="object-cover transition-transform duration-500 group-hover:scale-105 will-change-transform"
+                                                    fill
+                                                    sizes="(max-width: 768px) 240px, 320px"
+                                                    className="absolute inset-0 object-cover w-full h-full transition-transform duration-500 group-hover:scale-105 will-change-transform"
                                                     loading="lazy"
                                                     quality={75}
                                                 />
@@ -478,13 +478,13 @@ export default function LandingPage() {
                                             key={`dup-${index}`}
                                             className="shrink-0 w-60 md:w-80 mx-4"
                                         >
-                                            <div className="group relative aspect-[4/5] overflow-hidden rounded-2xl bg-muted min-h-80 md:min-h-105 flex flex-col justify-end shadow-lg border border-border transition-all duration-300">
+                                            <div className="group relative aspect-4/5 overflow-hidden rounded-2xl bg-muted min-h-80 md:min-h-105 flex flex-col justify-end shadow-lg border border-border transition-all duration-300">
                                                 <Image
                                                     src={useCase.image}
                                                     alt={useCase.title}
-                                                    width={320}
-                                                    height={400}
-                                                    className="object-cover transition-transform duration-500 group-hover:scale-105 will-change-transform"
+                                                    fill
+                                                    sizes="(max-width: 768px) 240px, 320px"
+                                                    className="absolute inset-0 object-cover w-full h-full transition-transform duration-500 group-hover:scale-105 will-change-transform"
                                                     loading="lazy"
                                                     quality={75}
                                                 />
