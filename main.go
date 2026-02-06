@@ -61,7 +61,7 @@ const (
 	refreshTTLShort         = 24 * time.Hour
 	lockoutThreshold        = 5
 	lockoutWindow           = 15 * time.Minute
-	schemaVersion           = 4
+	schemaVersion           = 5
 	refreshCookieName       = "rt"
 	recaptchaActionRegister = "register"
 	verifyResendCooldown    = 15 * time.Minute
@@ -173,6 +173,7 @@ type RefreshToken struct {
 	ExpiresAt time.Time
 	CreatedAt time.Time
 	Revoked   bool
+	Remember  bool
 }
 
 type EventUpdate struct {
@@ -478,6 +479,7 @@ func migrate(ctx context.Context, d *sql.DB) error {
 			expires_at TIMESTAMP NOT NULL,
 			created_at TIMESTAMP NOT NULL,
 			revoked INTEGER NOT NULL DEFAULT 0,
+			remember INTEGER NOT NULL DEFAULT 1,
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		);`,
 		`CREATE TABLE IF NOT EXISTS login_attempts (
@@ -559,6 +561,13 @@ func migrate(ctx context.Context, d *sql.DB) error {
 	if current < 4 {
 		// Tables are created via CREATE TABLE IF NOT EXISTS above, but we ensure indexes exist
 		// No ALTER statements needed as these are new tables
+	}
+
+	// Migration for version 5: add remember column to refresh_tokens
+	if current < 5 && current > 0 {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE refresh_tokens ADD COLUMN remember INTEGER NOT NULL DEFAULT 1`); err != nil {
+			return err
+		}
 	}
 
 	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_versions(version, applied_at) VALUES (?,?)`, schemaVersion, time.Now().UTC()); err != nil {
@@ -1101,9 +1110,9 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
-	if _, err := db.ExecContext(ctx, `INSERT INTO refresh_tokens(id, user_id, family_id, version, token_hash, expires_at, created_at, revoked)
-		VALUES (?,?,?,?,?,?,?,0)`,
-		rtID, u.ID, family, version, string(rtHash), refreshExpires, now); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO refresh_tokens(id, user_id, family_id, version, token_hash, expires_at, created_at, revoked, remember)
+		VALUES (?,?,?,?,?,?,?,0,?)`,
+		rtID, u.ID, family, version, string(rtHash), refreshExpires, now, remember); err != nil {
 		serverError(c, "login: insert refresh", err)
 		return
 	}
@@ -1161,8 +1170,8 @@ func refreshHandler(c *gin.Context) {
 	version, _ := strconv.Atoi(parts[1])
 
 	var stored RefreshToken
-	err = db.QueryRowContext(ctx, `SELECT id, user_id, family_id, version, token_hash, expires_at, revoked FROM refresh_tokens WHERE id = ?`, rtID).
-		Scan(&stored.ID, &stored.UserID, &stored.FamilyID, &stored.Version, &stored.TokenHash, &stored.ExpiresAt, &stored.Revoked)
+	err = db.QueryRowContext(ctx, `SELECT id, user_id, family_id, version, token_hash, expires_at, revoked, remember FROM refresh_tokens WHERE id = ?`, rtID).
+		Scan(&stored.ID, &stored.UserID, &stored.FamilyID, &stored.Version, &stored.TokenHash, &stored.ExpiresAt, &stored.Revoked, &stored.Remember)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 		return
@@ -1208,9 +1217,9 @@ func refreshHandler(c *gin.Context) {
 		return
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO refresh_tokens(id, user_id, family_id, version, token_hash, expires_at, created_at, revoked)
-		VALUES (?,?,?,?,?,?,?,0)
-	`, newRtID, userID, family, newVersion, string(newHash), expires, now); err != nil {
+		INSERT INTO refresh_tokens(id, user_id, family_id, version, token_hash, expires_at, created_at, revoked, remember)
+		VALUES (?,?,?,?,?,?,?,0,?)
+	`, newRtID, userID, family, newVersion, string(newHash), expires, now, stored.Remember); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
 		return
@@ -1226,8 +1235,7 @@ func refreshHandler(c *gin.Context) {
 		return
 	}
 
-	remember := time.Until(expires) > 0
-	setRefreshCookie(c, newRefresh, expires, remember)
+	setRefreshCookie(c, newRefresh, expires, stored.Remember)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":         access,
