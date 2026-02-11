@@ -8,7 +8,7 @@ import { Footer } from "@/components/footer"
 import { GoogleAnalytics } from "@/components/google-analytics"
 import { NextIntlClientProvider } from 'next-intl'
 import { getMessages, setRequestLocale } from 'next-intl/server'
-import { routing } from '@/src/i18n/routing'
+import { routing, Locale } from '@/src/i18n/routing'
 import { notFound } from 'next/navigation'
 
 const manrope = Manrope({
@@ -77,7 +77,7 @@ export default async function LocaleLayout({ children, params }: Props) {
   const { locale } = await params
 
   // Validate that the incoming locale is valid
-  if (!routing.locales.includes(locale as any)) {
+  if (!routing.locales.includes(locale as Locale)) {
     notFound()
   }
 
