@@ -19,6 +19,11 @@ export function LanguageToggle({ className }: { className?: string }) {
     const pathname = usePathname()
 
     const handleLanguageChange = (newLocale: string) => {
+        // Store the locale preference in a cookie
+        // Note: HttpOnly flag is intentionally not set as this cookie needs to be
+        // accessible by client-side JavaScript for the language toggle functionality
+        const secureFlag = process.env.NODE_ENV === 'production' ? '; Secure' : ''
+        document.cookie = `NEXT_LOCALE=${encodeURIComponent(newLocale)}; path=/; max-age=31536000; SameSite=Lax${secureFlag}`
         router.replace(pathname, { locale: newLocale as "en" | "de" })
     }
 
