@@ -14,6 +14,8 @@ import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
 import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en"
 import { fetchWithAuth, clearTokens, getAccessToken, getStoredUsername, ensureAuth } from "@/lib/api"
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
+import { useTranslations } from "next-intl"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -40,6 +42,8 @@ const passwordValid = (p: string) => {
 export default function SettingsPage() {
     const router = useRouter()
     const { toast } = useToast()
+    const tSettings = useTranslations("settings")
+    const tCommon = useTranslations("common")
 
     const [username, setUsername] = useState("")
     const [email, setEmail] = useState("")
@@ -110,27 +114,27 @@ export default function SettingsPage() {
 
         // Local validation
         if (!usernameRe.test(username)) {
-            toast({ title: "Invalid username", description: "Use 3-30 alphanumeric characters.", variant: "destructive" })
+            toast({ title: tSettings("toasts.invalidUsername"), description: tSettings("toasts.invalidUsernameDescription"), variant: "destructive" })
             return
         }
         if (email && !emailRe.test(email)) {
-            toast({ title: "Invalid email", description: "Please enter a valid email address.", variant: "destructive" })
+            toast({ title: tSettings("toasts.invalidEmail"), description: tSettings("toasts.invalidEmailDescription"), variant: "destructive" })
             return
         }
         if (newPassword && !passwordValid(newPassword)) {
             toast({
-                title: "Weak password",
-                description: "At least 8 chars with a number and a special character.",
+                title: tSettings("toasts.weakPassword"),
+                description: tSettings("toasts.weakPasswordDescription"),
                 variant: "destructive",
             })
             return
         }
         if (newPassword && !passwordsMatch) {
-            toast({ title: "Error", description: "New passwords do not match.", variant: "destructive" })
+            toast({ title: tSettings("toasts.error"), description: tSettings("toasts.passwordsDoNotMatch"), variant: "destructive" })
             return
         }
         if (newPassword && !oldPassword) {
-            toast({ title: "Error", description: "Please enter your current password.", variant: "destructive" })
+            toast({ title: tSettings("toasts.error"), description: tSettings("toasts.enterCurrentPassword"), variant: "destructive" })
             return
         }
 
@@ -171,15 +175,15 @@ export default function SettingsPage() {
                     localStorage.setItem("username", data.username)
                     setUsername(data.username)
                 }
-                toast({ title: "Success", description: "Settings updated successfully." })
+                toast({ title: tSettings("toasts.success"), description: tSettings("toasts.settingsUpdated") })
                 setOldPassword("")
                 setNewPassword("")
                 setConfirmPassword("")
             } else {
-                toast({ title: "Error", description: data.error || "Failed to update settings", variant: "destructive" })
+                toast({ title: tSettings("toasts.error"), description: data.error || tSettings("toasts.failedToUpdate"), variant: "destructive" })
             }
         } catch (e) {
-            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+            toast({ title: tSettings("toasts.error"), description: tSettings("toasts.failedToConnect"), variant: "destructive" })
         } finally {
             setLoading(false)
         }
@@ -193,7 +197,7 @@ export default function SettingsPage() {
             return
         }
         if (!deletePassword) {
-            toast({ title: "Password required", description: "Enter your current password to delete your account.", variant: "destructive" })
+            toast({ title: tSettings("toasts.passwordRequired"), description: tSettings("toasts.passwordRequiredDescription"), variant: "destructive" })
             return
         }
         const confirmed = window.confirm(
@@ -214,62 +218,67 @@ export default function SettingsPage() {
                 return
             }
             if (res.ok) {
-                toast({ title: "Account deleted", description: "Your account and data have been removed." })
+                toast({ title: tSettings("toasts.accountDeleted"), description: tSettings("toasts.accountDeletedDescription") })
                 clearTokens()
                 router.replace("/login")
             } else {
-                toast({ title: "Error", description: data.error || "Could not delete account", variant: "destructive" })
+                toast({ title: tSettings("toasts.error"), description: data.error || tSettings("toasts.couldNotDelete"), variant: "destructive" })
             }
         } catch {
-            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+            toast({ title: tSettings("toasts.error"), description: tSettings("toasts.failedToConnect"), variant: "destructive" })
         } finally {
             setDeleteLoading(false)
         }
     }
 
     return (
-        <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <div className="min-h-screen bg-background p-4 flex items-center justify-center relative">
+            {/* Corner toggle (theme only, language is in footer) */}
+            <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+                <ThemeToggle />
+            </div>
+
             <Card className="w-full max-w-md">
                 <CardHeader>
                     <div className="flex items-center gap-2 mb-2">
                         <Button variant="ghost" size="icon" onClick={() => router.back()}>
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
-                        <CardTitle>Settings</CardTitle>
+                        <CardTitle>{tSettings("title")}</CardTitle>
                     </div>
-                    <CardDescription>Manage your account and preferences.</CardDescription>
+                    <CardDescription>{tSettings("description")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                     {/* General Settings */}
                     <div className="space-y-4">
                         <h3 className="text-sm font-medium flex items-center gap-2 text-primary">
-                            <Globe className="h-4 w-4" /> General
+                            <Globe className="h-4 w-4" /> {tSettings("general")}
                         </h3>
                         <div className="space-y-2">
-                            <Label htmlFor="username">Username</Label>
+                            <Label htmlFor="username">{tSettings("username")}</Label>
                             <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} />
-                            <p className="text-[11px] text-muted-foreground">3–30 chars, letters and numbers only.</p>
+                            <p className="text-[11px] text-muted-foreground">{tSettings("usernameHint")}</p>
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
+                            <Label htmlFor="email">{tSettings("email")}</Label>
                             <Input
                                 id="email"
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                placeholder="you@example.com"
+                                placeholder={tSettings("emailPlaceholder")}
                             />
                             <p className="text-[11px] text-muted-foreground">
-                                Changing email will require re-verification.
+                                {tSettings("emailHint")}
                             </p>
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Display Timezone</Label>
+                            <Label>{tSettings("displayTimezone")}</Label>
                             <Select value={preferredTimezone} onValueChange={setPreferredTimezone}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select timezone" />
+                                    <SelectValue placeholder={tSettings("selectTimezone")} />
                                 </SelectTrigger>
                                 <SelectContent className="h-64">
                                     {timezones.map((tz) => (
@@ -287,28 +296,28 @@ export default function SettingsPage() {
                     {/* Password Section */}
                     <div className="space-y-4">
                         <h3 className="text-sm font-medium flex items-center gap-2 text-primary">
-                            <ShieldCheck className="h-4 w-4" /> Security
+                            <ShieldCheck className="h-4 w-4" /> {tSettings("security")}
                         </h3>
 
                         <div className="space-y-2">
-                            <Label htmlFor="oldPass">Current Password</Label>
+                            <Label htmlFor="oldPass">{tSettings("currentPassword")}</Label>
                             <Input
                                 id="oldPass"
                                 type="password"
                                 value={oldPassword}
                                 onChange={(e) => setOldPassword(e.target.value)}
-                                placeholder="Required to change password"
+                                placeholder={tSettings("currentPasswordPlaceholder")}
                             />
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="newPass">New Password</Label>
+                            <Label htmlFor="newPass">{tSettings("newPassword")}</Label>
                             <Input
                                 id="newPass"
                                 type="password"
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
-                                placeholder="Leave blank to keep current password"
+                                placeholder={tSettings("newPasswordPlaceholder")}
                             />
 
                             {newPassword && (
@@ -320,10 +329,10 @@ export default function SettingsPage() {
                                         />
                                     </div>
                                     <p className="text-xs text-muted-foreground text-right">
-                                        Crack time: <span className="font-medium">{crackTime}</span>
+                                        {tSettings("crackTime")} <span className="font-medium">{crackTime}</span>
                                     </p>
                                     <p className="text-[11px] text-muted-foreground">
-                                        Must be ≥8 chars and include a number and a special character.
+                                        {tSettings("passwordRequirement")}
                                     </p>
                                 </div>
                             )}
@@ -331,7 +340,7 @@ export default function SettingsPage() {
 
                         <div className="space-y-2">
                             <Label htmlFor="confirmPass" className={!passwordsMatch && newPassword ? "text-destructive" : ""}>
-                                Confirm New Password
+                                {tSettings("confirmNewPassword")}
                             </Label>
                             <Input
                                 id="confirmPass"
@@ -345,7 +354,7 @@ export default function SettingsPage() {
 
                     <Button className="w-full gap-2 mt-4" onClick={handleSave} disabled={loading}>
                         <FloppyDisk className="h-4 w-4" />
-                        {loading ? "Saving..." : "Save Changes"}
+                        {loading ? tSettings("saving") : tSettings("saveChanges")}
                     </Button>
 
                     <hr className="border-muted" />
@@ -354,19 +363,19 @@ export default function SettingsPage() {
                     <div className="space-y-3">
                         <h3 className="text-sm font-medium text-destructive flex items-center gap-2">
                             <Trash className="h-4 w-4" />
-                            Danger zone
+                            {tSettings("dangerZone")}
                         </h3>
                         <p className="text-[12px] text-muted-foreground">
-                            Permanently delete your account and all associated data. This action cannot be undone.
+                            {tSettings("dangerZoneDescription")}
                         </p>
                         <div className="space-y-2">
-                            <Label htmlFor="deletePass">Confirm with password</Label>
+                            <Label htmlFor="deletePass">{tSettings("confirmWithPassword")}</Label>
                             <Input
                                 id="deletePass"
                                 type="password"
                                 value={deletePassword}
                                 onChange={(e) => setDeletePassword(e.target.value)}
-                                placeholder="Current password"
+                                placeholder={tSettings("currentPasswordPlaceholderDelete")}
                             />
                         </div>
                         <Button
@@ -376,7 +385,7 @@ export default function SettingsPage() {
                             disabled={deleteLoading}
                         >
                             <Trash className="h-4 w-4" />
-                            {deleteLoading ? "Deleting..." : "Delete my account"}
+                            {deleteLoading ? tSettings("deleting") : tSettings("deleteMyAccount")}
                         </Button>
                     </div>
 
