@@ -13,7 +13,7 @@ import * as zxcvbnCommonPackage from "@zxcvbn-ts/language-common"
 import * as zxcvbnEnPackage from "@zxcvbn-ts/language-en"
 import { setTokens } from "@/lib/api"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useTranslations } from "@/components/language-provider"
+import { useTranslations } from "next-intl"
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
@@ -44,8 +44,9 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false)
     const [tosAccepted, setTosAccepted] = useState(false)
     const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null)
-    const { t } = useTranslations()
-    const strengthLevels = useMemo(() => t("login.strengthLevels").split("|"), [t])
+    const tCommon = useTranslations("common")
+    const tLogin = useTranslations("login")
+    const strengthLevels = useMemo(() => tLogin("strengthLevels").split("|"), [tLogin])
 
     const router = useRouter()
     const { toast } = useToast()
@@ -83,24 +84,24 @@ export default function LoginPage() {
     const handleAuth = async () => {
         if (!username || !password) {
             toast({
-                title: t("login.toasts.missingFieldsTitle"),
-                description: t("login.toasts.missingFieldsDescription"),
+                title: tLogin("toasts.missingFieldsTitle"),
+                description: tLogin("toasts.missingFieldsDescription"),
                 variant: "destructive",
             })
             return
         }
         if (isRegister && !passwordLooksValid()) {
             toast({
-                title: t("login.toasts.passwordWeakTitle"),
-                description: t("login.toasts.passwordWeakDescription"),
+                title: tLogin("toasts.passwordWeakTitle"),
+                description: tLogin("toasts.passwordWeakDescription"),
                 variant: "destructive",
             })
             return
         }
         if (isRegister && !emailLooksValid()) {
             toast({
-                title: t("login.toasts.invalidEmailTitle"),
-                description: t("login.toasts.invalidEmailDescription"),
+                title: tLogin("toasts.invalidEmailTitle"),
+                description: tLogin("toasts.invalidEmailDescription"),
                 variant: "destructive",
             })
             return
@@ -108,16 +109,16 @@ export default function LoginPage() {
         if (isRegister) {
             if (!tosAccepted) {
                 toast({
-                    title: t("login.toasts.acceptTermsTitle"),
-                    description: t("login.toasts.acceptTermsDescription"),
+                    title: tLogin("toasts.acceptTermsTitle"),
+                    description: tLogin("toasts.acceptTermsDescription"),
                     variant: "destructive",
                 })
                 return
             }
             if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
                 toast({
-                    title: t("login.toasts.completeRecaptchaTitle"),
-                    description: t("login.toasts.completeRecaptchaDescription"),
+                    title: tLogin("toasts.completeRecaptchaTitle"),
+                    description: tLogin("toasts.completeRecaptchaDescription"),
                     variant: "destructive",
                 })
                 return
@@ -140,8 +141,8 @@ export default function LoginPage() {
                 const dataReg = await resReg.json().catch(() => ({}))
                 if (!resReg.ok) {
                     toast({
-                        title: t("login.toasts.errorTitle"),
-                        description: dataReg.error || t("login.toasts.loginFailed"),
+                        title: tLogin("toasts.errorTitle"),
+                        description: dataReg.error || tLogin("toasts.loginFailed"),
                         variant: "destructive",
                     })
                     return
@@ -167,20 +168,20 @@ export default function LoginPage() {
                     // ignore storage errors
                 }
                 toast({
-                    title: isRegister ? t("login.toasts.accountCreatedTitle") : t("login.toasts.successTitle"),
-                    description: isRegister ? t("login.toasts.accountCreatedDescription") : t("login.toasts.successDescription"),
+                    title: isRegister ? tLogin("toasts.accountCreatedTitle") : tLogin("toasts.successTitle"),
+                    description: isRegister ? tLogin("toasts.accountCreatedDescription") : tLogin("toasts.successDescription"),
                 })
                 router.push("/dashboard")
             } else {
                 toast({
-                    title: t("login.toasts.errorTitle"),
-                    description: dataLogin.error || t("login.toasts.loginFailed"),
+                    title: tLogin("toasts.errorTitle"),
+                    description: dataLogin.error || tLogin("toasts.loginFailed"),
                     variant: "destructive",
                 })
             }
         } catch (e) {
             console.error(e)
-            toast({ title: t("login.toasts.errorTitle"), description: t("login.toasts.unexpectedError"), variant: "destructive" })
+            toast({ title: tLogin("toasts.errorTitle"), description: tLogin("toasts.unexpectedError"), variant: "destructive" })
         } finally {
             setLoading(false)
         }
@@ -210,7 +211,7 @@ export default function LoginPage() {
         <div className="absolute top-4 left-4 flex items-center gap-2">
             <Link href="/">
                 <Button variant="outline" size="sm" className="font-semibold">
-                    {t("common.backToHome")}
+                    {tCommon("backToHome")}
                 </Button>
             </Link>
         </div>
@@ -221,12 +222,12 @@ export default function LoginPage() {
             <Card className="w-full max-w-md shadow-lg border-2">
                 <CardHeader>
                     <CardTitle className="text-2xl text-center">
-                        {isRegister ? t("login.signUpTitle") : t("login.signInTitle")}
+                        {isRegister ? tLogin("signUpTitle") : tLogin("signInTitle")}
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <Input
-                        placeholder={t("login.usernamePlaceholder")}
+                        placeholder={tLogin("usernamePlaceholder")}
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         className="h-11"
@@ -235,7 +236,7 @@ export default function LoginPage() {
 
                     {isRegister && (
                         <Input
-                            placeholder={t("login.emailPlaceholder")}
+                            placeholder={tLogin("emailPlaceholder")}
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -247,7 +248,7 @@ export default function LoginPage() {
                     <div className="space-y-2">
                         <Input
                             type="password"
-                            placeholder={t("login.passwordPlaceholder")}
+                            placeholder={tLogin("passwordPlaceholder")}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             className="h-11"
@@ -258,10 +259,10 @@ export default function LoginPage() {
                             <div className="space-y-1.5 pt-1">
                                 <div className="flex justify-between text-xs font-medium text-muted-foreground">
                                     <span>
-                                        {t("login.strengthLabel")} {strengthLevels[score] || ""}
+                                        {tLogin("strengthLabel")} {strengthLevels[score] || ""}
                                     </span>
                                     <span>
-                                        {t("login.crackTimeLabel")} {crackTime}
+                                        {tLogin("crackTimeLabel")} {crackTime}
                                     </span>
                                 </div>
                                 <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
@@ -270,7 +271,7 @@ export default function LoginPage() {
                                         style={{ width: `${(score + 1) * 20}%` }}
                                     />
                                 </div>
-                                <div className="text-[11px] text-muted-foreground">{t("login.passwordRequirement")}</div>
+                                <div className="text-[11px] text-muted-foreground">{tLogin("passwordRequirement")}</div>
                             </div>
                         )}
                     </div>
@@ -284,7 +285,7 @@ export default function LoginPage() {
                             onChange={(e) => setRememberMe(e.target.checked)}
                         />
                         <label htmlFor="remember" className="select-none cursor-pointer">
-                            {t("login.rememberMe")}
+                            {tLogin("rememberMe")}
                         </label>
                         {!isRegister && (
                             <button
@@ -292,7 +293,7 @@ export default function LoginPage() {
                                 type="button"
                                 onClick={() => router.push("/forgot")}
                             >
-                                {t("login.forgotPassword")}
+                                {tLogin("forgotPassword")}
                             </button>
                         )}
                     </div>
@@ -307,7 +308,7 @@ export default function LoginPage() {
                             onChange={(e) => setTosAccepted(e.target.checked)}
                         />
                         <label htmlFor="tos" className="select-none cursor-pointer">
-                                {t("login.acceptTos")}
+                                {tLogin("acceptTos")}
                             </label>
                         </div>
                     )}
@@ -324,7 +325,7 @@ export default function LoginPage() {
                     )}
 
                     <Button className="w-full h-11 text-base mt-2" onClick={handleAuth} disabled={loading}>
-                        {loading ? t("login.buttonWait") : isRegister ? t("login.buttonSignUp") : t("login.buttonLogin")}
+                        {loading ? tLogin("buttonWait") : isRegister ? tLogin("buttonSignUp") : tLogin("buttonLogin")}
                     </Button>
                     <PrivacyTermsNote />
 
@@ -340,7 +341,7 @@ export default function LoginPage() {
                                 setTosAccepted(false)
                             }}
                         >
-                            {isRegister ? t("login.toggleToLogin") : t("login.toggleToSignup")}
+                            {isRegister ? tLogin("toggleToLogin") : tLogin("toggleToSignup")}
                         </button>
                     </div>
                 </CardContent>

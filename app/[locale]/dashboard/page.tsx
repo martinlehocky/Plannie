@@ -24,7 +24,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { fetchWithAuth, clearTokens, logout, ensureAuth } from "@/lib/api"
-import { useTranslations } from "@/components/language-provider"
+import { useTranslations } from "next-intl"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 
@@ -84,7 +84,8 @@ export default function Dashboard() {
     const [hideVerificationBanner, setHideVerificationBanner] = useState(false)
     const [friendUsername, setFriendUsername] = useState("")
     const [activeTab, setActiveTab] = useState<"events" | "friends" | "invites">("events")
-    const { t } = useTranslations()
+    const tCommon = useTranslations("common")
+    const tDashboard = useTranslations("dashboard")
     const router = useRouter()
     const { toast } = useToast()
 
@@ -268,18 +269,18 @@ export default function Dashboard() {
             }
             if (res.ok) {
                 setEvents((prev) => prev.filter((ev) => ev.id !== eventId))
-                toast({ title: t("dashboard.toasts.eventDeletedTitle"), description: t("dashboard.toasts.eventDeletedDescription") })
+                toast({ title: tDashboard("toasts.eventDeletedTitle"), description: tDashboard("toasts.eventDeletedDescription") })
             } else {
                 const data = await res.json().catch(() => ({}))
                 toast({
-                    title: t("dashboard.toasts.errorTitle"),
-                    description: data.error || t("dashboard.toasts.deleteFailed"),
+                    title: tDashboard("toasts.errorTitle"),
+                    description: data.error || tDashboard("toasts.deleteFailed"),
                     variant: "destructive",
                 })
             }
         } catch (error) {
             console.error("Failed to delete", error)
-            toast({ title: t("dashboard.toasts.errorTitle"), description: t("dashboard.toasts.unreachable"), variant: "destructive" })
+            toast({ title: tDashboard("toasts.errorTitle"), description: tDashboard("toasts.unreachable"), variant: "destructive" })
         }
     }
 
@@ -294,18 +295,18 @@ export default function Dashboard() {
             }
             if (res.ok) {
                 setEvents((prev) => prev.filter((ev) => ev.id !== eventId))
-                toast({ title: t("dashboard.toasts.leftEventTitle"), description: t("dashboard.toasts.leftEventDescription") })
+                toast({ title: tDashboard("toasts.leftEventTitle"), description: tDashboard("toasts.leftEventDescription") })
             } else {
                 const data = await res.json().catch(() => ({}))
                 toast({
-                    title: t("dashboard.toasts.errorTitle"),
-                    description: data.error || t("dashboard.toasts.leaveFailed"),
+                    title: tDashboard("toasts.errorTitle"),
+                    description: data.error || tDashboard("toasts.leaveFailed"),
                     variant: "destructive",
                 })
             }
         } catch (error) {
             console.error("Failed to leave event", error)
-            toast({ title: t("dashboard.toasts.errorTitle"), description: t("dashboard.toasts.unreachable"), variant: "destructive" })
+            toast({ title: tDashboard("toasts.errorTitle"), description: tDashboard("toasts.unreachable"), variant: "destructive" })
         }
     }
 
@@ -458,8 +459,8 @@ export default function Dashboard() {
         const h = Math.floor(mins / 60)
         const m = mins % 60
         const parts: string[] = []
-        if (h > 0) parts.push(`${h} ${h === 1 ? t("dashboard.duration.hour") : t("dashboard.duration.hours")}`)
-        if (m > 0) parts.push(`${m} ${m === 1 ? t("dashboard.duration.minute") : t("dashboard.duration.minutes")}`)
+        if (h > 0) parts.push(`${h} ${h === 1 ? tDashboard("duration.hour") : tDashboard("duration.hours")}`)
+        if (m > 0) parts.push(`${m} ${m === 1 ? tDashboard("duration.minute") : tDashboard("duration.minutes")}`)
         return parts.join(" ")
     }
 
@@ -495,7 +496,7 @@ export default function Dashboard() {
         )
     }
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center">{t("dashboard.loading")}</div>
+    if (loading) return <div className="min-h-screen flex items-center justify-center">{tDashboard("loading")}</div>
 
     return (
         <div className="min-h-screen bg-background">
@@ -504,14 +505,14 @@ export default function Dashboard() {
                 <Button variant="ghost" size="sm" className="gap-2" asChild>
                     <Link href="/">
                         <ArrowLeft className="h-4 w-4" />
-                        <span className="hidden md:inline">{t("common.backToHome")}</span>
-                        <span className="md:hidden">{t("common.home")}</span>
+                        <span className="hidden md:inline">{tCommon("backToHome")}</span>
+                        <span className="md:hidden">{tCommon("home")}</span>
                     </Link>
                 </Button>
 
                 <div className="flex items-center gap-3">
                     <span className="text-sm text-muted-foreground hidden sm:inline">
-                        {t("common.signedInAs", { name: username || t("common.guest") })}
+                        {tCommon("signedInAs", { name: username || tCommon("guest") })}
                     </span>
 
                     <Link href="/settings">
@@ -522,7 +523,7 @@ export default function Dashboard() {
 
                     <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
                         <SignOut className="h-4 w-4" />
-                        <span className="hidden md:inline">{t("common.signOut")}</span>
+                        <span className="hidden md:inline">{tCommon("signOut")}</span>
                     </Button>
                     <ThemeToggle />
                 </div>
@@ -538,8 +539,8 @@ export default function Dashboard() {
                         <Button className="gap-2" asChild>
                             <Link href="/create">
                                 <Plus className="h-4 w-4" />
-                                <span className="hidden md:inline">{t("dashboard.newEvent")}</span>
-                                <span className="md:hidden">{t("dashboard.newShort")}</span>
+                                <span className="hidden md:inline">{tDashboard("newEvent")}</span>
+                                <span className="md:hidden">{tDashboard("newShort")}</span>
                             </Link>
                         </Button>
                     </div>
@@ -574,9 +575,9 @@ export default function Dashboard() {
                         <>
                             {events.length === 0 ? (
                                 <div className="text-center py-12 text-muted-foreground">
-                                    <p>{t("dashboard.empty")}</p>
+                                    <p>{tDashboard("empty")}</p>
                                     <Button variant="link" className="underline hover:text-primary" asChild>
-                                        <Link href="/create">{t("dashboard.emptyCta")}</Link>
+                                        <Link href="/create">{tDashboard("emptyCta")}</Link>
                                     </Button>
                                 </div>
                             ) : (
@@ -598,7 +599,7 @@ export default function Dashboard() {
                                                             size="icon"
                                                             className="text-destructive hover:bg-destructive/10"
                                                             onClick={(e) => handleLeaveEvent(e, event.id)}
-                                                            title={t("dashboard.leaveTitle")}
+                                                            title={tDashboard("leaveTitle")}
                                                         >
                                                             <SignOut className="h-4 w-4" />
                                                         </Button>
@@ -619,18 +620,18 @@ export default function Dashboard() {
                                                             </AlertDialogTrigger>
                                                             <AlertDialogContent onClick={(e) => e.stopPropagation()}>
                                                                 <AlertDialogHeader>
-                                                                    <AlertDialogTitle>{t("dashboard.deleteConfirmTitle")}</AlertDialogTitle>
+                                                                    <AlertDialogTitle>{tDashboard("deleteConfirmTitle")}</AlertDialogTitle>
                                                                     <AlertDialogDescription>
-                                                                        {t("dashboard.deleteConfirmDescription", { name: event.name })}
+                                                                        {tDashboard("deleteConfirmDescription", { name: event.name })}
                                                                     </AlertDialogDescription>
                                                                 </AlertDialogHeader>
                                                                 <AlertDialogFooter>
-                                                                    <AlertDialogCancel>{t("dashboard.cancel")}</AlertDialogCancel>
+                                                                    <AlertDialogCancel>{tDashboard("cancel")}</AlertDialogCancel>
                                                                     <AlertDialogAction
                                                                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                                                         onClick={(e) => handleDelete(e, event.id)}
                                                                     >
-                                                                        {t("dashboard.delete")}
+                                                                        {tDashboard("delete")}
                                                                     </AlertDialogAction>
                                                                 </AlertDialogFooter>
                                                             </AlertDialogContent>
