@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar"
 import { Clock } from "phosphor-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useTranslations } from "@/components/language-provider"
+import { useTranslations } from "next-intl"
 import type { DateRange } from "react-day-picker"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
@@ -21,7 +21,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 export default function Home() {
   const router = useRouter()
   const { toast } = useToast()
-  const { t } = useTranslations()
+  const tCommon = useTranslations("common")
+  const tCreate = useTranslations("create")
 
   const [eventName, setEventName] = useState("")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
@@ -42,14 +43,14 @@ export default function Home() {
   const handleLogout = async () => {
     await logout()
     setIsLoggedIn(false)
-    toast({ title: t("create.toasts.signedOutTitle"), description: t("create.toasts.signedOutDescription") })
+    toast({ title: tCreate("toasts.signedOutTitle"), description: tCreate("toasts.signedOutDescription") })
   }
 
   const handleCreateEvent = async () => {
     if (!isLoggedIn) {
       toast({
-        title: t("create.toasts.signInRequiredTitle"),
-        description: t("create.toasts.signInRequiredDescription"),
+        title: tCreate("toasts.signInRequiredTitle"),
+        description: tCreate("toasts.signInRequiredDescription"),
         variant: "destructive",
       })
       router.push("/login")
@@ -62,8 +63,8 @@ export default function Home() {
       finalDuration = Number.parseInt(customDuration)
       if (isNaN(finalDuration) || finalDuration <= 0) {
         toast({
-          title: t("create.toasts.invalidDurationTitle"),
-          description: t("create.toasts.invalidDurationDescription"),
+          title: tCreate("toasts.invalidDurationTitle"),
+          description: tCreate("toasts.invalidDurationDescription"),
           variant: "destructive",
         })
         return
@@ -109,8 +110,8 @@ export default function Home() {
     } catch (error) {
       console.error("Error creating event:", error)
       toast({
-        title: t("create.toasts.errorTitle"),
-        description: t("create.toasts.errorDescription"),
+        title: tCreate("toasts.errorTitle"),
+        description: tCreate("toasts.errorDescription"),
         variant: "destructive",
       })
     } finally {
@@ -137,7 +138,7 @@ export default function Home() {
               className="md:h-10 md:px-4 md:py-2 text-xs md:text-sm"
               onClick={() => router.push("/dashboard")}
             >
-              {t("common.myDashboard")}
+              {tCommon("myDashboard")}
             </Button>
             <Button
               variant="ghost"
@@ -145,7 +146,7 @@ export default function Home() {
               className="md:h-10 md:px-4 md:py-2 text-xs md:text-sm"
               onClick={handleLogout}
             >
-              {t("common.signOut")}
+              {tCommon("signOut")}
             </Button>
           </div>
         ) : (
@@ -155,7 +156,7 @@ export default function Home() {
             className="md:h-10 md:px-4 md:py-2 text-xs md:text-sm"
             onClick={() => router.push("/login")}
           >
-            {t("common.signInRegister")}
+            {tCommon("signInRegister")}
           </Button>
         )}
         <ThemeToggle />
@@ -164,23 +165,23 @@ export default function Home() {
       <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 w-full">
         <div className="w-full max-w-4xl grid gap-8">
           <div className="text-center space-y-2">
-            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight lg:text-7xl">{t("create.heading")}</h1>
-            <p className="text-xl text-muted-foreground md:text-2xl">{t("create.subheading")}</p>
+            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight lg:text-7xl">{tCreate("heading")}</h1>
+            <p className="text-xl text-muted-foreground md:text-2xl">{tCreate("subheading")}</p>
           </div>
 
           <Card className="border-2 shadow-lg">
             <CardHeader>
-              <CardTitle>{t("create.cardTitle")}</CardTitle>
-              <CardDescription>{t("create.cardDescription")}</CardDescription>
+              <CardTitle>{tCreate("cardTitle")}</CardTitle>
+              <CardDescription>{tCreate("cardDescription")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="eventName">{t("create.eventNameLabel")}</Label>
+                    <Label htmlFor="eventName">{tCreate("eventNameLabel")}</Label>
                     <Input
                       id="eventName"
-                      placeholder={t("create.eventNamePlaceholder")}
+                      placeholder={tCreate("eventNamePlaceholder")}
                       value={eventName}
                       onChange={(e) => setEventName(e.target.value)}
                       className="text-base md:text-lg h-11 md:h-12"
@@ -189,35 +190,35 @@ export default function Home() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>{t("create.durationLabel")}</Label>
+                      <Label>{tCreate("durationLabel")}</Label>
                       <Select value={duration} onValueChange={setDuration}>
                         <SelectTrigger className="h-11 md:h-12">
                           <Clock className="mr-2 h-4 w-4" />
-                          <SelectValue placeholder={t("create.durationPlaceholder")} />
+                          <SelectValue placeholder={tCreate("durationPlaceholder")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="15">{t("create.durationOptions.minutes15")}</SelectItem>
-                          <SelectItem value="30">{t("create.durationOptions.minutes30")}</SelectItem>
-                          <SelectItem value="60">{t("create.durationOptions.minutes60")}</SelectItem>
-                          <SelectItem value="90">{t("create.durationOptions.minutes90")}</SelectItem>
-                          <SelectItem value="120">{t("create.durationOptions.minutes120")}</SelectItem>
-                          <SelectItem value="custom">{t("create.durationOptions.custom")}</SelectItem>
+                          <SelectItem value="15">{tCreate("durationOptions.minutes15")}</SelectItem>
+                          <SelectItem value="30">{tCreate("durationOptions.minutes30")}</SelectItem>
+                          <SelectItem value="60">{tCreate("durationOptions.minutes60")}</SelectItem>
+                          <SelectItem value="90">{tCreate("durationOptions.minutes90")}</SelectItem>
+                          <SelectItem value="120">{tCreate("durationOptions.minutes120")}</SelectItem>
+                          <SelectItem value="custom">{tCreate("durationOptions.custom")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div className="space-y-2">
-                      <Label>{t("create.timezoneLabel")}</Label>
+                      <Label>{tCreate("timezoneLabel")}</Label>
                       <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} className="h-11 md:h-12" disabled />
                     </div>
                   </div>
 
                   {duration === "custom" && (
                     <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                      <Label>{t("create.customDurationLabel")}</Label>
+                      <Label>{tCreate("customDurationLabel")}</Label>
                       <Input
                         type="number"
-                        placeholder={t("create.customDurationPlaceholder")}
+                        placeholder={tCreate("customDurationPlaceholder")}
                         value={customDuration}
                         onChange={(e) => setCustomDuration(e.target.value)}
                         className="h-11 md:h-12"
@@ -227,7 +228,7 @@ export default function Home() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{t("create.dateRangeLabel")}</Label>
+                  <Label>{tCreate("dateRangeLabel")}</Label>
                   <div className="border rounded-md p-4 flex justify-center bg-card">
                     <Calendar
                       mode="range"
@@ -239,7 +240,7 @@ export default function Home() {
                   </div>
                   {dateRange?.from && dateRange?.to && (
                     <p className="text-sm text-muted-foreground text-center">
-                      {t("create.dateRangeSelected", {
+                      {tCreate("dateRangeSelected", {
                         from: format(dateRange.from, "MMM dd, yyyy"),
                         to: format(dateRange.to, "MMM dd, yyyy"),
                       })}
@@ -249,7 +250,7 @@ export default function Home() {
               </div>
 
               <Button size="lg" className="w-full text-lg h-12 md:h-14" onClick={handleCreateEvent} disabled={isButtonDisabled}>
-                {isSubmitting ? t("create.buttonCreating") : isLoggedIn ? t("create.buttonCreate") : t("create.buttonSignIn")}
+                {isSubmitting ? tCreate("buttonCreating") : isLoggedIn ? tCreate("buttonCreate") : tCreate("buttonSignIn")}
               </Button>
             </CardContent>
           </Card>

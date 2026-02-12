@@ -3,7 +3,6 @@ import type { Metadata } from "next"
 import { Manrope } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/toaster"
-import { LanguageProvider } from "@/components/language-provider"
 import { Footer } from "@/components/footer"
 import { GoogleAnalytics } from "@/components/google-analytics"
 import { NextIntlClientProvider } from 'next-intl'
@@ -104,13 +103,11 @@ export default async function LocaleLayout({ children, params }: Props) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
         <NextIntlClientProvider messages={messages}>
-          <LanguageProvider>
-            {children}
-            <Footer />
-            <Toaster />
-            <Analytics />
-            <GoogleAnalytics />
-          </LanguageProvider>
+          {children}
+          <Footer />
+          <Toaster />
+          <Analytics />
+          <GoogleAnalytics />
         </NextIntlClientProvider>
       </body>
     </html>

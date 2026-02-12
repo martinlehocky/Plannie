@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation"
 import { ArrowLeft } from "phosphor-react"
 import { Button } from "@/components/ui/button"
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
-import { useTranslations } from "@/components/language-provider"
+import { useTranslations } from "next-intl"
 import { LEGAL_ENTITY } from "@/lib/legal"
 
 export default function TermsPage() {
-  const { t } = useTranslations()
+  const tCommon = useTranslations("common")
+  const tLegal = useTranslations("legal")
   const router = useRouter()
 
   return (
@@ -16,11 +17,11 @@ export default function TermsPage() {
       <div className="container mx-auto max-w-3xl space-y-6">
         <Button variant="ghost" size="sm" className="gap-2 -ml-2 mb-2" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4" />
-          <span>{t("common.back")}</span>
+          <span>{tCommon("back")}</span>
         </Button>
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold">{t("legal.termsTitle")}</h1>
-          <p className="text-muted-foreground">{t("legal.termsPlaceholder")}</p>
+          <h1 className="text-3xl font-bold">{tLegal("termsTitle")}</h1>
+          <p className="text-muted-foreground">{tLegal("termsPlaceholder")}</p>
         </div>
 
         <div className="rounded-lg border bg-card p-6 space-y-4">

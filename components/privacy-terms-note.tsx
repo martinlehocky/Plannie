@@ -2,24 +2,24 @@
 
 import Link from "next/link"
 
-import { useTranslations } from "@/components/language-provider"
+import { useTranslations } from "next-intl"
 
 interface PrivacyTermsNoteProps {
   className?: string
 }
 
 export function PrivacyTermsNote({ className = "" }: PrivacyTermsNoteProps) {
-  const { t } = useTranslations()
+  const t = useTranslations("common")
 
   return (
     <p className={["text-xs text-muted-foreground text-center", className].filter(Boolean).join(" ")}>
-      {t("common.privacyTermsNotice")}{" "}
+      {t("privacyTermsNotice")}{" "}
       <Link href="/privacy" className="text-primary underline underline-offset-4">
-        {t("common.privacy")}
+        {t("privacy")}
       </Link>{" "}
-      {t("common.and")}{" "}
+      {t("and")}{" "}
       <Link href="/terms" className="text-primary underline underline-offset-4">
-        {t("common.terms")}
+        {t("terms")}
       </Link>
       .
     </p>

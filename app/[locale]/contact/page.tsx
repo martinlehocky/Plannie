@@ -6,7 +6,7 @@ import Link from "next/link"
 import { ArrowLeft } from "phosphor-react"
 import { Button } from "@/components/ui/button"
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
-import { useTranslations } from "@/components/language-provider"
+import { useTranslations } from "next-intl"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LEGAL_ENTITY } from "@/lib/legal"
 
@@ -15,7 +15,8 @@ const TALLY_IFRAME_SRC =
 const TALLY_SCRIPT_SRC = "https://tally.so/widgets/embed.js"
 
 export default function ContactPage() {
-  const { t } = useTranslations()
+  const tCommon = useTranslations("common")
+  const tContact = useTranslations("contact")
   const router = useRouter()
 
   useEffect(() => {
@@ -57,11 +58,11 @@ export default function ContactPage() {
       <div className="container mx-auto max-w-2xl space-y-6">
         <Button variant="ghost" size="sm" className="gap-2 -ml-2 mb-2" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4" />
-          <span>{t("common.back")}</span>
+          <span>{tCommon("back")}</span>
         </Button>
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold">{t("contact.title")}</h1>
-          <p className="text-muted-foreground">{t("contact.subtitle")}</p>
+          <h1 className="text-3xl font-bold">{tContact("title")}</h1>
+          <p className="text-muted-foreground">{tContact("subtitle")}</p>
         </div>
 
         <div className="rounded-lg border bg-card p-6 space-y-4">
@@ -82,7 +83,7 @@ export default function ContactPage() {
         </div>
 
         <div className="rounded-lg border bg-card p-6 space-y-3">
-          <p className="font-semibold">{t("contact.directContact")}</p>
+          <p className="font-semibold">{tContact("directContact")}</p>
           <div className="space-y-1 text-muted-foreground">
             <p className="font-medium text-foreground">{LEGAL_ENTITY.name}</p>
             <Link href={`mailto:${LEGAL_ENTITY.email}`} className="text-primary underline underline-offset-4">

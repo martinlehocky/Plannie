@@ -9,22 +9,28 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { availableLanguages, useTranslations } from "./language-provider"
+import { useLocale, useTranslations } from "next-intl"
+import { useRouter, usePathname } from "@/src/i18n/navigation"
 
 export function LanguageToggle({ className }: { className?: string }) {
-    const { language, setLanguage, t } = useTranslations()
+    const t = useTranslations("common")
+    const locale = useLocale()
+    const router = useRouter()
+    const pathname = usePathname()
+
+    const handleLanguageChange = (newLocale: string) => {
+        router.replace(pathname, { locale: newLocale as "en" | "de" })
+    }
 
     const selectedLabel =
-        language === "en" ? t("common.english") :
-            language === "de" ? t("common.german") :
-                language
+        locale === "en" ? t("english") :
+            locale === "de" ? t("german") :
+                locale
 
     return (
         <Select
-            value={language}
-            onValueChange={(val) =>
-                setLanguage(val as (typeof availableLanguages)[number])
-            }
+            value={locale}
+            onValueChange={handleLanguageChange}
         >
             <SelectTrigger className={cn("w-[150px] justify-between", className)}>
                 <div className="flex items-center gap-2">
@@ -34,8 +40,8 @@ export function LanguageToggle({ className }: { className?: string }) {
             </SelectTrigger>
 
             <SelectContent>
-                <SelectItem value="en">{t("common.english")}</SelectItem>
-                <SelectItem value="de">{t("common.german")}</SelectItem>
+                <SelectItem value="en">{t("english")}</SelectItem>
+                <SelectItem value="de">{t("german")}</SelectItem>
             </SelectContent>
         </Select>
     )

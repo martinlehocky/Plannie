@@ -5,11 +5,12 @@ import Link from "next/link"
 import { ArrowLeft } from "phosphor-react"
 import { Button } from "@/components/ui/button"
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
-import { useTranslations } from "@/components/language-provider"
+import { useTranslations } from "next-intl"
 import { LEGAL_ENTITY } from "@/lib/legal"
 
 export default function ImprintPage() {
-  const { t } = useTranslations()
+  const tCommon = useTranslations("common")
+  const tLegal = useTranslations("legal")
   const router = useRouter()
 
   return (
@@ -17,21 +18,21 @@ export default function ImprintPage() {
       <div className="container mx-auto max-w-3xl space-y-6">
         <Button variant="ghost" size="sm" className="gap-2 -ml-2 mb-2" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4" />
-          <span>{t("common.back")}</span>
+          <span>{tCommon("back")}</span>
         </Button>
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold">{t("legal.imprintTitle")}</h1>
-          <p className="text-muted-foreground">{t("legal.imprintPlaceholder")}</p>
+          <h1 className="text-3xl font-bold">{tLegal("imprintTitle")}</h1>
+          <p className="text-muted-foreground">{tLegal("imprintPlaceholder")}</p>
         </div>
 
         <div className="rounded-lg border bg-card p-6 space-y-4">
           <div>
-            <p className="text-sm uppercase tracking-wide text-muted-foreground">{t("legal.imprintNameLabel")}</p>
+            <p className="text-sm uppercase tracking-wide text-muted-foreground">{tLegal("imprintNameLabel")}</p>
             <p className="text-base font-medium">{LEGAL_ENTITY.name}</p>
           </div>
 
           <div>
-            <p className="text-sm uppercase tracking-wide text-muted-foreground">{t("legal.imprintContactLabel")}</p>
+            <p className="text-sm uppercase tracking-wide text-muted-foreground">{tLegal("imprintContactLabel")}</p>
             <Link href={`mailto:${LEGAL_ENTITY.email}`} className="text-primary underline underline-offset-4">
               {LEGAL_ENTITY.email}
             </Link>

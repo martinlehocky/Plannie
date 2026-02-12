@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar, Clock, Users, ShareNetwork, Sparkle, Lightning, X, Barbell, Globe, Heart, BookOpen, List as Menu } from "phosphor-react"
 import { logout, getStoredUsername, ensureAuth } from "@/lib/api"
-import { useTranslations } from "@/components/language-provider"
+import { useTranslations } from "next-intl"
 import { useInView } from "@/hooks/use-in-view"
 import { cn } from "@/lib/utils"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -45,7 +45,8 @@ export default function LandingPage() {
     const [isLoggedIn, setIsLoggedIn] = useState(false)
     const [username, setUsername] = useState("")
     const [isMenuOpen, setIsMenuOpen] = useState(false)
-    const { t } = useTranslations()
+    const tCommon = useTranslations("common")
+    const tLanding = useTranslations("landing")
 
     // Animation mount check
     const [mounted, setMounted] = useState(false)
@@ -95,46 +96,46 @@ export default function LandingPage() {
                             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center overflow-hidden">
                                 <Image
                                     src="/app-icon.png"
-                                    alt={t("common.appName")}
+                                    alt={tCommon("appName")}
                                     width={32}
                                     height={32}
                                     className="w-8 h-8"
                                     priority
                                 />
                             </div>
-                            <span className="font-bold text-xl">{t("common.appName")}</span>
+                            <span className="font-bold text-xl">{tCommon("appName")}</span>
                         </div>
 
                         {/* Desktop actions */}
                         <div className="hidden sm:flex items-center gap-3">
                             {isLoggedIn && (
                                 <span className="text-sm text-muted-foreground">
-                  {t("common.signedInAs", { name: username || t("common.guest") })}
+                  {tCommon("signedInAs", { name: username || tCommon("guest") })}
                 </span>
                             )}
 
                             {isLoggedIn && (
                                 <Link href="/dashboard">
                                     <Button variant="outline" size="sm" className="font-semibold">
-                                        {t("common.myDashboard")}
+                                        {tCommon("myDashboard")}
                                     </Button>
                                 </Link>
                             )}
 
                             <Link href="/create">
                                 <Button size="sm" className="font-semibold">
-                                    {t("common.createEvent")}
+                                    {tCommon("createEvent")}
                                 </Button>
                             </Link>
 
                             {isLoggedIn ? (
                                 <Button variant="ghost" size="sm" className="font-semibold" onClick={handleSignOut}>
-                                    {t("common.signOut")}
+                                    {tCommon("signOut")}
                                 </Button>
                             ) : (
                                 <Link href="/login">
                                     <Button variant="ghost" size="sm" className="font-semibold">
-                                        {t("common.signInRegister")}
+                                        {tCommon("signInRegister")}
                                     </Button>
                                 </Link>
                             )}
@@ -162,30 +163,30 @@ export default function LandingPage() {
                                 <div className="rounded-xl border bg-background/95 backdrop-blur-lg shadow-lg p-4 space-y-3">
                                     {isLoggedIn && (
                                         <p className="text-sm text-muted-foreground">
-                                            {t("common.signedInAs", { name: username || t("common.guest") })}
+                                            {tCommon("signedInAs", { name: username || tCommon("guest") })}
                                         </p>
                                     )}
 
                                     {isLoggedIn && (
                                         <Link href="/dashboard" onClick={() => setIsMenuOpen(false)}>
                                             <Button variant="outline" className="w-full justify-center">
-                                                {t("common.myDashboard")}
+                                                {tCommon("myDashboard")}
                                             </Button>
                                         </Link>
                                     )}
 
                                     <Link href="/create" onClick={() => setIsMenuOpen(false)}>
-                                        <Button className="w-full justify-center">{t("common.createEvent")}</Button>
+                                        <Button className="w-full justify-center">{tCommon("createEvent")}</Button>
                                     </Link>
 
                                     {isLoggedIn ? (
                                         <Button variant="ghost" className="w-full justify-center" onClick={handleSignOut}>
-                                            {t("common.signOut")}
+                                            {tCommon("signOut")}
                                         </Button>
                                     ) : (
                                         <Link href="/login" onClick={() => setIsMenuOpen(false)}>
                                             <Button variant="ghost" className="w-full justify-center">
-                                                {t("common.signInRegister")}
+                                                {tCommon("signInRegister")}
                                             </Button>
                                         </Link>
                                     )}
@@ -213,9 +214,9 @@ export default function LandingPage() {
                                 }`}
                             >
                                 <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight text-balance">
-                                    {t("landing.title")}
+                                    {tLanding("title")}
                                     <br />
-                                    <span className="text-primary">{t("landing.highlight")}</span>
+                                    <span className="text-primary">{tLanding("highlight")}</span>
                                 </h1>
                             </div>
 
@@ -224,7 +225,7 @@ export default function LandingPage() {
                                     mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
                                 }`}
                             >
-                                {t("landing.description")}
+                                {tLanding("description")}
                             </p>
 
                             <div
@@ -235,15 +236,15 @@ export default function LandingPage() {
                                 <Link href="/create">
                                     <Button size="lg" className="h-14 px-8 text-lg font-semibold">
                                         <Calendar className="w-5 h-5 mr-2" />
-                                        {t("landing.primaryCta")}
+                                        {tLanding("primaryCta")}
                                     </Button>
                                 </Link>
                                 <Button variant="outline" size="lg" className="h-14 px-8 text-lg font-semibold bg-transparent" asChild>
-                                    <a href="#features-section">{t("landing.secondaryCta")}</a>
+                                    <a href="#features-section">{tLanding("secondaryCta")}</a>
                                 </Button>
                             </div>
 
-                            <p className="text-sm text-muted-foreground">{t("landing.heroNote")}</p>
+                            <p className="text-sm text-muted-foreground">{tLanding("heroNote")}</p>
                         </div>
                     </div>
                 </section>
@@ -256,8 +257,8 @@ export default function LandingPage() {
                     <div className="py-16 px-4">
                         <div className="container mx-auto max-w-6xl">
                             <div className="text-left mb-12">
-                                <h2 className="text-3xl md:text-5xl font-bold mb-4">{t("landing.whyTitle")}</h2>
-                                <p className="text-muted-foreground text-lg max-w-2xl">{t("landing.whySubtitle")}</p>
+                                <h2 className="text-3xl md:text-5xl font-bold mb-4">{tLanding("whyTitle")}</h2>
+                                <p className="text-muted-foreground text-lg max-w-2xl">{tLanding("whySubtitle")}</p>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -266,8 +267,8 @@ export default function LandingPage() {
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                             <Lightning className="w-6 h-6 text-primary" />
                                         </div>
-                                        <CardTitle className="text-xl">{t("landing.features.lightning.title")}</CardTitle>
-                                        <CardDescription className="text-base">{t("landing.features.lightning.description")}</CardDescription>
+                                        <CardTitle className="text-xl">{tLanding("features.lightning.title")}</CardTitle>
+                                        <CardDescription className="text-base">{tLanding("features.lightning.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
 
@@ -276,8 +277,8 @@ export default function LandingPage() {
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                             <Users className="w-6 h-6 text-primary" />
                                         </div>
-                                        <CardTitle className="text-xl">{t("landing.features.heatmap.title")}</CardTitle>
-                                        <CardDescription className="text-base">{t("landing.features.heatmap.description")}</CardDescription>
+                                        <CardTitle className="text-xl">{tLanding("features.heatmap.title")}</CardTitle>
+                                        <CardDescription className="text-base">{tLanding("features.heatmap.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
 
@@ -286,8 +287,8 @@ export default function LandingPage() {
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                             <ShareNetwork className="w-6 h-6 text-primary" />
                                         </div>
-                                        <CardTitle className="text-xl">{t("landing.features.sharing.title")}</CardTitle>
-                                        <CardDescription className="text-base">{t("landing.features.sharing.description")}</CardDescription>
+                                        <CardTitle className="text-xl">{tLanding("features.sharing.title")}</CardTitle>
+                                        <CardDescription className="text-base">{tLanding("features.sharing.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
 
@@ -296,8 +297,8 @@ export default function LandingPage() {
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                             <Calendar className="w-6 h-6 text-primary" />
                                         </div>
-                                        <CardTitle className="text-xl">{t("landing.features.smartDates.title")}</CardTitle>
-                                        <CardDescription className="text-base">{t("landing.features.smartDates.description")}</CardDescription>
+                                        <CardTitle className="text-xl">{tLanding("features.smartDates.title")}</CardTitle>
+                                        <CardDescription className="text-base">{tLanding("features.smartDates.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
 
@@ -306,8 +307,8 @@ export default function LandingPage() {
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                             <Clock className="w-6 h-6 text-primary" />
                                         </div>
-                                        <CardTitle className="text-xl">{t("landing.features.timezones.title")}</CardTitle>
-                                        <CardDescription className="text-base">{t("landing.features.timezones.description")}</CardDescription>
+                                        <CardTitle className="text-xl">{tLanding("features.timezones.title")}</CardTitle>
+                                        <CardDescription className="text-base">{tLanding("features.timezones.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
 
@@ -316,8 +317,8 @@ export default function LandingPage() {
                                         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                                             <Sparkle className="w-6 h-6 text-primary" />
                                         </div>
-                                        <CardTitle className="text-xl">{t("landing.features.design.title")}</CardTitle>
-                                        <CardDescription className="text-base">{t("landing.features.design.description")}</CardDescription>
+                                        <CardTitle className="text-xl">{tLanding("features.design.title")}</CardTitle>
+                                        <CardDescription className="text-base">{tLanding("features.design.description")}</CardDescription>
                                     </CardHeader>
                                 </Card>
                             </div>
@@ -331,7 +332,7 @@ export default function LandingPage() {
                         <div className="container mx-auto max-w-6xl px-4 mb-8">
                             <FadeIn>
                                 <h2 className="text-3xl md:text-5xl font-bold text-left">
-                                    {t("landing.useCases.title")}
+                                    {tLanding("useCases.title")}
                                 </h2>
                             </FadeIn>
                         </div>
@@ -348,50 +349,50 @@ export default function LandingPage() {
                                     {[
                                         {
                                             icon: Users,
-                                            title: t("landing.useCases.team.title"),
-                                            description: t("landing.useCases.team.description"),
+                                            title: tLanding("useCases.team.title"),
+                                            description: tLanding("useCases.team.description"),
                                             image: "/images/use-cases/team.jpg",
                                         },
                                         {
                                             icon: Sparkle,
-                                            title: t("landing.useCases.social.title"),
-                                            description: t("landing.useCases.social.description"),
+                                            title: tLanding("useCases.social.title"),
+                                            description: tLanding("useCases.social.description"),
                                             image: "/images/use-cases/social.jpg",
                                         },
                                         {
                                             icon: Lightning,
-                                            title: t("landing.useCases.study.title"),
-                                            description: t("landing.useCases.study.description"),
+                                            title: tLanding("useCases.study.title"),
+                                            description: tLanding("useCases.study.description"),
                                             image: "/images/use-cases/study.jpg",
                                         },
                                         {
                                             icon: Calendar,
-                                            title: t("landing.useCases.clients.title"),
-                                            description: t("landing.useCases.clients.description"),
+                                            title: tLanding("useCases.clients.title"),
+                                            description: tLanding("useCases.clients.description"),
                                             image: "/images/use-cases/clients.jpg",
                                         },
                                         {
                                             icon: Barbell,
-                                            title: t("landing.useCases.fitness.title"),
-                                            description: t("landing.useCases.fitness.description"),
+                                            title: tLanding("useCases.fitness.title"),
+                                            description: tLanding("useCases.fitness.description"),
                                             image: "/images/use-cases/fitness.jpg",
                                         },
                                         {
                                             icon: Globe,
-                                            title: t("landing.useCases.remote.title"),
-                                            description: t("landing.useCases.remote.description"),
+                                            title: tLanding("useCases.remote.title"),
+                                            description: tLanding("useCases.remote.description"),
                                             image: "/images/use-cases/remote.jpg",
                                         },
                                         {
                                             icon: Heart,
-                                            title: t("landing.useCases.community.title"),
-                                            description: t("landing.useCases.community.description"),
+                                            title: tLanding("useCases.community.title"),
+                                            description: tLanding("useCases.community.description"),
                                             image: "/images/use-cases/community.jpg",
                                         },
                                         {
                                             icon: BookOpen,
-                                            title: t("landing.useCases.workshops.title"),
-                                            description: t("landing.useCases.workshops.description"),
+                                            title: tLanding("useCases.workshops.title"),
+                                            description: tLanding("useCases.workshops.description"),
                                             image: "/images/use-cases/workshops.jpg",
                                         },
                                     ].map((useCase, index) => (
@@ -427,50 +428,50 @@ export default function LandingPage() {
                                     {[
                                         {
                                             icon: Users,
-                                            title: t("landing.useCases.team.title"),
-                                            description: t("landing.useCases.team.description"),
+                                            title: tLanding("useCases.team.title"),
+                                            description: tLanding("useCases.team.description"),
                                             image: "/images/use-cases/team.jpg",
                                         },
                                         {
                                             icon: Sparkle,
-                                            title: t("landing.useCases.social.title"),
-                                            description: t("landing.useCases.social.description"),
+                                            title: tLanding("useCases.social.title"),
+                                            description: tLanding("useCases.social.description"),
                                             image: "/images/use-cases/social.jpg",
                                         },
                                         {
                                             icon: Lightning,
-                                            title: t("landing.useCases.study.title"),
-                                            description: t("landing.useCases.study.description"),
+                                            title: tLanding("useCases.study.title"),
+                                            description: tLanding("useCases.study.description"),
                                             image: "/images/use-cases/study.jpg",
                                         },
                                         {
                                             icon: Calendar,
-                                            title: t("landing.useCases.clients.title"),
-                                            description: t("landing.useCases.clients.description"),
+                                            title: tLanding("useCases.clients.title"),
+                                            description: tLanding("useCases.clients.description"),
                                             image: "/images/use-cases/clients.jpg",
                                         },
                                         {
                                             icon: Barbell,
-                                            title: t("landing.useCases.fitness.title"),
-                                            description: t("landing.useCases.fitness.description"),
+                                            title: tLanding("useCases.fitness.title"),
+                                            description: tLanding("useCases.fitness.description"),
                                             image: "/images/use-cases/fitness.jpg",
                                         },
                                         {
                                             icon: Globe,
-                                            title: t("landing.useCases.remote.title"),
-                                            description: t("landing.useCases.remote.description"),
+                                            title: tLanding("useCases.remote.title"),
+                                            description: tLanding("useCases.remote.description"),
                                             image: "/images/use-cases/remote.jpg",
                                         },
                                         {
                                             icon: Heart,
-                                            title: t("landing.useCases.community.title"),
-                                            description: t("landing.useCases.community.description"),
+                                            title: tLanding("useCases.community.title"),
+                                            description: tLanding("useCases.community.description"),
                                             image: "/images/use-cases/community.jpg",
                                         },
                                         {
                                             icon: BookOpen,
-                                            title: t("landing.useCases.workshops.title"),
-                                            description: t("landing.useCases.workshops.description"),
+                                            title: tLanding("useCases.workshops.title"),
+                                            description: tLanding("useCases.workshops.description"),
                                             image: "/images/use-cases/workshops.jpg",
                                         },
                                     ].map((useCase, index) => (
@@ -512,8 +513,8 @@ export default function LandingPage() {
                     <div className="py-16 px-4 flex flex-col justify-center items-center min-h-screen-safe">
                         <div className="container mx-auto max-w-4xl">
                             <div className="text-left mb-12">
-                                <h2 className="text-3xl md:text-5xl font-bold mb-4">{t("landing.howTitle")}</h2>
-                                <p className="text-muted-foreground text-lg">{t("landing.howSubtitle")}</p>
+                                <h2 className="text-3xl md:text-5xl font-bold mb-4">{tLanding("howTitle")}</h2>
+                                <p className="text-muted-foreground text-lg">{tLanding("howSubtitle")}</p>
                             </div>
                             <div className="space-y-8">
                                 {[1, 2, 3, 4].map((step, idx) => (
@@ -524,10 +525,10 @@ export default function LandingPage() {
                                             </div>
                                             <div>
                                                 <h3 className="text-xl font-semibold mb-2">
-                                                    {t(`landing.steps.${["create", "share", "select", "pick"][idx]}.title`)}
+                                                    {tLanding(`steps.${["create", "share", "select", "pick"][idx]}.title`)}
                                                 </h3>
                                                 <p className="text-muted-foreground">
-                                                    {t(`landing.steps.${["create", "share", "select", "pick"][idx]}.description`)}
+                                                    {tLanding(`steps.${["create", "share", "select", "pick"][idx]}.description`)}
                                                 </p>
                                             </div>
                                         </div>
@@ -543,12 +544,12 @@ export default function LandingPage() {
                     <div className="container mx-auto max-w-4xl text-center flex flex-col justify-center items-center min-h-screen-safe">
                         <Card className="border-0 shadow-2xl bg-linear-to-br from-primary/10 to-primary/5 backdrop-blur-xl ring-1 ring-primary/20">
                             <CardContent className="pt-12 pb-12 space-y-6">
-                                <h2 className="text-3xl md:text-5xl font-bold text-balance">{t("landing.ctaTitle")}</h2>
-                                <p className="text-lg text-muted-foreground max-w-2xl mx-auto">{t("landing.ctaDescription")}</p>
+                                <h2 className="text-3xl md:text-5xl font-bold text-balance">{tLanding("ctaTitle")}</h2>
+                                <p className="text-lg text-muted-foreground max-w-2xl mx-auto">{tLanding("ctaDescription")}</p>
                                 <Link href="/create">
                                     <Button size="lg" className="h-14 px-10 text-lg font-semibold">
                                         <Calendar className="w-5 h-5 mr-2" />
-                                        {t("landing.ctaButton")}
+                                        {tLanding("ctaButton")}
                                     </Button>
                                 </Link>
                             </CardContent>

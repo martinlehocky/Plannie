@@ -1,5 +1,357 @@
 {
-  "HomePage": {
-    "title": "Hello World"
+  "common": {
+    "languageLabel": "Language",
+    "english": "English",
+    "german": "Deutsch",
+    "appName": "Plannie",
+    "signedInAs": "Signed in as {name}",
+    "myDashboard": "My Dashboard",
+    "createEvent": "Create Event",
+    "signOut": "Sign Out",
+    "signInRegister": "Sign In / Register",
+    "backToHome": "Back to Home",
+    "back": "Back",
+    "home": "Home",
+    "guest": "Guest",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "imprint": "Imprint",
+    "contact": "Contact",
+    "and": "and",
+    "privacyTermsNotice": "By continuing, you agree to our"
+  },
+  "landing": {
+    "badge": "Modern Group Scheduling",
+    "title": "Find the Perfect Time",
+    "highlight": "Everyone Can Meet",
+    "description": "Coordinate meetings effortlessly. Select your availability, share a link, and watch as the best times emerge through beautiful heatmap visualization.",
+    "primaryCta": "Create Free Event",
+    "secondaryCta": "Learn More",
+    "heroNote": "Free forever • Works on any device",
+    "whyTitle": "Why Choose Plannie?",
+    "whySubtitle": "Built for teams, clubs, friends, and anyone who needs to coordinate schedules without the hassle.",
+    "features": {
+      "lightning": {
+        "title": "Lightning Fast",
+        "description": "Create events in seconds. No complicated setup or lengthy forms. Just pick dates and share."
+      },
+      "heatmap": {
+        "title": "Visual Heatmap",
+        "description": "See group availability at a glance with our intuitive heatmap. Darker colors mean more people available."
+      },
+      "sharing": {
+        "title": "Easy Sharing",
+        "description": "Share a simple link with your group. Works on any device, anywhere."
+      },
+      "smartDates": {
+        "title": "Smart Dates",
+        "description": "Automatically expands to show all dates you need. Add more dates dynamically as needed."
+      },
+      "timezones": {
+        "title": "Time Zones",
+        "description": "Automatically handles time zones. Everyone sees times in their local time zone."
+      },
+      "design": {
+        "title": "Modern Design",
+        "description": "Beautiful, mobile-responsive interface with dark mode support. Looks great everywhere."
+      }
+    },
+    "howTitle": "How It Works",
+    "howSubtitle": "Getting started takes less than a minute",
+    "steps": {
+      "create": {
+        "title": "Create Your Event",
+        "description": "Give your event a name, select the date range, and set the meeting duration. That's it!"
+      },
+      "share": {
+        "title": "Share the Link",
+        "description": "Copy the event link and share it with your group via email, Slack, WhatsApp, or any messaging app."
+      },
+      "select": {
+        "title": "Select Availability",
+        "description": "Each person clicks and drags to mark when they're available. Changes are saved automatically."
+      },
+      "pick": {
+        "title": "Find Best Time",
+        "description": "Watch the heatmap update in real-time. Darker times mean more people available. Pick the best time!"
+      }
+    },
+    "ctaTitle": "Ready to Schedule Your Next Meeting?",
+    "ctaDescription": "Join thousands of teams coordinating schedules with Plannie. No credit card required.",
+    "ctaButton": "Create Your First Event",
+    "footer": "Made with ❤️ for better scheduling",
+    "useCases": {
+      "title": "Use Cases",
+      "subtitle": "See how teams around the world use Plannie",
+      "team": {
+        "title": "Team Meetings",
+        "description": "Coordinate standups, sprints, and team syncs with ease."
+      },
+      "social": {
+        "title": "Social Events",
+        "description": "Plan parties, dinners, and gatherings with friends."
+      },
+      "study": {
+        "title": "Study Groups",
+        "description": "Find the perfect time for group study sessions."
+      },
+      "clients": {
+        "title": "Client Meetings",
+        "description": "Schedule calls and meetings with clients across time zones."
+      },
+      "fitness": {
+        "title": "Fitness Classes",
+        "description": "Organize workout sessions, yoga classes, and group fitness."
+      },
+      "remote": {
+        "title": "Remote Teams",
+        "description": "Sync distributed teams across multiple time zones effortlessly."
+      },
+      "community": {
+        "title": "Community Events",
+        "description": "Plan meetups, workshops, and community gatherings."
+      },
+      "workshops": {
+        "title": "Workshops",
+        "description": "Coordinate training sessions and educational workshops."
+      }
+    }
+  },
+  "create": {
+    "heading": "Find the Perfect Time",
+    "subheading": "Modern group scheduling made simple",
+    "cardTitle": "Create New Event",
+    "cardDescription": "Set up your event details and select available dates",
+    "eventNameLabel": "Event Name",
+    "eventNamePlaceholder": "e.g., Team Standup, Birthday Party",
+    "durationLabel": "Duration",
+    "durationPlaceholder": "Duration",
+    "durationOptions": {
+      "minutes15": "15 minutes",
+      "minutes30": "30 minutes",
+      "minutes60": "1 hour",
+      "minutes90": "1.5 hours",
+      "minutes120": "2 hours",
+      "custom": "Custom"
+    },
+    "timezoneLabel": "Time Zone",
+    "customDurationLabel": "Custom Duration (minutes)",
+    "customDurationPlaceholder": "e.g. 45",
+    "dateRangeLabel": "Select Date Range",
+    "dateRangeSelected": "Selected: {from} - {to}",
+    "buttonCreating": "Creating...",
+    "buttonCreate": "Create Event",
+    "buttonSignIn": "Sign in to create",
+    "toasts": {
+      "signedOutTitle": "Signed Out",
+      "signedOutDescription": "See you next time!",
+      "signInRequiredTitle": "Sign in required",
+      "signInRequiredDescription": "Please sign in to create an event.",
+      "invalidDurationTitle": "Invalid Duration",
+      "invalidDurationDescription": "Please enter a valid number of minutes.",
+      "errorTitle": "Error",
+      "errorDescription": "Could not create event. Ensure you are signed in and the backend is running."
+    }
+  },
+  "login": {
+    "backHome": "← Back to Home",
+    "signInTitle": "Sign In",
+    "signUpTitle": "Create Account",
+    "usernamePlaceholder": "Username",
+    "emailPlaceholder": "Email",
+    "passwordPlaceholder": "Password",
+    "strengthLabel": "Strength:",
+    "crackTimeLabel": "Crack time:",
+    "strengthLevels": "Risk|Weak|Fair|Good|Strong",
+    "passwordRequirement": "Must be ≥8 chars and include a number and a special character.",
+    "rememberMe": "Remember me",
+    "forgotPassword": "Forgot password?",
+    "acceptTos": "I accept the Terms of Service",
+    "buttonWait": "Please wait...",
+    "buttonSignUp": "Sign Up",
+    "buttonLogin": "Login",
+    "toggleToLogin": "Already have an account? Login",
+    "toggleToSignup": "Need an account? Sign Up",
+    "toasts": {
+      "missingFieldsTitle": "Missing fields",
+      "missingFieldsDescription": "Username and password are required.",
+      "passwordWeakTitle": "Password too weak",
+      "passwordWeakDescription": "Use at least 8 characters with a number and a special character.",
+      "invalidEmailTitle": "Invalid email",
+      "invalidEmailDescription": "Please enter a valid email address.",
+      "acceptTermsTitle": "Accept Terms",
+      "acceptTermsDescription": "Please accept the Terms of Service.",
+      "completeRecaptchaTitle": "Complete reCAPTCHA",
+      "completeRecaptchaDescription": "Please complete the verification.",
+      "accountCreatedTitle": "Account created",
+      "accountCreatedDescription": "You are now signed in.",
+      "successTitle": "Success",
+      "successDescription": "Welcome back!",
+      "errorTitle": "Error",
+      "unexpectedError": "Unexpected error",
+      "loginFailed": "Login failed"
+    }
+  },
+  "dashboard": {
+    "loading": "Loading dashboard...",
+    "myEvents": "My Events",
+    "newEvent": "New Event",
+    "newShort": "New",
+    "empty": "No events found.",
+    "emptyCta": "Create your first event",
+    "deleteConfirmTitle": "Delete Event?",
+    "deleteConfirmDescription": "This action cannot be undone. This will permanently delete \"{name}\" for all participants.",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "leaveTitle": "Leave event",
+    "duration": {
+      "hour": "hr",
+      "hours": "hrs",
+      "minute": "min",
+      "minutes": "mins"
+    },
+    "toasts": {
+      "eventDeletedTitle": "Event deleted",
+      "eventDeletedDescription": "The event has been permanently removed.",
+      "leftEventTitle": "Left event",
+      "leftEventDescription": "You have left the event.",
+      "errorTitle": "Error",
+      "deleteFailed": "Could not delete event.",
+      "leaveFailed": "Could not leave event.",
+      "unreachable": "Could not reach the server."
+    }
+  },
+  "legal": {
+    "privacyTitle": "Privacy Policy",
+    "privacyPlaceholder": "How Plannie handles your data, including controller details, collected data, and your rights.",
+    "termsTitle": "Terms of Service",
+    "termsPlaceholder": "Terms that govern your use of Plannie.",
+    "imprintTitle": "Imprint / Legal Notice",
+    "imprintPlaceholder": "Provider identification and contact for Plannie.",
+    "imprintNameLabel": "Legal name",
+    "imprintAddressLabel": "Address",
+    "imprintContactLabel": "Contact"
+  },
+  "contact": {
+    "title": "Contact",
+    "subtitle": "Reach out with questions or feedback using the form or via email.",
+    "notice": "Contact form not active yet — please reach out via email.",
+    "emailFallback": "You can also email",
+    "nameLabel": "Name",
+    "namePlaceholder": "Your name",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "messageLabel": "Message",
+    "messagePlaceholder": "How can we help?",
+    "submitLabel": "Contact form coming soon",
+    "directContact": "Direct contact"
+  },
+  "eventPage": {
+    "availabilitySaved": "Availability Saved",
+    "updatedSuccessfully": "Updated successfully.",
+    "error": "Error",
+    "saveFailed": "Could not save",
+    "unexpectedError": "Unexpected error",
+    "emailNotVerifiedTitle": "Email not verified",
+    "emailNotVerifiedBody": "Please verify your email to keep your account. Unverified accounts are removed after 24 hours.",
+    "expiresPrefix": "Expires:",
+    "sendVerificationAgain": "Send verification email again",
+    "verificationSent": "Verification email sent",
+    "checkInbox": "Check your inbox for the new verification link.",
+    "resendFailed": "Could not resend verification email",
+    "failedConnect": "Failed to connect.",
+    "loading": "Loading...",
+    "notFound": "Event not found",
+    "unsavedChanges": "Unsaved changes",
+    "renameEvent": "Rename event",
+    "renameDescription": "Update the event title for everyone. This change is instant.",
+    "eventNamePlaceholder": "Event name",
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "save": "Save",
+    "revertUnsaved": "Revert unsaved",
+    "dashboard": "Dashboard",
+    "home": "Home",
+    "leave": "Leave",
+    "linkCopied": "Link Copied!",
+    "deleteEventTitle": "Delete Event?",
+    "deleteEventDescription": "This action cannot be undone.",
+    "delete": "Delete",
+    "eventRenamed": "Event renamed",
+    "errorUpdating": "Error updating",
+    "disabledTimesReset": "Disabled times reset",
+    "joined": "Joined!",
+    "youCanMark": "You can now mark your availability.",
+    "joinFailed": "Join failed",
+    "leftEvent": "Left Event",
+    "eventDeleted": "Event Deleted",
+    "inviteFailed": "Invite failed",
+    "removedParticipant": "Removed participant",
+    "removeFailed": "Could not remove participant",
+    "invited": "Invited!",
+    "signInTitle": "Please Sign In",
+    "signInSubtitle": "You must be logged in to participate.",
+    "signInNow": "Sign In Now",
+    "best": "Best",
+    "participantsCount": "Participants",
+    "bestTimes": "Best Times",
+    "noOverlaps": "No overlaps yet",
+    "viewAllBestTimes": "View all best times",
+    "hideAllBestTimes": "Hide all best times",
+    "participantsTitle": "Participants",
+    "host": "Host",
+    "removeParticipant": "Remove participant",
+    "you": "You",
+    "resumeDraftTitle": "Resume your draft?",
+    "resumeDraftDescription": "We found unsaved changes from last time. You can resume them or discard and load the saved version.",
+    "discard": "Discard",
+    "resume": "Resume draft",
+    "usernamePlaceholder": "Username",
+    "invite": "Invite",
+    "signInRegister": "Sign In / Register",
+    "joinEvent": "Join Event",
+    "viewBestTimes": "View best times",
+    "bestTimesChartTitle": "Best times overview",
+    "bestTimesChartDescription": "Top time slots with the highest availability.",
+    "legendMost": "More available",
+    "legendLeast": "Less available",
+    "close": "Close",
+    "hour": "hr",
+    "hours": "hrs",
+    "minute": "min",
+    "minutes": "mins"
+  },
+  "availability": {
+    "title": "Mark Your Availability",
+    "timesShownIn": "Times shown in {tz}",
+    "hostDisable": "(Host disable mode enabled)",
+    "prevDay": "Previous day",
+    "nextDay": "Next day",
+    "noDays": "No days",
+    "reset": "Reset",
+    "resetDisabled": "Reset Disabled",
+    "resetting": "Resetting...",
+    "exitDisable": "Exit disable",
+    "disableTimes": "Disable times",
+    "paintMode": "Paint Mode",
+    "scrollMode": "Scroll Mode",
+    "saveChanges": "Save Changes",
+    "save": "Save",
+    "scroll": "Scroll",
+    "paint": "Paint",
+    "yourAvailability": "Your Availability",
+    "includesYou": "Includes You",
+    "unavailable": "Unavailable",
+    "person": "person",
+    "people": "people",
+    "disabledByHost": "Disabled by host",
+    "time": "Time",
+    "disabledLabel": "Disabled",
+    "youLabel": "You",
+    "youAreAvailable": "You're available",
+    "notSelected": "Not selected",
+    "availableCount": "{count} available",
+    "more": "more",
+    "blockedByHost": "Blocked by event host"
   }
 }
