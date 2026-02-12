@@ -51,7 +51,7 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen bg-background px-4 py-16 relative">
       {/* Corner toggle (theme only, language is in footer) */}
-      <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+      <div className="fixed top-4 right-6 z-50 flex items-center gap-2">
         <ThemeToggle />
       </div>
 

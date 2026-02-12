@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 import { useTranslations } from "next-intl"
 import { LEGAL_ENTITY } from "@/lib/legal"
+import { ThemeToggle } from "@/components/theme-toggle"
+
 
 export default function TermsPage() {
   const tCommon = useTranslations("common")
@@ -13,7 +15,10 @@ export default function TermsPage() {
   const router = useRouter()
 
   return (
-    <div className="min-h-screen bg-background px-4 py-16">
+    <div className="min-h-screen bg-background px-4 py-16 relative">
+      <div className="fixed top-4 right-6 z-50 flex items-center gap-2">
+        <ThemeToggle />
+      </div>
       <div className="container mx-auto max-w-3xl space-y-6">
         <Button variant="ghost" size="sm" className="gap-2 -ml-2 mb-2" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4" />

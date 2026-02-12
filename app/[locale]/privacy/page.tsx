@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { PrivacyTermsNote } from "@/components/privacy-terms-note"
 import { useTranslations } from "next-intl"
 import { LEGAL_ENTITY } from "@/lib/legal"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function PrivacyPage() {
   const tCommon = useTranslations("common")
@@ -15,7 +16,7 @@ export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-background px-4 py-16 relative">
       {/* Corner toggle (theme only, language is in footer) */}
-      <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+      <div className="fixed top-4 right-6 z-50 flex items-center gap-2">
         <ThemeToggle />
       </div>
 
