@@ -19,6 +19,8 @@ export function LanguageToggle({ className }: { className?: string }) {
     const pathname = usePathname()
 
     const handleLanguageChange = (newLocale: string) => {
+        // Store the locale preference in a cookie
+        document.cookie = `NEXT_LOCALE=${newLocale}; path=/; max-age=31536000; SameSite=Lax`
         router.replace(pathname, { locale: newLocale as "en" | "de" })
     }
 
