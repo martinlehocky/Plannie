@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Image from "next/image"
-import Link from "next/link"
+import { Link } from "@/src/i18n/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar, Clock, Users, ShareNetwork, Sparkle, Lightning, X, Barbell, Globe, Heart, BookOpen, List as Menu } from "phosphor-react"
