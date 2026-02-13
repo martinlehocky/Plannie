@@ -41,11 +41,17 @@ export const getStoredUsername = () =>
         ? (sessionStorage.getItem("username") || localStorage.getItem("username") || undefined)
         : undefined
 
-// Refresh flow using HttpOnly refresh cookie
-export const refreshAccessToken = async () => {
+// Mutex to prevent concurrent refresh token requests
+// When a refresh is in progress, subsequent calls will wait for the same promise
+let refreshPromise: Promise<string> | null = null
+
+// Internal function that performs the actual refresh - should only be called through refreshAccessToken
+const doRefreshAccessToken = async (): Promise<string> => {
     const hadSession = typeof window !== "undefined" && !!sessionStorage.getItem("token")
     const hadLocal = typeof window !== "undefined" && !!localStorage.getItem("token")
-    authDebug("refreshAccessToken:start", { hadSession, hadLocal })
+    const hadUsername = typeof window !== "undefined" && !!(sessionStorage.getItem("username") || localStorage.getItem("username"))
+    authDebug("refreshAccessToken:start", { hadSession, hadLocal, hadUsername })
+    
     const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/refresh`,
         {
@@ -67,21 +73,54 @@ export const refreshAccessToken = async () => {
     }
 
     const data = await res.json()
+    authDebug("refreshAccessToken:data", { hasToken: !!data.token, hasUsername: !!data.username })
+    
     if (data.token) {
         try {
-            if (hadSession && !hadLocal) {
+            // Determine storage type based on what was previously used
+            // If sessionStorage had token but localStorage didn't, use sessionStorage (session-only mode)
+            // Otherwise default to localStorage (remember me mode)
+            const useSessionStorage = hadSession && !hadLocal
+            
+            if (useSessionStorage) {
                 sessionStorage.setItem("token", data.token)
+                if (data.username) {
+                    sessionStorage.setItem("username", data.username)
+                    authDebug("refreshAccessToken:stored-username", { storage: "sessionStorage", username: data.username })
+                }
                 authDebug("refreshAccessToken:stored-token", { storage: "sessionStorage" })
             } else {
                 localStorage.setItem("token", data.token)
+                if (data.username) {
+                    localStorage.setItem("username", data.username)
+                    authDebug("refreshAccessToken:stored-username", { storage: "localStorage", username: data.username })
+                }
                 authDebug("refreshAccessToken:stored-token", { storage: "localStorage" })
             }
         } catch {
-            // ignore
+            // ignore storage errors
         }
         return data.token as string
     }
     throw new Error("invalid refresh response")
+}
+
+// Refresh flow using HttpOnly refresh cookie
+// This function serializes concurrent refresh requests to prevent race conditions
+export const refreshAccessToken = async (): Promise<string> => {
+    // If a refresh is already in progress, wait for its result
+    if (refreshPromise) {
+        authDebug("refreshAccessToken:waiting-for-existing-refresh")
+        return refreshPromise
+    }
+
+    // Create a new refresh promise
+    refreshPromise = doRefreshAccessToken().finally(() => {
+        // Clear the promise when done (success or failure)
+        refreshPromise = null
+    })
+
+    return refreshPromise
 }
 
 export const ensureAuth = async () => {
