@@ -86,14 +86,14 @@ const doRefreshAccessToken = async (): Promise<string> => {
                 sessionStorage.setItem("token", data.token)
                 if (data.username) {
                     sessionStorage.setItem("username", data.username)
-                    authDebug("refreshAccessToken:stored-username", { storage: "sessionStorage", username: data.username })
+                    authDebug("refreshAccessToken:stored-username", { storage: "sessionStorage" })
                 }
                 authDebug("refreshAccessToken:stored-token", { storage: "sessionStorage" })
             } else {
                 localStorage.setItem("token", data.token)
                 if (data.username) {
                     localStorage.setItem("username", data.username)
-                    authDebug("refreshAccessToken:stored-username", { storage: "localStorage", username: data.username })
+                    authDebug("refreshAccessToken:stored-username", { storage: "localStorage" })
                 }
                 authDebug("refreshAccessToken:stored-token", { storage: "localStorage" })
             }
