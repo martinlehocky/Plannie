@@ -1,4 +1,8 @@
 // Simple token helpers
+const authDebug = (...args: unknown[]) => {
+    if (typeof window !== "undefined") console.debug("[auth-debug]", ...args)
+}
+
 export const setTokens = (access: string, remember = true) => {
     if (typeof window === "undefined") return
     try {
@@ -39,6 +43,9 @@ export const getStoredUsername = () =>
 
 // Refresh flow using HttpOnly refresh cookie
 export const refreshAccessToken = async () => {
+    const hadSession = typeof window !== "undefined" && !!sessionStorage.getItem("token")
+    const hadLocal = typeof window !== "undefined" && !!localStorage.getItem("token")
+    authDebug("refreshAccessToken:start", { hadSession, hadLocal })
     const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/refresh`,
         {
@@ -48,21 +55,26 @@ export const refreshAccessToken = async () => {
             body: "{}", // cookie carries the refresh token
         }
     )
+    authDebug("refreshAccessToken:response", { status: res.status, ok: res.ok })
 
     if (res.status === 400 || res.status === 401) {
+        authDebug("refreshAccessToken:auth-failed", { status: res.status })
         throw new Error("refresh_auth")
     }
-    if (!res.ok) throw new Error("refresh failed")
+    if (!res.ok) {
+        authDebug("refreshAccessToken:server-failed", { status: res.status })
+        throw new Error("refresh failed")
+    }
 
     const data = await res.json()
     if (data.token) {
         try {
-            const hadSession = typeof window !== "undefined" && !!sessionStorage.getItem("token")
-            const hadLocal = typeof window !== "undefined" && !!localStorage.getItem("token")
             if (hadSession && !hadLocal) {
                 sessionStorage.setItem("token", data.token)
+                authDebug("refreshAccessToken:stored-token", { storage: "sessionStorage" })
             } else {
                 localStorage.setItem("token", data.token)
+                authDebug("refreshAccessToken:stored-token", { storage: "localStorage" })
             }
         } catch {
             // ignore
@@ -95,10 +107,13 @@ export const fetchWithAuth = async (input: RequestInfo | URL, init: RequestInit 
     const current = getAccessToken()
     let res = await doFetch(current)
     if (res.status === 401) {
+        authDebug("fetchWithAuth:initial-401", { url: String(input) })
         try {
             const newToken = await refreshAccessToken()
             res = await doFetch(newToken)
+            authDebug("fetchWithAuth:retry-result", { url: String(input), status: res.status })
         } catch {
+            authDebug("fetchWithAuth:refresh-failed", { url: String(input) })
             clearTokens()
             return new Response(null, { status: 401 })
         }
