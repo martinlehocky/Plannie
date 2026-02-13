@@ -1196,24 +1196,24 @@ func refreshHandler(c *gin.Context) {
 	newVersion := version + 1
 	newRefresh, newRtID, err := signRefreshToken(userID, family, newVersion, expires)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		serverError(c, "refresh: sign new refresh", err)
 		return
 	}
 	newHash, err := hashToken(newRefresh)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		serverError(c, "refresh: hash new refresh", err)
 		return
 	}
 	now := time.Now().UTC()
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		serverError(c, "refresh: begin tx", err)
 		return
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET revoked = 1 WHERE id = ?`, rtID); err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		serverError(c, "refresh: revoke old token", err)
 		return
 	}
 	if _, err := tx.ExecContext(ctx, `
@@ -1221,17 +1221,20 @@ func refreshHandler(c *gin.Context) {
 		VALUES (?,?,?,?,?,?,?,0,?)
 	`, newRtID, userID, family, newVersion, string(newHash), expires, now, stored.Remember); err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: refresh_tokens.id") {
+			log.Printf("refresh: concurrent rotation detected for old=%s new=%s", rtID, newRtID)
+		}
+		serverError(c, "refresh: insert new token", err)
 		return
 	}
 	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		serverError(c, "refresh: commit tx", err)
 		return
 	}
 
 	access, err := signAccessToken(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server error"})
+		serverError(c, "refresh: sign access", err)
 		return
 	}
 
