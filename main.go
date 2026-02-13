@@ -1238,11 +1238,19 @@ func refreshHandler(c *gin.Context) {
 		return
 	}
 
+	// Fetch username for the response so frontend can restore session state
+	var username string
+	if err := db.QueryRowContext(ctx, `SELECT username FROM users WHERE id = ?`, userID).Scan(&username); err != nil {
+		log.Printf("refresh: failed to fetch username for user %s: %v", userID, err)
+		// Continue without username - not a critical error
+	}
+
 	setRefreshCookie(c, newRefresh, expires, stored.Remember)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":         access,
 		"refresh_token": newRefresh,
+		"username":      username,
 	})
 }
 
