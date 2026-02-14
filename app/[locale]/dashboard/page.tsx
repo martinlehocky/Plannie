@@ -320,12 +320,12 @@ export default function Dashboard() {
                 return
             }
             if (res.ok) {
-                toast({ title: "Verification email sent", description: "Check your inbox for the new verification link." })
+                toast({ title: tDashboard("toasts.verificationSentTitle"), description: tDashboard("toasts.verificationSentBody") })
             } else {
-                toast({ title: "Error", description: data.error || "Could not resend verification email", variant: "destructive" })
+                toast({ title: tDashboard("toasts.errorTitle"), description: data.error || tDashboard("toasts.resendFailed"), variant: "destructive" })
             }
         } catch {
-            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+            toast({ title: tDashboard("toasts.errorTitle"), description: tDashboard("toasts.failedToConnect"), variant: "destructive" })
         }
     }
 
@@ -343,13 +343,13 @@ export default function Dashboard() {
                 return
             }
             if (res.ok) {
-                toast({ title: "Friend request sent", description: `Sent friend request to ${friendUsername}` })
+                toast({ title: tDashboard("toasts.friendRequestSentTitle"), description: tDashboard("toasts.friendRequestSentBody", { name: friendUsername }) })
                 setFriendUsername("")
             } else {
-                toast({ title: "Error", description: data.error || "Failed to send friend request", variant: "destructive" })
+                toast({ title: tDashboard("toasts.errorTitle"), description: data.error || tDashboard("toasts.friendRequestFailed"), variant: "destructive" })
             }
         } catch {
-            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+            toast({ title: tDashboard("toasts.errorTitle"), description: tDashboard("toasts.failedToConnect"), variant: "destructive" })
         }
     }
 
@@ -362,15 +362,15 @@ export default function Dashboard() {
                 return
             }
             if (res.ok) {
-                toast({ title: "Friend request accepted" })
+                toast({ title: tDashboard("toasts.friendRequestAccepted") })
                 fetchFriendRequests()
                 fetchFriends()
             } else {
                 const data = await res.json().catch(() => ({}))
-                toast({ title: "Error", description: data.error || "Failed to accept request", variant: "destructive" })
+                toast({ title: tDashboard("toasts.errorTitle"), description: data.error || tDashboard("toasts.friendRequestAcceptFailed"), variant: "destructive" })
             }
         } catch {
-            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+            toast({ title: tDashboard("toasts.errorTitle"), description: tDashboard("toasts.failedToConnect"), variant: "destructive" })
         }
     }
 
@@ -383,14 +383,14 @@ export default function Dashboard() {
                 return
             }
             if (res.ok) {
-                toast({ title: "Friend request declined" })
+                toast({ title: tDashboard("toasts.friendRequestDeclined") })
                 fetchFriendRequests()
             } else {
                 const data = await res.json().catch(() => ({}))
-                toast({ title: "Error", description: data.error || "Failed to decline request", variant: "destructive" })
+                toast({ title: tDashboard("toasts.errorTitle"), description: data.error || tDashboard("toasts.friendRequestDeclineFailed"), variant: "destructive" })
             }
         } catch {
-            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+            toast({ title: tDashboard("toasts.errorTitle"), description: tDashboard("toasts.failedToConnect"), variant: "destructive" })
         }
     }
 
@@ -403,14 +403,14 @@ export default function Dashboard() {
                 return
             }
             if (res.ok) {
-                toast({ title: "Friend removed" })
+                toast({ title: tDashboard("toasts.friendRemoved") })
                 fetchFriends()
             } else {
                 const data = await res.json().catch(() => ({}))
-                toast({ title: "Error", description: data.error || "Failed to remove friend", variant: "destructive" })
+                toast({ title: tDashboard("toasts.errorTitle"), description: data.error || tDashboard("toasts.friendRemoveFailed"), variant: "destructive" })
             }
         } catch {
-            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+            toast({ title: tDashboard("toasts.errorTitle"), description: tDashboard("toasts.failedToConnect"), variant: "destructive" })
         }
     }
 
@@ -423,14 +423,14 @@ export default function Dashboard() {
                 return
             }
             if (res.ok) {
-                toast({ title: "Event invite accepted" })
+                toast({ title: tDashboard("toasts.inviteAccepted") })
                 fetchEventInvites()
             } else {
                 const data = await res.json().catch(() => ({}))
-                toast({ title: "Error", description: data.error || "Failed to accept invite", variant: "destructive" })
+                toast({ title: tDashboard("toasts.errorTitle"), description: data.error || tDashboard("toasts.inviteAcceptFailed"), variant: "destructive" })
             }
         } catch {
-            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+            toast({ title: tDashboard("toasts.errorTitle"), description: tDashboard("toasts.failedToConnect"), variant: "destructive" })
         }
     }
 
@@ -443,14 +443,14 @@ export default function Dashboard() {
                 return
             }
             if (res.ok) {
-                toast({ title: "Event invite declined" })
+                toast({ title: tDashboard("toasts.inviteDeclined") })
                 fetchEventInvites()
             } else {
                 const data = await res.json().catch(() => ({}))
-                toast({ title: "Error", description: data.error || "Failed to decline invite", variant: "destructive" })
+                toast({ title: tDashboard("toasts.errorTitle"), description: data.error || tDashboard("toasts.inviteDeclineFailed"), variant: "destructive" })
             }
         } catch {
-            toast({ title: "Error", description: "Failed to connect.", variant: "destructive" })
+            toast({ title: tDashboard("toasts.errorTitle"), description: tDashboard("toasts.failedToConnect"), variant: "destructive" })
         }
     }
 
@@ -472,18 +472,18 @@ export default function Dashboard() {
                     <div className="flex items-start gap-3 flex-1">
                         <Warning className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
                         <div className="space-y-1">
-                            <p className="font-semibold">Email not verified</p>
+                            <p className="font-semibold">{tDashboard("verification.title")}</p>
                             <p className="text-sm">
-                                Please verify your email to keep your account. Unverified accounts are removed after 24 hours.
+                                {tDashboard("verification.body")}
                                 {verificationExpiry && (
                                     <span className="block text-xs text-amber-800 mt-1">
-                                        Expires: {new Date(verificationExpiry).toLocaleString()}
+                                        {tDashboard("verification.expires")}: {new Date(verificationExpiry).toLocaleString()}
                                     </span>
                                 )}
                             </p>
                             <div className="flex flex-wrap gap-2 pt-1">
                                 <Button size="sm" variant="outline" className="border-amber-300 text-amber-900" onClick={handleResendVerification}>
-                                    Send verification email again
+                                    {tDashboard("verification.resend")}
                                 </Button>
                             </div>
                         </div>
@@ -501,7 +501,7 @@ export default function Dashboard() {
     return (
         <div className="min-h-screen bg-background">
             {/* Header */}
-            <div className="w-full flex justify-between items-center gap-2 p-4">
+            <div className="w-full flex items-center justify-between">
                 <Button variant="ghost" size="sm" className="gap-2" asChild>
                     <Link href="/">
                         <ArrowLeft className="h-4 w-4" />
@@ -535,7 +535,7 @@ export default function Dashboard() {
                 {/* Main content */}
                 <div className="w-full max-w-4xl mx-auto space-y-6 p-4 md:p-8">
                     <div className="flex items-center justify-between">
-                        <h1 className="text-3xl font-bold">Dashboard</h1>
+                        <h1 className="text-3xl font-bold">{tDashboard("title")}</h1>
                         <Button className="gap-2" asChild>
                             <Link href="/create">
                                 <Plus className="h-4 w-4" />
@@ -552,21 +552,21 @@ export default function Dashboard() {
                             onClick={() => setActiveTab("events")}
                             className="rounded-b-none"
                         >
-                            Events {events.length > 0 && <Badge variant="secondary" className="ml-2">{events.length}</Badge>}
+                            {tDashboard("tabs.events")} {events.length > 0 && <Badge variant="secondary" className="ml-2">{events.length}</Badge>}
                         </Button>
                         <Button
                             variant={activeTab === "invites" ? "default" : "ghost"}
                             onClick={() => setActiveTab("invites")}
                             className="rounded-b-none"
                         >
-                            Invites {eventInvites.length > 0 && <Badge variant="secondary" className="ml-2">{eventInvites.length}</Badge>}
+                            {tDashboard("tabs.invites")} {eventInvites.length > 0 && <Badge variant="secondary" className="ml-2">{eventInvites.length}</Badge>}
                         </Button>
                         <Button
                             variant={activeTab === "friends" ? "default" : "ghost"}
                             onClick={() => setActiveTab("friends")}
                             className="rounded-b-none"
                         >
-                            Friends {friendRequests.length > 0 && <Badge variant="destructive" className="ml-2">{friendRequests.length}</Badge>}
+                            {tDashboard("tabs.friends")} {friendRequests.length > 0 && <Badge variant="destructive" className="ml-2">{friendRequests.length}</Badge>}
                         </Button>
                     </div>
 
@@ -675,7 +675,7 @@ export default function Dashboard() {
                             {eventInvites.length === 0 ? (
                                 <div className="text-center py-12 text-muted-foreground">
                                     <Envelope className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                                    <p>No pending event invites</p>
+                                    <p>{tDashboard("invites.empty")}</p>
                                 </div>
                             ) : (
                                 <div className="grid gap-4">
@@ -691,7 +691,7 @@ export default function Dashboard() {
                                                         className="text-destructive hover:bg-destructive/10"
                                                     >
                                                         <XCircle className="h-4 w-4 mr-1" />
-                                                        Decline
+                                                        {tDashboard("invites.decline")}
                                                     </Button>
                                                     <Button
                                                         size="sm"
@@ -701,13 +701,13 @@ export default function Dashboard() {
                                                         }}
                                                     >
                                                         <Check className="h-4 w-4 mr-1" />
-                                                        Accept
+                                                        {tDashboard("invites.accept")}
                                                     </Button>
                                                 </div>
                                             </CardHeader>
                                             <CardContent>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Invited by <span className="font-medium">{invite.inviterUsername}</span>
+                                                    {tDashboard("invites.invitedBy", { name: invite.inviterUsername })}
                                                 </p>
                                                 {invite.dateRange && (
                                                     <p className="text-sm text-muted-foreground flex items-center gap-3 mt-2">
@@ -737,18 +737,18 @@ export default function Dashboard() {
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
                                         <UserPlus className="h-5 w-5" />
-                                        Add Friend
+                                        {tDashboard("friends.addTitle")}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     <div className="flex gap-2">
                                         <Input
-                                            placeholder="Enter username"
+                                            placeholder={tDashboard("friends.placeholder")}
                                             value={friendUsername}
                                             onChange={(e) => setFriendUsername(e.target.value)}
                                             onKeyDown={(e) => e.key === "Enter" && handleSendFriendRequest()}
                                         />
-                                        <Button onClick={handleSendFriendRequest}>Send Request</Button>
+                                        <Button onClick={handleSendFriendRequest}>{tDashboard("friends.sendRequest")}</Button>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -758,7 +758,7 @@ export default function Dashboard() {
                                     <CardHeader>
                                         <CardTitle className="flex items-center gap-2">
                                             <Envelope className="h-5 w-5" />
-                                            Friend Requests ({friendRequests.length})
+                                            {tDashboard("friends.requestsTitle", { count: friendRequests.length })}
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-2">
@@ -771,7 +771,7 @@ export default function Dashboard() {
                                                     <div>
                                                         <p className="font-medium">{request.username}</p>
                                                         <p className="text-xs text-muted-foreground">
-                                                            {format(new Date(request.createdAt), "MMM d, yyyy")}
+                                                            {format(new Date(request.createdAt), tDashboard("friends.dateFormat"))}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -797,15 +797,15 @@ export default function Dashboard() {
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
                                         <Users className="h-5 w-5" />
-                                        My Friends ({friends.length})
+                                        {tDashboard("friends.listTitle", { count: friends.length })}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     {friends.length === 0 ? (
                                         <div className="text-center py-8 text-muted-foreground">
                                             <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                                            <p>No friends yet</p>
-                                            <p className="text-sm mt-2">Send a friend request to get started!</p>
+                                            <p>{tDashboard("friends.emptyTitle")}</p>
+                                            <p className="text-sm mt-2">{tDashboard("friends.emptySubtitle")}</p>
                                         </div>
                                     ) : (
                                         <div className="space-y-2">

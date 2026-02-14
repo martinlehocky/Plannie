@@ -228,6 +228,7 @@
     }
   },
   "dashboard": {
+    "title": "Dashboard",
     "loading": "Loading dashboard...",
     "myEvents": "My Events",
     "newEvent": "New Event",
@@ -245,6 +246,33 @@
       "minute": "min",
       "minutes": "mins"
     },
+    "tabs": {
+      "events": "Events",
+      "invites": "Invites",
+      "friends": "Friends"
+    },
+    "verification": {
+      "title": "Email not verified",
+      "body": "Please verify your email to keep your account. Unverified accounts are removed after 24 hours.",
+      "expires": "Expires",
+      "resend": "Send verification email again"
+    },
+    "invites": {
+      "empty": "No pending event invites",
+      "invitedBy": "Invited by {name}",
+      "accept": "Accept",
+      "decline": "Decline"
+    },
+    "friends": {
+      "addTitle": "Add Friend",
+      "placeholder": "Enter username",
+      "sendRequest": "Send Request",
+      "requestsTitle": "Friend Requests ({count})",
+      "dateFormat": "MMM d, yyyy",
+      "listTitle": "My Friends ({count})",
+      "emptyTitle": "No friends yet",
+      "emptySubtitle": "Send a friend request to get started!"
+    },
     "toasts": {
       "eventDeletedTitle": "Event deleted",
       "eventDeletedDescription": "The event has been permanently removed.",
@@ -253,7 +281,24 @@
       "errorTitle": "Error",
       "deleteFailed": "Could not delete event.",
       "leaveFailed": "Could not leave event.",
-      "unreachable": "Could not reach the server."
+      "unreachable": "Could not reach the server.",
+      "verificationSentTitle": "Verification email sent",
+      "verificationSentBody": "Check your inbox for the new verification link.",
+      "resendFailed": "Could not resend verification email",
+      "failedToConnect": "Failed to connect.",
+      "friendRequestSentTitle": "Friend request sent",
+      "friendRequestSentBody": "Sent friend request to {name}",
+      "friendRequestFailed": "Failed to send friend request",
+      "friendRequestAccepted": "Friend request accepted",
+      "friendRequestAcceptFailed": "Failed to accept request",
+      "friendRequestDeclined": "Friend request declined",
+      "friendRequestDeclineFailed": "Failed to decline request",
+      "friendRemoved": "Friend removed",
+      "friendRemoveFailed": "Failed to remove friend",
+      "inviteAccepted": "Event invite accepted",
+      "inviteAcceptFailed": "Failed to accept invite",
+      "inviteDeclined": "Event invite declined",
+      "inviteDeclineFailed": "Failed to decline invite"
     }
   },
   "legal": {

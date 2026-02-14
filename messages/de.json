@@ -228,6 +228,7 @@
     }
   },
   "dashboard": {
+    "title": "Dashboard",
     "loading": "Dashboard wird geladen...",
     "myEvents": "Meine Events",
     "newEvent": "Neues Event",
@@ -245,6 +246,33 @@
       "minute": "Min.",
       "minutes": "Min."
     },
+    "tabs": {
+      "events": "Events",
+      "invites": "Einladungen",
+      "friends": "Freunde"
+    },
+    "verification": {
+      "title": "E-Mail nicht verifiziert",
+      "body": "Bitte verifiziere deine E-Mail, um dein Konto zu behalten. Unbestätigte Konten werden nach 24 Stunden gelöscht.",
+      "expires": "Ablauf",
+      "resend": "Verifizierungs-E-Mail erneut senden"
+    },
+    "invites": {
+      "empty": "Keine ausstehenden Event-Einladungen",
+      "invitedBy": "Eingeladen von {name}",
+      "accept": "Annehmen",
+      "decline": "Ablehnen"
+    },
+    "friends": {
+      "addTitle": "Freund hinzufügen",
+      "placeholder": "Benutzernamen eingeben",
+      "sendRequest": "Anfrage senden",
+      "requestsTitle": "Freundschaftsanfragen ({count})",
+      "dateFormat": "dd.MM.yyyy",
+      "listTitle": "Meine Freunde ({count})",
+      "emptyTitle": "Noch keine Freunde",
+      "emptySubtitle": "Sende eine Freundschaftsanfrage, um zu starten!"
+    },
     "toasts": {
       "eventDeletedTitle": "Event gelöscht",
       "eventDeletedDescription": "Das Event wurde dauerhaft entfernt.",
@@ -253,7 +281,24 @@
       "errorTitle": "Fehler",
       "deleteFailed": "Event konnte nicht gelöscht werden.",
       "leaveFailed": "Event konnte nicht verlassen werden.",
-      "unreachable": "Server nicht erreichbar."
+      "unreachable": "Server nicht erreichbar.",
+      "verificationSentTitle": "Verifizierungs-E-Mail gesendet",
+      "verificationSentBody": "Prüfe deinen Posteingang auf den neuen Verifizierungslink.",
+      "resendFailed": "Verifizierungs-E-Mail konnte nicht gesendet werden",
+      "failedToConnect": "Verbindung fehlgeschlagen.",
+      "friendRequestSentTitle": "Freundschaftsanfrage gesendet",
+      "friendRequestSentBody": "Anfrage an {name} gesendet",
+      "friendRequestFailed": "Anfrage konnte nicht gesendet werden",
+      "friendRequestAccepted": "Freundschaftsanfrage angenommen",
+      "friendRequestAcceptFailed": "Anfrage konnte nicht angenommen werden",
+      "friendRequestDeclined": "Freundschaftsanfrage abgelehnt",
+      "friendRequestDeclineFailed": "Anfrage konnte nicht abgelehnt werden",
+      "friendRemoved": "Freund entfernt",
+      "friendRemoveFailed": "Freund konnte nicht entfernt werden",
+      "inviteAccepted": "Event-Einladung angenommen",
+      "inviteAcceptFailed": "Einladung konnte nicht angenommen werden",
+      "inviteDeclined": "Event-Einladung abgelehnt",
+      "inviteDeclineFailed": "Einladung konnte nicht abgelehnt werden"
     }
   },
   "legal": {
