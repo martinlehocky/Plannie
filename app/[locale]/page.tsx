@@ -179,6 +179,11 @@ export default function LandingPage() {
                     </div>
 
                     <div className="hidden md:flex items-center space-x-3">
+                        {isLoggedIn && (
+                            <span className="text-sm text-muted-foreground">
+                                {tCommon("signedInAs", { name: username || tCommon("guest") })}
+                            </span>
+                        )}
                         <button
                             className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-slate-800 transition"
                             onClick={toggleTheme}
@@ -245,6 +250,13 @@ export default function LandingPage() {
                                     </a>
                                 </div>
                                 <div className="flex gap-2 pt-1">
+                                    {isLoggedIn && (
+                                        <Link href="/dashboard">
+                                            <Button size="sm" variant="secondary" className="w-full">
+                                                {tCommon("myDashboard")}
+                                            </Button>
+                                        </Link>
+                                    )}
                                     <Link href="/create">
                                         <Button size="sm" className="w-full">
                                             {tCommon("createEvent")}
