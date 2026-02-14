@@ -749,7 +749,7 @@ export function AvailabilityGrid({
                                 disabled={resetDisabledLoading}
                                 className="rounded-full text-xs px-2.5 h-8 hover:bg-destructive/10 hover:text-destructive"
                             >
-                                {resetDisabledLoading ? "..." : tAvailability("reset")}
+                                {resetDisabledLoading ? "..." : tAvailability("resetDisabledShort")}
                             </Button>
                         )}
                         {isCreator && !scrollMode && (

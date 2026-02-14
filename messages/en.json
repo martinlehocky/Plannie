@@ -528,6 +528,7 @@
     "noDays": "No days",
     "reset": "Reset",
     "resetDisabled": "Reset Disabled",
+    "resetDisabledShort": "Clear Blocked",
     "resetting": "Resetting...",
     "exitDisable": "Exit disable",
     "disableTimes": "Disable times",

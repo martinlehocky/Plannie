@@ -528,6 +528,7 @@
     "noDays": "Keine Tage",
     "reset": "Zurücksetzen",
     "resetDisabled": "Sperren zurücksetzen",
+    "resetDisabledShort": "Sperren löschen",
     "resetting": "Wird zurückgesetzt...",
     "exitDisable": "Disable-Modus verlassen",
     "disableTimes": "Zeiten sperren",

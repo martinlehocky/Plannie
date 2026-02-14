@@ -24,6 +24,7 @@ import {
   Clock,
   ChartBar,
   Envelope,
+  Medal,
 } from "phosphor-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { format } from "date-fns"
@@ -1042,7 +1043,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               {bestChartData.slice(0, 3).map((slot, i) => (
                 <Badge
                   key={slot.slot}
-                  className={`text-xs py-1.5 px-3 ${
+                  className={`text-xs py-1.5 px-3 flex items-center gap-1.5 ${
                     i === 0 
                       ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white border-0 shadow-md' 
                       : i === 1 
@@ -1050,7 +1051,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       : 'bg-gradient-to-r from-amber-700 to-amber-600 text-white border-0 shadow-sm'
                   }`}
                 >
-                  <span className="mr-1">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
+                  <Medal weight="fill" className={`h-4 w-4 ${i === 0 ? 'text-yellow-200' : i === 1 ? 'text-slate-600' : 'text-amber-300'}`} />
                   {formatTimeInTz(slot.slot)} — {slot.count}/{totalParticipants}
                 </Badge>
               ))}
