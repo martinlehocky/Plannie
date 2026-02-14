@@ -21,13 +21,15 @@
     "privacyTermsNotice": "Mit dem Fortfahren stimmst du unserer"
   },
   "landing": {
-    "badge": "Moderne Gruppenterminplanung",
+    "badge": "2.0 ist jetzt live",
     "title": "Finde die perfekte Zeit",
     "highlight": "damit alle können",
-    "description": "Plane Treffen mühelos. Wähle deine Verfügbarkeit, teile einen Link und sieh zu, wie die besten Zeiten über eine schöne Heatmap sichtbar werden.",
+    "description": "plane Treffen mühelos. Wähle deine Verfügbarkeit, teile einen Link und sieh zu, wie die besten Zeiten über eine schöne Heatmap sichtbar werden.",
     "primaryCta": "Kostenloses Event erstellen",
     "secondaryCta": "Mehr erfahren",
-    "heroNote": "Für immer kostenlos • Funktioniert auf jedem Gerät",
+    "heroNote": "Für immer kostenlos • Keine Kreditkarte erforderlich • Funktioniert auf jedem Gerät",
+    "useCasesSubtitle": "Erfahre, wie Teams auf der ganzen Welt Plannie nutzen",
+    "footerDescription": "Finde die perfekte Zeit, zu der sich alle treffen können. Einfach, schnell und für immer kostenlos.",
     "whyTitle": "Warum Plannie?",
     "whySubtitle": "Für Teams, Vereine, Freunde und alle, die Termine ohne Aufwand koordinieren möchten.",
     "features": {

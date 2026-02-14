@@ -21,13 +21,15 @@
     "privacyTermsNotice": "By continuing, you agree to our"
   },
   "landing": {
-    "badge": "Modern Group Scheduling",
+    "badge": "2.0 is now live",
     "title": "Find the Perfect Time",
     "highlight": "Everyone Can Meet",
     "description": "Coordinate meetings effortlessly. Select your availability, share a link, and watch as the best times emerge through beautiful heatmap visualization.",
     "primaryCta": "Create Free Event",
     "secondaryCta": "Learn More",
-    "heroNote": "Free forever • Works on any device",
+    "heroNote": "Free forever • No credit card required • Works on any device",
+    "useCasesSubtitle": "See how teams around the world use Plannie",
+    "footerDescription": "Find the perfect time everyone can meet. Simple, fast, and free forever.",
     "whyTitle": "Why Choose Plannie?",
     "whySubtitle": "Built for teams, clubs, friends, and anyone who needs to coordinate schedules without the hassle.",
     "features": {
