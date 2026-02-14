@@ -246,7 +246,7 @@ export default function LandingPage() {
                                     )}
                                 >
                                     <Sparkle className="w-4 h-4 text-primary" weight="fill" />
-                                    <span className="text-sm font-medium">2.0 is now live</span>
+                                    <span className="text-sm font-medium">{tLanding("badge")}</span>
                                 </div>
 
                                 {/* Main headline with gradient */}
@@ -300,7 +300,7 @@ export default function LandingPage() {
                                         mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
                                     )}
                                 >
-                                    Free forever • No credit card required • Works on any device
+                                    {tLanding("heroNote")}
                                 </p>
                             </div>
 
@@ -346,9 +346,14 @@ export default function LandingPage() {
                                                         {time}
                                                     </div>
                                                     {[0, 1, 2, 3, 4].map((dayIdx) => {
-                                                        // Create varying intensity for heatmap effect
-                                                        const isWedTenAM = timeIdx === 1 && dayIdx === 2
-                                                        const availability = isWedTenAM ? 6 : Math.floor(Math.random() * 5) + 1
+                                                        // Predetermined demo availability data for consistent rendering
+                                                        const demoData = [
+                                                            [3, 4, 2, 3, 4], // 9 AM
+                                                            [2, 3, 6, 4, 5], // 10 AM - Wed is best time (6/6)
+                                                            [4, 2, 3, 2, 1], // 11 AM
+                                                            [5, 5, 4, 3, 2], // 12 PM
+                                                        ]
+                                                        const availability = demoData[timeIdx][dayIdx]
                                                         const intensity = availability / 6
                                                         const bgColor = `rgba(124, 58, 237, ${intensity * 0.7})`
                                                         
@@ -490,7 +495,7 @@ export default function LandingPage() {
                             {tLanding("useCases.title")}
                         </h2>
                         <p className="text-muted-foreground text-lg text-center max-w-2xl mx-auto">
-                            See how teams around the world use Plannie
+                            {tLanding("useCasesSubtitle")}
                         </p>
                     </FadeIn>
                 </div>
@@ -757,7 +762,7 @@ export default function LandingPage() {
                                 <span className="font-bold text-xl">{tCommon("appName")}</span>
                             </Link>
                             <p className="text-sm text-muted-foreground max-w-xs">
-                                Find the perfect time everyone can meet. Simple, fast, and free forever.
+                                {tLanding("footerDescription")}
                             </p>
                         </div>
 
