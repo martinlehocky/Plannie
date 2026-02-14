@@ -12,9 +12,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { format, eachDayOfInterval, startOfDay, isBefore, isAfter } from "date-fns"
+import { enUS, de } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { Users, Prohibit, CaretLeft, CaretRight } from "phosphor-react"
-import { useTranslations } from "next-intl"
+import { useTranslations, useLocale } from "next-intl"
 
 /* helpers unchanged */
 
@@ -185,7 +186,7 @@ const SlotCell = memo(function SlotCell({
                     "absolute top-1 right-1 px-1.5 py-[1px] rounded text-[9px] font-bold leading-none pointer-events-none",
                     shouldUsePurple || shouldUseHeat
                         ? "bg-black/40 text-white"
-                        : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                        : "bg-slate-200 dark:bg-slate700 text-slate-700 dark:text-slate-200"
                 )}>
                     {displayCount}
                 </div>
@@ -277,7 +278,10 @@ export function AvailabilityGrid({
                                      onSlotInteraction,
                                      onAvailabilityChange,
                                  }: AvailabilityGridProps) {
-    const tAvailability = useTranslations("availability")
+     const tAvailability = useTranslations("availability")
+     const locale = useLocale()
+     const dateFnsLocale = locale === "de" ? de : enUS
+
     const disabledSetFull = useMemo(() => new Set(disabledSlots), [disabledSlots])
 
     const otherParticipants = useMemo(
@@ -386,10 +390,10 @@ export function AvailabilityGrid({
 
         for (let mins = 0; mins < minutesInDay; mins += step) {
             const d = new Date(baseDate.getTime() + mins * 60000)
-            rows.push({ hour: d.getHours(), minute: d.getMinutes(), label: format(d, "h:mm a") })
+            rows.push({ hour: d.getHours(), minute: d.getMinutes(), label: format(d, "p", { locale: dateFnsLocale }) })
         }
         return rows
-    }, [duration])
+    }, [duration, dateFnsLocale])
 
     const getSlotStatus = useCallback(
         (date: Date, hour: number, minute: number) => {
@@ -663,7 +667,7 @@ export function AvailabilityGrid({
                         </Button>
                         <div className="text-sm font-medium">
                             {expandedDates && expandedDates.length > 0
-                                ? format(expandedDates[Math.min(mobileDayIndex, expandedDates.length - 1)], "EEE, MMM d")
+                                ? format(expandedDates[Math.min(mobileDayIndex, expandedDates.length - 1)], "EEE, MMM d", { locale: dateFnsLocale })
                                 : tAvailability("noDays")}
                         </div>
                         <Button
@@ -808,8 +812,8 @@ export function AvailabilityGrid({
                                     key={date.toString()}
                                     className="w-32 md:w-40 shrink-0 px-3 py-3 text-center border-l border-border/30 bg-background/80 backdrop-blur-sm"
                                 >
-                                    <div className="text-[10px] md:text-xs font-semibold text-foreground">{format(date, "EEE")}</div>
-                                    <div className="text-xs md:text-sm font-bold text-foreground">{format(date, "MMM d")}</div>
+                                    <div className="text-[10px] md:text-xs font-semibold text-foreground">{format(date, "EEE", { locale: dateFnsLocale })}</div>
+                                    <div className="text-xs md:text-sm font-bold text-foreground">{format(date, "MMM d", { locale: dateFnsLocale })}</div>
                                 </div>
                             ))}
                         </div>
@@ -921,3 +925,4 @@ export function AvailabilityGrid({
         </div>
     )
 }
+

@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar"
 import { Clock } from "phosphor-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useTranslations } from "next-intl"
+import { useTranslations, useLocale } from "next-intl"
+import { enUS, de } from "date-fns/locale"
 import type { DateRange } from "react-day-picker"
 import { format } from "date-fns"
 import { useRouter } from "next/navigation"
@@ -23,6 +24,8 @@ export default function Home() {
   const { toast } = useToast()
   const tCommon = useTranslations("common")
   const tCreate = useTranslations("create")
+  const locale = useLocale()
+  const dateFnsLocale = locale === "de" ? de : enUS
 
   const [eventName, setEventName] = useState("")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
@@ -247,8 +250,8 @@ export default function Home() {
                   {dateRange?.from && dateRange?.to && (
                     <p className="text-sm text-muted-foreground text-center">
                       {tCreate("dateRangeSelected", {
-                        from: format(dateRange.from, "MMM dd, yyyy"),
-                        to: format(dateRange.to, "MMM dd, yyyy"),
+                        from: format(dateRange.from, "MMM dd, yyyy", { locale: dateFnsLocale }),
+                        to: format(dateRange.to, "MMM dd, yyyy", { locale: dateFnsLocale }),
                       })}
                     </p>
                   )}
