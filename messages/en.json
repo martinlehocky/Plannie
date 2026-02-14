@@ -18,16 +18,42 @@
     "imprint": "Imprint",
     "contact": "Contact",
     "and": "and",
-    "privacyTermsNotice": "By continuing, you agree to our"
+    "privacyTermsNotice": "By continuing, you agree to our",
+    "toggleTheme": "Toggle theme",
+    "toggleMenu": "Toggle menu"
   },
   "landing": {
+    "nav": {
+      "features": "Features",
+      "useCases": "Use Cases",
+      "howItWorks": "How it works"
+    },
     "badge": "Modern Group Scheduling",
     "title": "Find the Perfect Time",
     "highlight": "Everyone Can Meet",
     "description": "Coordinate meetings effortlessly. Select your availability, share a link, and watch as the best times emerge through beautiful heatmap visualization.",
+    "heroTitleLine1": "Find the perfect time",
+    "heroTitleLine2": "for every group",
+    "heroSubtitle": "Coordinate meetings effortlessly. Select your availability, share a link, and watch the best times emerge in a live heatmap.",
     "primaryCta": "Create Free Event",
     "secondaryCta": "Learn More",
     "heroNote": "Free forever • Works on any device",
+    "heroMockupTitle": "Team availability heatmap",
+    "days": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri"
+    },
+    "timeSlots": {
+      "9am": "9 AM",
+      "10am": "10 AM",
+      "11am": "11 AM",
+      "12pm": "12 PM"
+    },
+    "bestTimeFound": "Best time found",
+    "bestTimeValue": "Thu 9:00 AM",
     "whyTitle": "Why Choose Plannie?",
     "whySubtitle": "Built for teams, clubs, friends, and anyone who needs to coordinate schedules without the hassle.",
     "features": {
@@ -56,30 +82,6 @@
         "description": "Beautiful, mobile-responsive interface with dark mode support. Looks great everywhere."
       }
     },
-    "howTitle": "How It Works",
-    "howSubtitle": "Getting started takes less than a minute",
-    "steps": {
-      "create": {
-        "title": "Create Your Event",
-        "description": "Give your event a name, select the date range, and set the meeting duration. That's it!"
-      },
-      "share": {
-        "title": "Share the Link",
-        "description": "Copy the event link and share it with your group via email, Slack, WhatsApp, or any messaging app."
-      },
-      "select": {
-        "title": "Select Availability",
-        "description": "Each person clicks and drags to mark when they're available. Changes are saved automatically."
-      },
-      "pick": {
-        "title": "Find Best Time",
-        "description": "Watch the heatmap update in real-time. Darker times mean more people available. Pick the best time!"
-      }
-    },
-    "ctaTitle": "Ready to Schedule Your Next Meeting?",
-    "ctaDescription": "Join thousands of teams coordinating schedules with Plannie. No credit card required.",
-    "ctaButton": "Create Your First Event",
-    "footer": "Made with ❤️ for better scheduling",
     "useCases": {
       "title": "Use Cases",
       "subtitle": "See how teams around the world use Plannie",
@@ -115,6 +117,39 @@
         "title": "Workshops",
         "description": "Coordinate training sessions and educational workshops."
       }
+    },
+    "howTitle": "How It Works",
+    "howSubtitle": "Getting started takes less than a minute",
+    "steps": {
+      "create": {
+        "title": "Create Your Event",
+        "description": "Give your event a name, select the date range, and set the meeting duration. That's it!"
+      },
+      "share": {
+        "title": "Share the Link",
+        "description": "Copy the event link and share it with your group via email, Slack, WhatsApp, or any messaging app."
+      },
+      "select": {
+        "title": "Select Availability",
+        "description": "Each person clicks and drags to mark when they're available. Changes are saved automatically."
+      },
+      "pick": {
+        "title": "Find Best Time",
+        "description": "Watch the heatmap update in real-time. Darker times mean more people available. Pick the best time!"
+      }
+    },
+    "ctaTitle": "Ready to Schedule Your Next Meeting?",
+    "ctaSubtitle": "Join thousands of teams coordinating schedules with Plannie. No credit card required.",
+    "ctaDescription": "Join thousands of teams coordinating schedules with Plannie. No credit card required.",
+    "ctaButton": "Create Your First Event",
+    "footer": {
+      "note": "Made with love for better scheduling",
+      "privacy": "Privacy",
+      "terms": "Terms",
+      "imprint": "Imprint",
+      "contact": "Contact",
+      "allRights": "All rights reserved.",
+      "language": "Language"
     }
   },
   "create": {
@@ -224,8 +259,78 @@
   "legal": {
     "privacyTitle": "Privacy Policy",
     "privacyPlaceholder": "How Plannie handles your data, including controller details, collected data, and your rights.",
+    "privacyIntro": "How we handle your data and your rights under the GDPR.",
+    "privacySections": {
+      "responsible": {
+        "title": "Responsible Party (Controller)",
+        "body": "Contact the controller for any privacy questions or requests."
+      },
+      "data": {
+        "title": "Data We Collect",
+        "items": {
+          "account": "Account Data: Username, email address, and password (stored as a secure hash).",
+          "event": "Event Data: Event names, dates, timezones, and availability times you enter.",
+          "technical": "Technical Data: IP address, browser type, and timestamps."
+        }
+      },
+      "usage": {
+        "title": "How We Use Your Data",
+        "items": {
+          "service": "To provide the scheduling service (creating events, saving availability).",
+          "emails": "To send system emails (email verification, password resets).",
+          "fraud": "To protect the site from spam and abuse."
+        }
+      },
+      "thirdParties": {
+        "title": "Third-Party Services",
+        "brevo": "Brevo (Sendinblue) for transactional emails; your email address is processed to send codes and notifications.",
+        "recaptcha": "Google reCAPTCHA (v2/Enterprise) analyzes traffic (e.g., IP, mouse movements) to block bots; legal basis: legitimate interest (Art. 6(1)(f) GDPR)."
+      },
+      "cookies": {
+        "title": "Cookies & Local Storage",
+        "items": {
+          "essential": "Essential Cookies: a secure session cookie (rt) keeps you logged in.",
+          "localStorage": "Local Storage: we store your preferredTimezone to show times correctly."
+        }
+      },
+      "rights": {
+        "title": "Your Rights",
+        "body": "Under the GDPR, you can access, correct, or delete your data. You can delete your account anytime in settings to remove your personal data from our active database."
+      }
+    },
     "termsTitle": "Terms of Service",
     "termsPlaceholder": "Terms that govern your use of Plannie.",
+    "termsIntro": "Please read these terms to understand your and our obligations when using Plannie.",
+    "termsSections": {
+      "scope": {
+        "title": "Scope",
+        "body": "These terms govern your use of Plannie. By creating an account, you agree to them."
+      },
+      "services": {
+        "title": "Services",
+        "body": "We provide an online tool for scheduling events and coordinating availability. The service is provided \"as is\" and \"as available\" without uptime guarantees. We endeavor to back up data but cannot guarantee recovery."
+      },
+      "accounts": {
+        "title": "User Accounts",
+        "items": {
+          "credentials": "You are responsible for keeping your login credentials confidential.",
+          "content": "You are responsible for any content (event names, participant names) you create.",
+          "abuse": "We may terminate accounts that abuse the service or violate laws."
+        }
+      },
+      "liability": {
+        "title": "Liability",
+        "body": "To the fullest extent permitted by law, we are not liable for indirect, incidental, or consequential damages arising from use of the service (e.g., missed meetings due to technical errors or misuse)."
+      },
+      "changes": {
+        "title": "Changes",
+        "body": "We may update these terms at any time. Continued use constitutes acceptance of the new terms."
+      },
+      "law": {
+        "title": "Governing Law",
+        "body": "These terms are governed by the laws of the EU."
+      }
+    },
     "imprintTitle": "Imprint / Legal Notice",
     "imprintPlaceholder": "Provider identification and contact for Plannie.",
     "imprintNameLabel": "Legal name",

@@ -119,13 +119,15 @@ export default function Home() {
     }
   }
 
+  const needsFormCompletion = isLoggedIn
   const isButtonDisabled =
     isSubmitting ||
-    !isLoggedIn ||
-    !eventName ||
-    !dateRange?.from ||
-    !dateRange?.to ||
-    (duration === "custom" && (!customDuration || Number.parseInt(customDuration) <= 0))
+    (needsFormCompletion && (
+      !eventName ||
+      !dateRange?.from ||
+      !dateRange?.to ||
+      (duration === "custom" && (!customDuration || Number.parseInt(customDuration) <= 0))
+    ))
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:justify-center relative">
@@ -165,7 +167,11 @@ export default function Home() {
       <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 w-full">
         <div className="w-full max-w-4xl grid gap-8">
           <div className="text-center space-y-2">
-            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight lg:text-7xl">{tCreate("heading")}</h1>
+            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight lg:text-7xl">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-300">
+                {tCreate("heading")}
+              </span>
+            </h1>
             <p className="text-xl text-muted-foreground md:text-2xl">{tCreate("subheading")}</p>
           </div>
 

@@ -18,16 +18,42 @@
     "imprint": "Impressum",
     "contact": "Kontakt",
     "and": "und",
-    "privacyTermsNotice": "Mit dem Fortfahren stimmst du unserer"
+    "privacyTermsNotice": "Mit dem Fortfahren stimmst du unserer",
+    "toggleTheme": "Theme wechseln",
+    "toggleMenu": "Menü umschalten"
   },
   "landing": {
+    "nav": {
+      "features": "Funktionen",
+      "useCases": "Anwendungsfälle",
+      "howItWorks": "So funktioniert's"
+    },
     "badge": "Moderne Gruppenterminplanung",
     "title": "Finde die perfekte Zeit",
     "highlight": "damit alle können",
     "description": "Plane Treffen mühelos. Wähle deine Verfügbarkeit, teile einen Link und sieh zu, wie die besten Zeiten über eine schöne Heatmap sichtbar werden.",
+    "heroTitleLine1": "Finde die perfekte Zeit",
+    "heroTitleLine2": "für jede Gruppe",
+    "heroSubtitle": "Koordiniere Termine mühelos. Wähle deine Verfügbarkeit, teile den Link und sieh, wie die besten Zeiten in einer Live-Heatmap erscheinen.",
     "primaryCta": "Kostenloses Event erstellen",
     "secondaryCta": "Mehr erfahren",
     "heroNote": "Für immer kostenlos • Funktioniert auf jedem Gerät",
+    "heroMockupTitle": "Team-Verfügbarkeits-Heatmap",
+    "days": {
+      "mon": "Mo",
+      "tue": "Di",
+      "wed": "Mi",
+      "thu": "Do",
+      "fri": "Fr"
+    },
+    "timeSlots": {
+      "9am": "9 Uhr",
+      "10am": "10 Uhr",
+      "11am": "11 Uhr",
+      "12pm": "12 Uhr"
+    },
+    "bestTimeFound": "Beste Zeit gefunden",
+    "bestTimeValue": "Do 9:00 Uhr",
     "whyTitle": "Warum Plannie?",
     "whySubtitle": "Für Teams, Vereine, Freunde und alle, die Termine ohne Aufwand koordinieren möchten.",
     "features": {
@@ -56,30 +82,6 @@
         "description": "Schönes, responsives Interface mit Dark Mode. Sieht überall gut aus."
       }
     },
-    "howTitle": "So funktioniert's",
-    "howSubtitle": "Der Einstieg dauert weniger als eine Minute",
-    "steps": {
-      "create": {
-        "title": "Event erstellen",
-        "description": "Gib deinem Event einen Namen, wähle einen Datumsbereich und die Dauer. Fertig!"
-      },
-      "share": {
-        "title": "Link teilen",
-        "description": "Kopiere den Event-Link und teile ihn per E-Mail, Slack, WhatsApp oder einer anderen App."
-      },
-      "select": {
-        "title": "Verfügbarkeit wählen",
-        "description": "Alle markieren per Klicken und Ziehen, wann sie Zeit haben. Änderungen werden automatisch gespeichert."
-      },
-      "pick": {
-        "title": "Beste Zeit finden",
-        "description": "Beobachte die Heatmap in Echtzeit. Dunklere Zeiten bedeuten mehr Verfügbarkeit. Wähle den besten Slot!"
-      }
-    },
-    "ctaTitle": "Bereit für dein nächstes Meeting?",
-    "ctaDescription": "Schließe dich tausenden Teams an, die mit Plannie Termine koordinieren. Keine Kreditkarte nötig.",
-    "ctaButton": "Erstes Event erstellen",
-    "footer": "Mit ❤️ gemacht für bessere Planung",
     "useCases": {
       "title": "Anwendungsfälle",
       "subtitle": "Entdecke, wie Teams weltweit Plannie nutzen",
@@ -115,6 +117,39 @@
         "title": "Workshops",
         "description": "Koordiniere Trainings und Bildungsworkshops."
       }
+    },
+    "howTitle": "So funktioniert's",
+    "howSubtitle": "Der Einstieg dauert weniger als eine Minute",
+    "steps": {
+      "create": {
+        "title": "Event erstellen",
+        "description": "Gib deinem Event einen Namen, wähle einen Datumsbereich und die Dauer. Fertig!"
+      },
+      "share": {
+        "title": "Link teilen",
+        "description": "Kopiere den Event-Link und teile ihn per E-Mail, Slack, WhatsApp oder einer anderen App."
+      },
+      "select": {
+        "title": "Verfügbarkeit wählen",
+        "description": "Alle markieren per Klicken und Ziehen, wann sie Zeit haben. Änderungen werden automatisch gespeichert."
+      },
+      "pick": {
+        "title": "Beste Zeit finden",
+        "description": "Beobachte die Heatmap in Echtzeit. Dunklere Zeiten bedeuten mehr Verfügbarkeit. Wähle den besten Slot!"
+      }
+    },
+    "ctaTitle": "Bereit für dein nächstes Meeting?",
+    "ctaSubtitle": "Schließe dich tausenden Teams an, die mit Plannie Termine koordinieren. Keine Kreditkarte nötig.",
+    "ctaDescription": "Schließe dich tausenden Teams an, die mit Plannie Termine koordinieren. Keine Kreditkarte nötig.",
+    "ctaButton": "Erstes Event erstellen",
+    "footer": {
+      "note": "Mit Liebe gemacht für bessere Planung",
+      "privacy": "Datenschutz",
+      "terms": "Nutzungsbedingungen",
+      "imprint": "Impressum",
+      "contact": "Kontakt",
+      "allRights": "Alle Rechte vorbehalten.",
+      "language": "Sprache"
     }
   },
   "create": {
@@ -224,8 +259,78 @@
   "legal": {
     "privacyTitle": "Datenschutzerklärung",
     "privacyPlaceholder": "Details zum Umgang mit deinen Daten (Verantwortlicher, Daten, Zwecke, Rechte).",
+    "privacyIntro": "So verarbeiten wir deine Daten und deine Rechte nach DSGVO.",
+    "privacySections": {
+      "responsible": {
+        "title": "Verantwortlicher (Controller)",
+        "body": "Wende dich an den Verantwortlichen bei Fragen oder Anliegen zum Datenschutz."
+      },
+      "data": {
+        "title": "Welche Daten wir erheben",
+        "items": {
+          "account": "Kontodaten: Benutzername, E-Mail-Adresse und Passwort (als sicherer Hash gespeichert).",
+          "event": "Event-Daten: Eventnamen, Daten, Zeitzonen und deine eingetragenen Verfügbarkeiten.",
+          "technical": "Technische Daten: IP-Adresse, Browsertyp und Zeitstempel."
+        }
+      },
+      "usage": {
+        "title": "Wie wir deine Daten nutzen",
+        "items": {
+          "service": "Um den Scheduling-Service bereitzustellen (Events erstellen, Verfügbarkeiten speichern).",
+          "emails": "Um System-E-Mails zu senden (E-Mail-Verifizierung, Passwort-Resets).",
+          "fraud": "Um die Seite vor Spam und Missbrauch zu schützen."
+        }
+      },
+      "thirdParties": {
+        "title": "Drittanbieter",
+        "brevo": "Brevo (Sendinblue) für transaktionale E-Mails; deine E-Mail-Adresse wird zum Versand von Codes und Benachrichtigungen verarbeitet.",
+        "recaptcha": "Google reCAPTCHA (v2/Enterprise) analysiert Traffic (z. B. IP, Mausbewegungen), um Bots zu blockieren; Rechtsgrundlage: berechtigtes Interesse (Art. 6 Abs. 1 lit. f DSGVO)."
+      },
+      "cookies": {
+        "title": "Cookies & Local Storage",
+        "items": {
+          "essential": "Essenzielle Cookies: ein sicheres Sitzungs-Cookie (rt) hält dich eingeloggt.",
+          "localStorage": "Local Storage: wir speichern deine preferredTimezone lokal, um Zeiten korrekt anzuzeigen."
+        }
+      },
+      "rights": {
+        "title": "Deine Rechte",
+        "body": "Nach der DSGVO kannst du deine Daten einsehen, korrigieren oder löschen. Du kannst dein Konto jederzeit in den Einstellungen löschen; damit werden deine personenbezogenen Daten aus unserer aktiven Datenbank entfernt."
+      }
+    },
     "termsTitle": "Nutzungsbedingungen",
     "termsPlaceholder": "Bedingungen für die Nutzung von Plannie.",
+    "termsIntro": "Bitte lies diese Bedingungen, um deine und unsere Pflichten bei der Nutzung von Plannie zu verstehen.",
+    "termsSections": {
+      "scope": {
+        "title": "Geltungsbereich",
+        "body": "Diese Bedingungen regeln deine Nutzung von Plannie. Mit der Kontoerstellung stimmst du zu."
+      },
+      "services": {
+        "title": "Leistungen",
+        "body": "Wir bieten ein Online-Tool zur Terminplanung und Verfügbarkeitsabstimmung. Der Dienst wird \"wie besehen\" und \"wie verfügbar\" bereitgestellt, ohne Garantie auf Verfügbarkeit. Wir bemühen uns um Backups, können aber keine Wiederherstellung garantieren."
+      },
+      "accounts": {
+        "title": "Konten",
+        "items": {
+          "credentials": "Du bist für die Vertraulichkeit deiner Zugangsdaten verantwortlich.",
+          "content": "Du bist für Inhalte verantwortlich, die du erstellst (Eventnamen, Teilnehmende).",
+          "abuse": "Wir können Konten sperren, die den Dienst missbrauchen oder gegen Gesetze verstoßen."
+        }
+      },
+      "liability": {
+        "title": "Haftung",
+        "body": "Soweit rechtlich zulässig haften wir nicht für indirekte, zufällige oder Folgeschäden aus der Nutzung des Dienstes (z. B. verpasste Meetings durch technische Fehler oder Fehlbedienung)."
+      },
+      "changes": {
+        "title": "Änderungen",
+        "body": "Wir können diese Bedingungen jederzeit ändern. Die weitere Nutzung gilt als Zustimmung zu den neuen Bedingungen."
+      },
+      "law": {
+        "title": "Anwendbares Recht",
+        "body": "Es gilt das Recht der EU."
+      }
+    },
     "imprintTitle": "Impressum / Anbieterkennzeichnung",
     "imprintPlaceholder": "Anbieterkennzeichnung und Kontakt für Plannie.",
     "imprintNameLabel": "Rechtlicher Name",
