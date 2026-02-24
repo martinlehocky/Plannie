@@ -62,12 +62,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       images: [{ url: "/favicon.ico" }],
     },
     alternates: {
-      canonical: locale === 'en' ? baseUrl : `${baseUrl}/${locale}`,
+      canonical: `${baseUrl}/${locale}`,
       languages: {
-        'en': baseUrl,
+        'en': `${baseUrl}/en`,
         'de': `${baseUrl}/de`,
-        'x-default': baseUrl,
+        'x-default': `${baseUrl}/en`,
       },
+    },
+    twitter: {
+      card: 'summary',
+      title: 'Plannie',
+      description: 'Modern group scheduling and daily planning made simple.',
     },
   }
 }

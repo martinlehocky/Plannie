@@ -25,10 +25,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // Static pages for all locales
   const staticUrls = staticRoutes.flatMap((route) =>
     locales.map((locale) => {
-      // For default locale (en), use base URL without locale prefix
-      const url = locale === routing.defaultLocale
-        ? `${baseUrl}${route ? '/' + route : ''}`
-        : `${baseUrl}/${locale}${route ? '/' + route : ''}`
+      const url = `${baseUrl}/${locale}${route ? '/' + route : ''}`
 
       return {
         url,
@@ -37,7 +34,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
         priority: route === '' ? 1 : 0.8,
         alternates: {
           languages: {
-            'en': `${baseUrl}${route ? '/' + route : ''}`,
+            'en': `${baseUrl}/en${route ? '/' + route : ''}`,
             'de': `${baseUrl}/de${route ? '/' + route : ''}`,
           },
         },
@@ -48,9 +45,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // Dynamic event pages from events.json for all locales
   const eventUrls = Object.keys(events).flatMap((id) =>
     locales.map((locale) => {
-      const url = locale === routing.defaultLocale
-        ? `${baseUrl}/event/${id}`
-        : `${baseUrl}/${locale}/event/${id}`
+      const url = `${baseUrl}/${locale}/event/${id}`
 
       return {
         url,
@@ -59,7 +54,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
         priority: 0.7,
         alternates: {
           languages: {
-            'en': `${baseUrl}/event/${id}`,
+            'en': `${baseUrl}/en/event/${id}`,
             'de': `${baseUrl}/de/event/${id}`,
           },
         },

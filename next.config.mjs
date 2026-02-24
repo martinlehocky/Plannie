@@ -12,7 +12,16 @@ const nextConfig = {
   },
   experimental: {
     optimizePackageImports: ['next-intl']
-  }
+  },
+  async redirects() {
+    return [
+      {
+        source: '/:path((?!en|de|api|_next|_vercel|.*\\..*).*)',
+        destination: '/en/:path*',
+        permanent: true,
+      },
+    ]
+  },
 }
 
 export default withNextIntl(nextConfig)
