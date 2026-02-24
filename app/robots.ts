@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
         rules: {
             userAgent: '*',
             allow: '/',
-            disallow: '/private/',
+            disallow: ['/api/', '/admin/', '/private/'],
         },
         sitemap: 'https://plannie.de/sitemap.xml',
     }
